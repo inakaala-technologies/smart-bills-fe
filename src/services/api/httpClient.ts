@@ -1,6 +1,6 @@
 import axios, { AxiosHeaders, type AxiosAdapter, type AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
+export const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://13.233.126.174:8084'
 const parsedApiBaseUrl = new URL(API_BASE_URL)
 const isLoopbackApi = ['localhost', '127.0.0.1', '::1'].includes(parsedApiBaseUrl.hostname)
 
