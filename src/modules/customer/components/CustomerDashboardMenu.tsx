@@ -1,0 +1,117 @@
+import { useState } from 'react'
+import { alpha } from '@mui/material/styles'
+import { Box, Menu, MenuItem } from '@mui/material'
+import { UserRound, type LucideIcon } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ProfileManagerDialog } from '../../../components/ProfileManagerDialog'
+import { logoutUser, type Role } from '../../../services/auth'
+import { useAppDispatch } from '../../../store/hooks'
+import { setActiveTab } from '../../../store/customerDashboardSlice'
+import type { DashboardTab } from '../../types'
+
+type CustomerDashboardMenuProps = {
+  tabs: Array<{ key: DashboardTab; label: string; icon: LucideIcon }>
+  activeTab: DashboardTab
+  anchorEl: null | HTMLElement
+  isOpen: boolean
+  onClose: () => void
+  currentRole?: Role
+  availableAccounts?: Array<{ role: Role }>
+  missingProfileRoles?: Role[]
+  onSwitchAccount?: (role: Role) => void
+  onAddProfile?: (role: Role) => void
+}
+
+export function CustomerDashboardMenu({
+  tabs,
+  activeTab,
+  anchorEl,
+  isOpen,
+  onClose,
+  currentRole = 'CUSTOMER',
+  availableAccounts = [],
+  missingProfileRoles = [],
+  onSwitchAccount,
+  onAddProfile,
+}: CustomerDashboardMenuProps) {
+  const dispatch = useAppDispatch()
+  const navigate = useNavigate()
+  const [managerOpen, setManagerOpen] = useState(false)
+
+  return (
+    <>
+      <Menu
+        id="customer-menu"
+        anchorEl={anchorEl}
+        open={isOpen}
+        onClose={onClose}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+        slotProps={{
+          paper: {
+            sx: (theme) => ({
+              mt: 1,
+              minWidth: 180,
+              borderRadius: 2.5,
+              border: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
+              boxShadow: `0 12px 32px ${alpha(theme.palette.common.black, 0.12)}`,
+            }),
+          },
+        }}
+      >
+        {tabs.map((tab) => {
+          const Icon = tab.icon
+          return (
+            <MenuItem
+              key={tab.key}
+              selected={activeTab === tab.key}
+              onClick={() => {
+                dispatch(setActiveTab(tab.key))
+                onClose()
+              }}
+              sx={{ gap: 1, py: 1.1, fontWeight: 600 }}
+            >
+              <Icon size={16} />
+              {tab.label}
+            </MenuItem>
+          )
+        })}
+        {(availableAccounts.length > 0 || missingProfileRoles.length > 0) && (
+          <>
+            <Box component="div" sx={{ borderTop: '1px solid var(--mui-palette-divider)', my: 0.5 }} />
+            <MenuItem
+              onClick={() => {
+                setManagerOpen(true)
+                onClose()
+              }}
+              sx={{ gap: 1, py: 1.1, fontWeight: 700 }}
+            >
+              <UserRound size={15} />
+              Manage profiles
+            </MenuItem>
+          </>
+        )}
+        <MenuItem
+          onClick={() => {
+            logoutUser()
+            onClose()
+            navigate('/')
+          }}
+          sx={{ gap: 1, py: 1.1, fontWeight: 700, color: 'error.main' }}
+        >
+          Logout
+        </MenuItem>
+      </Menu>
+
+      <ProfileManagerDialog
+        open={managerOpen}
+        onClose={() => setManagerOpen(false)}
+        currentRole={currentRole}
+        availableAccounts={availableAccounts}
+        missingProfileRoles={missingProfileRoles}
+        onSwitchAccount={onSwitchAccount}
+        onAddProfile={onAddProfile}
+      />
+    </>
+  )
+}

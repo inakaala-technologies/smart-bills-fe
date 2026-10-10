@@ -1,0 +1,46 @@
+import { apiClient, getErrorMessage } from './httpClient'
+import { normalizeBusiness } from './normalizers'
+import type { BusinessCreateRequest, BusinessInsights, BusinessOffer, BusinessSummary } from './types'
+
+export async function fetchBusinessOffers(businessId: number): Promise<BusinessOffer[]> {
+  return (await apiClient.get<BusinessOffer[]>(`/api/v1/businesses/${businessId}/offers`)).data
+}
+
+export async function createBusinessOffer(businessId: number, offer: Omit<BusinessOffer, 'id' | 'businessId' | 'active'>): Promise<BusinessOffer> {
+  try {
+    return (await apiClient.post<BusinessOffer>(`/api/v1/businesses/${businessId}/offers`, offer)).data
+  } catch (error) {
+    throw new Error(getErrorMessage(error, 'Could not publish this offer.'), { cause: error })
+  }
+}
+
+export async function deactivateBusinessOffer(businessId: number, offerId: number): Promise<void> {
+  try {
+    await apiClient.delete(`/api/v1/businesses/${businessId}/offers/${offerId}`)
+  } catch (error) {
+    throw new Error(getErrorMessage(error, 'Could not remove this offer.'), { cause: error })
+  }
+}
+
+export async function fetchBusinessInsights(businessId: number, months = 6): Promise<BusinessInsights> {
+  const { data } = await apiClient.get<BusinessInsights>(`/api/v1/businesses/${businessId}/insights`, { params: { months } })
+  return data
+}
+
+export async function fetchBusinessById(businessId: number): Promise<BusinessSummary | null> {
+  try {
+    const { data } = await apiClient.get<Record<string, unknown>>(`/api/v1/businesses/${businessId}`)
+    return normalizeBusiness(data)
+  } catch {
+    return null
+  }
+}
+
+export async function createBusiness(payload: BusinessCreateRequest): Promise<{ ok: boolean; business?: BusinessSummary; message?: string }> {
+  try {
+    const { data } = await apiClient.post<Record<string, unknown>>('/api/v1/businesses', payload)
+    return { ok: true, business: normalizeBusiness(data), message: 'Business created successfully.' }
+  } catch (error) {
+    return { ok: false, message: getErrorMessage(error, 'Failed to create business.') }
+  }
+}
