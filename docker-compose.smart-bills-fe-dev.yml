@@ -1,0 +1,14 @@
+services:
+  smart-bills-fe-dev:
+    container_name: smart-bills-fe-dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3004:80"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

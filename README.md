@@ -44,6 +44,20 @@ export default defineConfig([
 
 ```
 
+## Dev deployment
+
+GitHub Actions deploys the frontend to the dev EC2 instance when changes are pushed
+to `dev`, `improvements`, or a `feature/**` branch. The workflow builds the Vite
+app, packages it with Docker/nginx, uploads the package to S3, and deploys it using
+AWS Systems Manager. The container is exposed on host port `3004`.
+
+Configure these secrets in the GitHub `dev` environment:
+
+- `AWS_ROLE_ARN`
+- `DEPLOYMENT_BUCKET`
+- `EC2_INSTANCE_ID`
+- `VITE_API_URL`
+
 You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
 
 ```js
