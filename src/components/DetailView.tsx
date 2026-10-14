@@ -18,9 +18,10 @@ import { setAuthUser } from '../store/authSlice'
 import { fetchBusinessDashboard, setActiveTab as setBusinessTab } from '../store/businessDashboardSlice'
 import { setActiveTab as setCustomerTab, setSelectedCustomerId } from '../store/customerDashboardSlice'
 import type { DashboardTab } from '../modules/types'
+import { v4 as uuidv4 } from 'uuid';
 
 function createInvoiceItem(): InvoiceLineItemForm {
-  return { id: crypto.randomUUID(), productName: '', quantity: '1', unitPrice: '0', gstRate: '18' }
+  return { id: uuidv4(), productName: '', quantity: '1', unitPrice: '0', gstRate: '18' }
 }
 
 function getDefaultDueDate() {

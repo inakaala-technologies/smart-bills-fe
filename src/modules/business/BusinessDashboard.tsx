@@ -27,6 +27,7 @@ import { AddCustomerDialog } from './components/AddCustomerDialog'
 import { SendMembershipNotificationDialog } from './components/SendMembershipNotificationDialog'
 import type { QuickActionId } from './components/QuickActionGrid'
 import { normalizeBusinessType } from '../../constants/businessTypes'
+import { v4 as uuidv4 } from 'uuid';
 
 function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
@@ -50,7 +51,7 @@ export function BusinessDashboard() {
   const selectedBusiness = data.businesses.find((business) => business.id === selectedBusinessId) ?? data.businesses[0] ?? null
 
   const createInvoiceItem = (): InvoiceLineItemForm => ({
-    id: crypto.randomUUID(),
+    id: uuidv4(),
     productName: '',
     quantity: '1',
     unitPrice: '0',
