@@ -6,9 +6,29 @@ export async function fetchBusinessOffers(businessId: number): Promise<BusinessO
   return (await apiClient.get<BusinessOffer[]>(`/api/v1/businesses/${businessId}/offers`)).data
 }
 
-export async function createBusinessOffer(businessId: number, offer: Omit<BusinessOffer, 'id' | 'businessId' | 'active'>): Promise<BusinessOffer> {
+export async function createBusinessOffer(
+  businessId: number,
+  offer: Omit<BusinessOffer, 'id' | 'businessId' | 'active' | 'imageUrl'>,
+  image?: File | null,
+): Promise<BusinessOffer> {
   try {
-    return (await apiClient.post<BusinessOffer>(`/api/v1/businesses/${businessId}/offers`, offer)).data
+    const formData = new FormData()
+
+    formData.append(
+      'offer',
+      new Blob([JSON.stringify(offer)], { type: 'application/json' }),
+    )
+
+    if (image) {
+      formData.append('image', image)
+    }
+
+    return (
+      await apiClient.post<BusinessOffer>(
+        `/api/v1/businesses/${businessId}/offers`,
+        formData,
+      )
+    ).data
   } catch (error) {
     throw new Error(getErrorMessage(error, 'Could not publish this offer.'), { cause: error })
   }

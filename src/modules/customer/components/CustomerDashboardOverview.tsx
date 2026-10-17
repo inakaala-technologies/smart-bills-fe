@@ -69,10 +69,25 @@ type SummaryCardsProps = {
 
 export function SummaryCards({ data, loading, offersCount, onSelectTab }: SummaryCardsProps) {
   const summaryCards = [
-    { label: 'Offers', count: offersCount, tab: 'businesses' as const, icon: Tag },
-    { label: 'Memberships', count: data.memberships.length, tab: 'memberships' as const, icon: ShieldCheck },
-    { label: 'Appointments', count: data.appointments.length, tab: 'appointments' as const, icon: CalendarCheck2 },
-  ]
+  {
+    label: 'Offers',
+    count: offersCount,
+    tab: 'offers' as const,
+    icon: Tag,
+  },
+  {
+    label: 'Memberships',
+    count: data.memberships.length,
+    tab: 'memberships' as const,
+    icon: ShieldCheck,
+  },
+  {
+    label: 'Appointments',
+    count: data.appointments.length,
+    tab: 'appointments' as const,
+    icon: CalendarCheck2,
+  },
+]
 
   return (
     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: { xs: 1.1, sm: 1.4 }, my: 2.2 }}>
