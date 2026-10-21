@@ -2,7 +2,8 @@ import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import { getCurrentUser, type AuthUser, type Role } from '../services/auth'
 
 type LoginForm = {
-  email: string
+  //email: string
+  identifier: string
   password: string
 }
 
@@ -25,7 +26,7 @@ type AuthState = {
 const initialState: AuthState = {
   authUser: getCurrentUser(),
   authError: '',
-  loginForm: { email: '', password: '' },
+  loginForm: { identifier: '', password: '' },
   signupForm: { name: '', email: '', phone: '', password: '', confirmPassword: '', role: 'BUSINESS' },
 }
 
@@ -42,7 +43,7 @@ const authSlice = createSlice({
     clearAuthError: (state) => {
       state.authError = ''
     },
-    setLoginForm: (state, action: PayloadAction<{ field: 'email' | 'password'; value: string }>) => {
+    setLoginForm: (state, action: PayloadAction<{ field: 'identifier' | 'password'; value: string }>) => {
       const { field, value } = action.payload
       state.loginForm[field] = value
     },
@@ -51,7 +52,7 @@ const authSlice = createSlice({
       state.signupForm[field] = value
     },
     resetAuthForms: (state) => {
-      state.loginForm = { email: '', password: '' }
+      state.loginForm = { identifier: '', password: '' }
       state.signupForm = { name: '', email: '', phone: '', password: '', confirmPassword: '', role: 'BUSINESS' }
       state.authError = ''
     },
