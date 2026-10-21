@@ -489,7 +489,7 @@ export function BusinessDashboard() {
                 }}
               />
 
-            {activeTab === 'overview' && <BusinessDashboardOverview onQuickAction={handleQuickAction} hasBusiness={Boolean(selectedBusiness)} appointmentsEnabled={appointmentsEnabled} membershipsEnabled={membershipsEnabled} />}
+            {activeTab === 'overview' && <BusinessDashboardOverview onQuickAction={handleQuickAction} onOpenInsights={() => changeTab('insights')} hasBusiness={Boolean(selectedBusiness)} appointmentsEnabled={appointmentsEnabled} membershipsEnabled={membershipsEnabled} />}
 
             {activeTab === 'businesses' && (
               <BusinessOverview
@@ -575,7 +575,7 @@ export function BusinessDashboard() {
               />
             )}
 
-            {activeTab === 'insights' && selectedBusiness && <BusinessInsightsWorkspace key={selectedBusiness.id} businessId={selectedBusiness.id} />}
+            {activeTab === 'insights' && selectedBusiness && <BusinessInsightsWorkspace key={selectedBusiness.id} businessId={selectedBusiness.id} appointmentsEnabled={appointmentsEnabled} membershipsEnabled={membershipsEnabled} />}
 
             {activeTab === 'memberships' && membershipsEnabled && selectedBusiness && (
               <MembershipWorkspace
