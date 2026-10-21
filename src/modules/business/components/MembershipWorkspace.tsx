@@ -10,6 +10,9 @@ import {
   searchMembershipUsers,
   sendMembershipReminder,
   updateManagedMembership,
+  fetchLoyaltyBalance,
+  fetchLoyaltySettings,
+  type LoyaltyProgramSettings,
   type CustomerSummary,
   type MembershipPlanSummary,
   type MembershipSummary,
@@ -87,6 +90,8 @@ export function MembershipWorkspace({ businessId, memberships, customers, onUpda
   const [membershipEditForm, setMembershipEditForm] = useState({ planId: '', startDate: '', paymentStatus: 'PENDING' as PaymentStatus, status: 'ACTIVE' as NonNullable<MembershipSummary['status']> })
   const [membershipEditMessage, setMembershipEditMessage] = useState('')
   const [renewalMembership, setRenewalMembership] = useState<MembershipSummary | null>(null)
+  const [renewalLoyalty, setRenewalLoyalty] = useState<{ balance: number; settings: LoyaltyProgramSettings } | null>(null)
+  const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState('0')
   const [reminderBusyId, setReminderBusyId] = useState<number | null>(null)
   const [planForm, setPlanForm] = useState({ name: '', description: '', price: '', billingFrequency: 'MONTHLY', durationMonths: '1', benefits: '', maxMembers: '', active: true })
 
@@ -119,6 +124,27 @@ export function MembershipWorkspace({ businessId, memberships, customers, onUpda
     return () => { isCurrent = false }
   }, [businessId, dispatch])
 
+  useEffect(() => {
+    if (!memberDialogOpen || !renewalMembership?.customerId) {
+      setRenewalLoyalty(null)
+      return
+    }
+    let isCurrent = true
+    Promise.all([
+      fetchLoyaltyBalance(businessId, renewalMembership.customerId),
+      fetchLoyaltySettings(businessId),
+    ]).then(([balance, settings]) => {
+      if (isCurrent) setRenewalLoyalty({ balance: balance.balance, settings })
+    }).catch((error) => {
+      if (isCurrent) {
+        setRenewalLoyalty(null)
+        setFeedback(error instanceof Error ? error.message : 'Could not load loyalty balance for this member.')
+        setFeedbackSeverity('error')
+      }
+    })
+    return () => { isCurrent = false }
+  }, [businessId, memberDialogOpen, renewalMembership?.customerId])
+
   const memberById = useMemo(() => new Map(customers.map((customer) => [customer.id, customer])), [customers])
   const businessMemberships = memberships.filter((membership) => (
     membership.businessId === businessId
@@ -138,6 +164,16 @@ export function MembershipWorkspace({ businessId, memberships, customers, onUpda
     const text = `${person?.fullName ?? person?.firstName ?? ''} ${person?.email ?? ''} ${person?.phoneNumber ?? ''} ${membership.planName ?? ''} ${person?.profileId ?? ''}`.toLowerCase()
     return text.includes(query.toLowerCase())
   })
+  const selectedRenewalPlan = plans.find((plan) => String(plan.id) === memberPlanId)
+  const renewalPoints = Math.max(0, Math.floor(Number(loyaltyPointsToRedeem) || 0))
+  const renewalDiscount = renewalLoyalty?.settings.configured
+    && renewalLoyalty.settings.pointsPerCurrencyUnit
+    && selectedRenewalPlan
+    ? Math.min(
+      renewalPoints / renewalLoyalty.settings.pointsPerCurrencyUnit,
+      selectedRenewalPlan.price * Number(renewalLoyalty.settings.maxRedemptionPercent) / 100,
+    )
+    : 0
 
   const openPlanDialog = (plan?: MembershipPlanSummary) => {
     setEditingPlan(plan ?? null)
@@ -204,6 +240,7 @@ export function MembershipWorkspace({ businessId, memberships, customers, onUpda
     setMemberPlanId(plans.find((plan) => plan.active)?.id.toString() ?? '')
     setMemberStartDate(todayIso())
     setMemberPaymentStatus('PENDING')
+    setLoyaltyPointsToRedeem('0')
     setMemberDialogOpen(true)
   }
 
@@ -220,6 +257,7 @@ export function MembershipWorkspace({ businessId, memberships, customers, onUpda
     setMemberPlanId(plans.find((plan) => plan.active && plan.id === membership.planId)?.id.toString() ?? plans.find((plan) => plan.active)?.id.toString() ?? '')
     setMemberStartDate(dayAfter(membership.endDate) < todayIso() ? todayIso() : dayAfter(membership.endDate))
     setMemberPaymentStatus('PENDING')
+    setLoyaltyPointsToRedeem('0')
     setSelectedMembership(null)
     setMemberDialogOpen(true)
   }
@@ -239,6 +277,7 @@ export function MembershipWorkspace({ businessId, memberships, customers, onUpda
       email: selectedUser ? undefined : memberEmail.trim() || undefined,
       startDate: memberStartDate,
       paymentStatus: memberPaymentStatus,
+      loyaltyPointsToRedeem: Math.max(0, Math.floor(Number(loyaltyPointsToRedeem) || 0)),
     })
     setSaving(false)
     if (!result.ok) {
@@ -439,6 +478,28 @@ export function MembershipWorkspace({ businessId, memberships, customers, onUpda
             <TextField label="Email (optional)" type="email" value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} fullWidth />
           </>}
           <TextField select label="Membership plan" value={memberPlanId} onChange={(event) => setMemberPlanId(event.target.value)} fullWidth>{plans.filter((plan) => plan.active).map((plan) => <MenuItem key={plan.id} value={String(plan.id)}>{plan.name} · {money(plan.price)}</MenuItem>)}</TextField>
+          {renewalMembership && renewalLoyalty?.settings.configured && (
+            <>
+              <Alert severity="info">
+                This member has {renewalLoyalty.balance.toLocaleString('en-IN')} points with this business.
+                {' '}Rate: {renewalLoyalty.settings.pointsPerCurrencyUnit} points = ₹1; cap: {renewalLoyalty.settings.maxRedemptionPercent}%.
+              </Alert>
+              <TextField
+                label="Loyalty points to use for renewal"
+                type="number"
+                value={loyaltyPointsToRedeem}
+                onChange={(event) => setLoyaltyPointsToRedeem(event.target.value)}
+                slotProps={{ htmlInput: { min: 0, max: renewalLoyalty.balance, step: 1 } }}
+                helperText={`Available: ${renewalLoyalty.balance.toLocaleString('en-IN')} points`}
+                fullWidth
+              />
+              {renewalDiscount > 0 && selectedRenewalPlan && (
+                <Typography variant="body2" sx={{ textAlign: 'right', fontWeight: 750 }}>
+                  Renewal price: {money(selectedRenewalPlan.price)} − {money(renewalDiscount)} loyalty discount = {money(Math.max(0, selectedRenewalPlan.price - renewalDiscount))}
+                </Typography>
+              )}
+            </>
+          )}
           <TextField label="Start date" type="date" value={memberStartDate} onChange={(event) => setMemberStartDate(event.target.value)} slotProps={{ inputLabel: { shrink: true } }} fullWidth />
           <TextField select label="Payment status" value={memberPaymentStatus} onChange={(event) => setMemberPaymentStatus(event.target.value as PaymentStatus)} fullWidth><MenuItem value="PAID">Paid (record only)</MenuItem><MenuItem value="PENDING">Pending</MenuItem><MenuItem value="FREE">Free / complimentary</MenuItem></TextField>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>No payment is collected here. This only records the status provided by the business.</Typography>
@@ -454,7 +515,7 @@ export function MembershipWorkspace({ businessId, memberships, customers, onUpda
           return <DialogContent dividers><Stack spacing={1.3}>
             <Box><Typography sx={{ fontWeight: 900 }}>{person?.fullName ?? person?.firstName ?? 'Member'}</Typography><Typography variant="caption" color="text.secondary">{person?.profileId ?? person?.email ?? person?.phoneNumber}</Typography></Box>
             <Chip label={memberStatus(selectedMembership, now)} color={statusTone(memberStatus(selectedMembership, now))} sx={{ alignSelf: 'flex-start' }} />
-            <Box><Typography variant="caption" color="text.secondary">Current plan</Typography><Typography sx={{ fontWeight: 800 }}>{selectedMembership.planName} · {money(selectedMembership.price)}</Typography><Typography variant="body2">{selectedMembership.startDate} to {selectedMembership.endDate ?? 'No end date'}</Typography><Typography variant="caption" color="text.secondary">Payment: {selectedMembership.paymentStatus ?? 'PENDING'}</Typography></Box>
+            <Box><Typography variant="caption" color="text.secondary">Current plan</Typography><Typography sx={{ fontWeight: 800 }}>{selectedMembership.planName} · {money(selectedMembership.price)}</Typography><Typography variant="body2">{selectedMembership.startDate} to {selectedMembership.endDate ?? 'No end date'}</Typography><Typography variant="caption" color="text.secondary">Payment: {selectedMembership.paymentStatus ?? 'PENDING'}</Typography>{(selectedMembership.loyaltyPointsRedeemed ?? 0) > 0 && <Typography variant="caption" sx={{ display: 'block', color: 'success.main' }}>{selectedMembership.loyaltyPointsRedeemed} points redeemed · {money(selectedMembership.loyaltyDiscountAmount)} off</Typography>}</Box>
             <Typography sx={{ fontWeight: 800 }}>Membership history</Typography>
             {history.map((item) => <Typography key={item.id} variant="body2" sx={{ color: 'text.secondary' }}>{item.planName} · {item.startDate} to {item.endDate ?? '—'} · {money(item.price)} · {item.status}</Typography>)}
             <Typography sx={{ fontWeight: 800 }}>Renewal reminders</Typography>

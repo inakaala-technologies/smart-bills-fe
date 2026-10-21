@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Box, Container, Paper, Stack, Typography } from '@mui/material'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import type { LocationValue } from '../../components/LocationPicker'
 import { createBusiness, createInvoice, searchCustomers, updateInvoiceStatus, type DashboardData } from '../../services/api'
@@ -23,11 +23,15 @@ import { InvoiceListPanel } from './components/InvoiceListPanel'
 import { MembershipWorkspace } from './components/MembershipWorkspace'
 import { CustomerRetentionWorkspace } from './components/CustomerRetentionWorkspace'
 import { BusinessInsightsWorkspace } from './components/BusinessInsightsWorkspace'
+import { LoyaltyWorkspace } from './components/LoyaltyWorkspace'
 import { AddCustomerDialog } from './components/AddCustomerDialog'
 import { SendMembershipNotificationDialog } from './components/SendMembershipNotificationDialog'
 import type { QuickActionId } from './components/QuickActionGrid'
+import type { DashboardTab } from '../types'
 import { normalizeBusinessType } from '../../constants/businessTypes'
 import { v4 as uuidv4 } from 'uuid';
+
+const businessDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'customers', 'appointments', 'memberships', 'loyalty', 'offers', 'retention', 'insights', 'profile']
 
 function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
@@ -41,12 +45,26 @@ function defaultDueDate() {
 
 export function BusinessDashboard() {
   const navigate = useNavigate()
+  const { tab: routeTab } = useParams()
   const dispatch = useAppDispatch()
   const authUser = getCurrentUser()
   const accountRoles = new Set((authUser?.accounts ?? []).map((account) => account.role).concat(authUser?.role ?? 'BUSINESS'))
   const availableAccounts = (authUser?.accounts ?? []).filter((account) => account.role !== authUser?.role)
   const missingProfileRoles = (['BUSINESS', 'CUSTOMER'] as Role[]).filter((role) => role !== authUser?.role && !accountRoles.has(role))
   const { data, activeTab, selectedBusinessId } = useAppSelector((state: RootState) => state.businessDashboard)
+  const changeTab = useCallback((tab: DashboardTab, replace = false) => {
+    dispatch(setActiveTab(tab))
+    navigate(`/dashboard/${tab}`, { replace })
+  }, [dispatch, navigate])
+
+  useEffect(() => {
+    const matchingTab = businessDashboardTabs.find((tab) => tab === routeTab)
+    if (matchingTab) {
+      dispatch(setActiveTab(matchingTab))
+    } else {
+      changeTab('overview', true)
+    }
+  }, [changeTab, dispatch, routeTab])
 
   const selectedBusiness = data.businesses.find((business) => business.id === selectedBusinessId) ?? data.businesses[0] ?? null
 
@@ -60,6 +78,7 @@ export function BusinessDashboard() {
   const [invoiceForm, setInvoiceForm] = useState<BusinessInvoiceForm>(() => ({
     customerId: data.customers[0]?.id ?? '',
     dueDate: defaultDueDate(),
+    loyaltyPointsToRedeem: '0',
     items: [createInvoiceItem()],
   }))
   const [invoiceMessage, setInvoiceMessage] = useState('')
@@ -111,12 +130,12 @@ export function BusinessDashboard() {
   const handleQuickAction = (action: QuickActionId) => {
     if (action === 'invoice') {
       setInvoiceMessage('')
-      dispatch(setActiveTab('invoices'))
+      changeTab('invoices')
       setIsInvoiceFormOpen(true)
     } else if (action === 'customer') {
       setIsAddCustomerOpen(true)
     } else if (action === 'membership') {
-      dispatch(setActiveTab('memberships'))
+      changeTab('memberships')
     } else {
       setIsNotificationDialogOpen(true)
     }
@@ -166,7 +185,7 @@ export function BusinessDashboard() {
     }
   }, [customerSearchText, data.customers])
 
-  const handleInvoiceInput = (field: 'customerId' | 'dueDate', value: string) => {
+  const handleInvoiceInput = (field: 'customerId' | 'dueDate' | 'loyaltyPointsToRedeem', value: string) => {
     setInvoiceForm((current) => ({ ...current, [field]: value }))
   }
 
@@ -258,7 +277,7 @@ export function BusinessDashboard() {
     setBusinessMessage('Business profile saved successfully.')
     setIsCreatingBusiness(false)
     dispatch(fetchBusinessDashboard(savedBusiness.id ?? undefined))
-    dispatch(setActiveTab('overview'))
+    changeTab('overview')
   }
 
   const handleCreateInvoice = async (status: 'DRAFT' | 'SENT') => {
@@ -298,6 +317,7 @@ export function BusinessDashboard() {
         gstAmount,
         totalAmount,
         status,
+        loyaltyPointsToRedeem: Math.max(0, Math.floor(Number(invoiceForm.loyaltyPointsToRedeem) || 0)),
       })
 
       if (!result.ok) {
@@ -308,7 +328,7 @@ export function BusinessDashboard() {
       setInvoiceMessage(status === 'DRAFT'
         ? `Invoice ${result.invoice?.invoiceNumber ?? 'draft'} saved as a draft.`
         : `Invoice ${result.invoice?.invoiceNumber ?? 'generated'} sent to the selected customer.`)
-      setInvoiceForm((current) => ({ ...current, customerId: '', items: [createInvoiceItem()] }))
+      setInvoiceForm((current) => ({ ...current, customerId: '', loyaltyPointsToRedeem: '0', items: [createInvoiceItem()] }))
       setSelectedCustomer(null)
       setCustomerSearchText('')
       dispatch(fetchBusinessDashboard(businessId))
@@ -350,6 +370,9 @@ export function BusinessDashboard() {
       status: invoice.status ?? 'SENT',
       dueDate: invoice.dueDate,
       amount: formatCurrency(invoice.totalAmount),
+      loyaltyDetails: (invoice.loyaltyPointsRedeemed ?? 0) > 0
+        ? `${invoice.loyaltyPointsRedeemed} points redeemed · ${formatCurrency(invoice.loyaltyDiscountAmount)} discount`
+        : undefined,
       date: invoiceDate && !Number.isNaN(invoiceDate.getTime())
         ? invoiceDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
         : '—',
@@ -406,7 +429,7 @@ export function BusinessDashboard() {
                 anchorEl={menuAnchorEl}
                 isOpen={isMenuOpen}
                 onClose={() => setMenuAnchorEl(null)}
-                onChangeTab={(tab) => dispatch(setActiveTab(tab))}
+                onChangeTab={changeTab}
                 currentRole={authUser?.role ?? 'BUSINESS'}
                 availableAccounts={availableAccounts}
                 missingProfileRoles={missingProfileRoles}
@@ -462,7 +485,7 @@ export function BusinessDashboard() {
               <Stack spacing={1.6}>
                 <InvoiceListPanel
                   invoiceRows={invoiceRows}
-                  onBack={() => dispatch(setActiveTab('overview'))}
+                  onBack={() => changeTab('overview')}
                   onCreateInvoice={() => {
                     setInvoiceMessage('')
                     setIsInvoiceFormOpen(true)
@@ -487,6 +510,7 @@ export function BusinessDashboard() {
                     setSelectedCustomer(customer)
                     if (customer) {
                       handleInvoiceInput('customerId', String(customer.id))
+                      handleInvoiceInput('loyaltyPointsToRedeem', '0')
                     }
                   }}
                   onInvoiceFieldChange={handleInvoiceInput}
@@ -498,7 +522,7 @@ export function BusinessDashboard() {
               </Stack>
             )}
 
-            {activeTab === 'customers' && <CustomerListCard customers={data.customers} onOpenCustomer={handleOpenCustomer} />}
+            {activeTab === 'customers' && selectedBusiness && <CustomerListCard businessId={selectedBusiness.id} customers={data.customers} onOpenCustomer={handleOpenCustomer} />}
 
             {activeTab === 'retention' && selectedBusiness && (
               <CustomerRetentionWorkspace
@@ -508,6 +532,14 @@ export function BusinessDashboard() {
                 hasMappedLocation={selectedBusiness.latitude != null && selectedBusiness.longitude != null}
                 data={data}
                 onUpdated={() => dispatch(fetchBusinessDashboard(selectedBusiness.id))}
+              />
+            )}
+
+            {activeTab === 'loyalty' && selectedBusiness && (
+              <LoyaltyWorkspace
+                key={selectedBusiness.id}
+                businessId={selectedBusiness.id}
+                products={data.products}
               />
             )}
 
@@ -576,7 +608,7 @@ export function BusinessDashboard() {
           </>
         )}
 
-        <BottomNavBar activeTab={activeTab} onChangeTab={(tab) => dispatch(setActiveTab(tab))} />
+        <BottomNavBar activeTab={activeTab} onChangeTab={changeTab} />
       </Paper>
     </Container>
   </Box>

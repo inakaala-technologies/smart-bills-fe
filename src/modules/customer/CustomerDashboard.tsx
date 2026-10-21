@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Alert,
   Box,
@@ -18,6 +18,7 @@ import {
 import {
   CalendarCheck2,
   ChevronRight,
+  Award,
   FileText,
   Home,
   LayoutGrid,
@@ -25,7 +26,7 @@ import {
   UserRound,
   type LucideIcon,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { DashboardListRow } from '../../components/DashboardListRow'
 import { BusinessTypeFilter } from '../../components/BusinessTypeFilter'
@@ -38,6 +39,7 @@ import { CustomerDashboardMenu } from './components/CustomerDashboardMenu'
 import { CustomerInvoicesList } from './components/CustomerInvoicesList'
 import { CustomerProfilePanel } from './components/CustomerProfilePanel'
 import { CustomerAppointmentsPanel } from './components/CustomerAppointmentsPanel'
+import { CustomerLoyaltyPanel } from './components/CustomerLoyaltyPanel'
 import { fetchNearbyOffers, type DashboardData } from '../../services/api'
 import { addProfile, logoutUser, switchAccount, type Role } from '../../services/auth'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
@@ -52,8 +54,11 @@ const roleNav: Array<{ key: DashboardTab; label: string; icon: LucideIcon }> = [
   { key: 'businesses', label: 'Businesses', icon: LayoutGrid },
   { key: 'invoices', label: 'Documents', icon: FileText },
   { key: 'appointments', label: 'Bookings', icon: CalendarCheck2 },
+  { key: 'rewards', label: 'Rewards', icon: Award },
   { key: 'profile', label: 'Profile', icon: UserRound },
 ]
+
+const customerDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'appointments', 'rewards', 'memberships', 'profile']
 
 function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
@@ -62,12 +67,13 @@ function formatCurrency(value?: number) {
 
 export function CustomerDashboard() {
   const navigate = useNavigate()
+  const { tab: routeTab } = useParams()
   const dispatch = useAppDispatch()
   const authUser = useAppSelector((state: RootState) => state.auth.authUser)
   const accountRoles = new Set((authUser?.accounts ?? []).map((account) => account.role).concat(authUser?.role ?? 'CUSTOMER'))
   const availableAccounts = (authUser?.accounts ?? []).filter((account) => account.role !== authUser?.role)
   const missingProfileRoles = (['BUSINESS', 'CUSTOMER'] as Role[]).filter((role) => role !== authUser?.role && !accountRoles.has(role))
-  const { data, loading, activeTab } = useAppSelector((state: RootState) => state.customerDashboard)
+  const { data, loading, activeTab, selectedCustomerId } = useAppSelector((state: RootState) => state.customerDashboard)
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
   const [managerOpen, setManagerOpen] = useState(false)
   const [businessTypeFilter, setBusinessTypeFilter] = useState('ALL')
@@ -91,9 +97,19 @@ export function CustomerDashboard() {
     return () => { isCurrent = false }
   }, [customerLatitude, customerLongitude])
 
-  const handleChangeTab = (tab: DashboardTab) => {
+  const handleChangeTab = useCallback((tab: DashboardTab, replace = false) => {
     dispatch(setActiveTab(tab))
-  }
+    navigate(`/dashboard/${tab}`, { replace })
+  }, [dispatch, navigate])
+
+  useEffect(() => {
+    const matchingTab = customerDashboardTabs.find((tab) => tab === routeTab)
+    if (matchingTab) {
+      dispatch(setActiveTab(matchingTab))
+    } else {
+      handleChangeTab('overview', true)
+    }
+  }, [dispatch, handleChangeTab, routeTab])
 
   const upcomingAppointmentActivities = data.appointments
     .filter((appointment) => {
@@ -197,6 +213,7 @@ export function CustomerDashboard() {
             <CustomerDashboardMenu
               tabs={roleNav}
               activeTab={activeTab}
+              onChangeTab={handleChangeTab}
               anchorEl={menuAnchorEl}
               isOpen={isMenuOpen}
               onClose={() => setMenuAnchorEl(null)}
@@ -282,7 +299,7 @@ export function CustomerDashboard() {
                     </Typography>
                     <Typography
                       variant="body2"
-                      onClick={() => dispatch(setActiveTab('invoices'))}
+                      onClick={() => handleChangeTab('invoices')}
                       sx={{
                         color: 'primary.main',
                         fontWeight: 700,
@@ -514,6 +531,12 @@ export function CustomerDashboard() {
                               <Typography sx={{ color: 'text.secondary' }}>GST</Typography>
                               <Typography sx={{ color: 'text.primary' }}>{formatCurrency(selectedInvoice.gstAmount)}</Typography>
                             </Box>
+                            {(selectedInvoice.loyaltyPointsRedeemed ?? 0) > 0 && (
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                                <Typography sx={{ color: 'success.main' }}>Loyalty discount ({selectedInvoice.loyaltyPointsRedeemed} points)</Typography>
+                                <Typography sx={{ color: 'success.main' }}>−{formatCurrency(selectedInvoice.loyaltyDiscountAmount)}</Typography>
+                              </Box>
+                            )}
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, pt: 0.7, borderTop: '1px solid var(--mui-palette-divider)' }}>
                               <Typography sx={{ color: 'text.primary', fontWeight: 800 }}>Total</Typography>
                               <Typography sx={{ color: 'primary.main', fontWeight: 800 }}>{formatCurrency(selectedInvoice.totalAmount)}</Typography>
@@ -574,7 +597,13 @@ export function CustomerDashboard() {
             )}
 
             {activeTab === 'invoices' && <CustomerInvoicesList invoices={data.invoices} businesses={data.businesses} />}
-            {activeTab === 'appointments' && <CustomerAppointmentsPanel appointments={data.appointments} businesses={data.businesses} />}
+            {activeTab === 'appointments' && <CustomerAppointmentsPanel appointments={data.appointments} businesses={data.businesses} customerId={selectedCustomerId} />}
+            {activeTab === 'rewards' && (
+              <CustomerLoyaltyPanel
+                customerId={selectedCustomerId}
+                businesses={data.businesses}
+              />
+            )}
             {activeTab === 'memberships' && (
               <Stack spacing={1.2}>
                 <Box>
@@ -613,8 +642,8 @@ export function CustomerDashboard() {
                 data={data}
                 onProfileUpdated={(user) => dispatch(setAuthUser(user))}
                 onOpenManageDialog={() => setManagerOpen(true)}
-                onOpenBusinesses={() => dispatch(setActiveTab('businesses'))}
-                onOpenDocuments={() => dispatch(setActiveTab('invoices'))}
+                onOpenBusinesses={() => handleChangeTab('businesses')}
+                onOpenDocuments={() => handleChangeTab('invoices')}
                 onOpenBusiness={(businessId) => {
                   dispatch(setSelectedBusinessId(businessId))
                   navigate(`/business/${businessId}`)

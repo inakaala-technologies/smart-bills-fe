@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Alert, Autocomplete, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, IconButton, MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import { ArrowRight, Plus, Trash2, X } from 'lucide-react'
 import { type DashboardData } from '../../../services/api'
+import { fetchLoyaltyBalance, fetchLoyaltySettings, type LoyaltyProgramSettings } from '../../../services/api'
 import { fetchBusinessMembershipPlans } from '../../../store/businessDashboardSlice'
 import { useAppDispatch, useAppSelector } from '../../../store/hooks'
 
@@ -16,6 +17,7 @@ export type InvoiceLineItemForm = {
 export type BusinessInvoiceForm = {
   customerId: number | string
   dueDate: string
+  loyaltyPointsToRedeem: string
   items: InvoiceLineItemForm[]
 }
 
@@ -35,7 +37,7 @@ export type InvoiceGeneratorCardProps = {
   onClose: () => void
   onCustomerSearchChange: (value: string) => void
   onCustomerSelection: (customer: DashboardData['customers'][number] | null) => void
-  onInvoiceFieldChange: (field: 'customerId' | 'dueDate', value: string) => void
+  onInvoiceFieldChange: (field: 'customerId' | 'dueDate' | 'loyaltyPointsToRedeem', value: string) => void
   onInvoiceItemChange: (id: string, field: InvoiceLineItemField, value: string) => void
   onAddItem: () => void
   onRemoveItem: (id: string) => void
@@ -69,7 +71,32 @@ export function InvoiceGeneratorCard({
   const membershipPlansError = membershipPlanState?.error ?? ''
   const [invoiceModeOverride, setInvoiceModeOverride] = useState<'products' | 'membership' | null>(null)
   const [selectedMembershipId, setSelectedMembershipId] = useState('')
+  const [loyaltyState, setLoyaltyState] = useState<{
+    customerId: number
+    balance: number
+    settings: LoyaltyProgramSettings
+  } | null>(null)
+  const [loyaltyError, setLoyaltyError] = useState('')
   const invoiceMode = invoiceModeOverride ?? (membershipPlans.length > 0 ? 'membership' : 'products')
+
+  useEffect(() => {
+    if (!open || !selectedCustomer) {
+      setLoyaltyState(null)
+      setLoyaltyError('')
+      return
+    }
+    let isCurrent = true
+    setLoyaltyError('')
+    Promise.all([
+      fetchLoyaltyBalance(businessId, selectedCustomer.id),
+      fetchLoyaltySettings(businessId),
+    ]).then(([balance, settings]) => {
+      if (isCurrent) setLoyaltyState({ customerId: selectedCustomer.id, balance: balance.balance, settings })
+    }).catch((error) => {
+      if (isCurrent) setLoyaltyError(error instanceof Error ? error.message : 'Could not load this customer’s loyalty balance.')
+    })
+    return () => { isCurrent = false }
+  }, [businessId, open, selectedCustomer])
 
   useEffect(() => {
     if (!open || !businessId) return
@@ -81,6 +108,7 @@ export function InvoiceGeneratorCard({
   const handleClose = () => {
     setInvoiceModeOverride(null)
     setSelectedMembershipId('')
+    onInvoiceFieldChange('loyaltyPointsToRedeem', '0')
     onClose()
   }
 
@@ -106,6 +134,15 @@ export function InvoiceGeneratorCard({
       && membership.planId != null
       && !['CANCELLED', 'RENEWED', 'SUSPENDED'].includes(membership.status ?? ''),
   )
+  const currentLoyaltyState = selectedCustomer && loyaltyState?.customerId === selectedCustomer.id ? loyaltyState : null
+  const loyaltyPoints = Math.max(0, Math.floor(Number(invoiceForm.loyaltyPointsToRedeem) || 0))
+  const loyaltySettings = currentLoyaltyState?.settings
+  const loyaltyDiscount = loyaltySettings?.configured && loyaltySettings.pointsPerCurrencyUnit
+    ? Math.min(
+      loyaltyPoints / loyaltySettings.pointsPerCurrencyUnit,
+      (totals.subtotal + totals.tax) * (Number(loyaltySettings.maxRedemptionPercent) / 100),
+    )
+    : 0
 
   const handleMembershipSelection = (membershipId: string) => {
     setSelectedMembershipId(membershipId)
@@ -121,6 +158,7 @@ export function InvoiceGeneratorCard({
 
     onCustomerSelection(customer)
     onInvoiceFieldChange('customerId', String(membership.customerId))
+    onInvoiceFieldChange('loyaltyPointsToRedeem', '0')
     onCustomerSearchChange('')
     onInvoiceItemChange(invoiceForm.items[0].id, 'productName', itemName)
     if (savedPrice != null) onInvoiceItemChange(invoiceForm.items[0].id, 'unitPrice', String(savedPrice))
@@ -170,6 +208,7 @@ export function InvoiceGeneratorCard({
                   onClick={() => {
                     onCustomerSelection(null)
                     onInvoiceFieldChange('customerId', '')
+                    onInvoiceFieldChange('loyaltyPointsToRedeem', '0')
                     onCustomerSearchChange('')
                   }}
                   sx={{ minWidth: 'auto', color: 'text.secondary', textTransform: 'none', fontWeight: 700, alignSelf: 'flex-start' }}
@@ -190,6 +229,7 @@ export function InvoiceGeneratorCard({
                   if (!customer) {
                     onCustomerSelection(null)
                     onInvoiceFieldChange('customerId', '')
+                    onInvoiceFieldChange('loyaltyPointsToRedeem', '0')
                     onCustomerSearchChange('')
                     return
                   }
@@ -245,6 +285,31 @@ export function InvoiceGeneratorCard({
             </Stack>
           )}
 
+          {selectedCustomer && (
+            <Stack spacing={0.8}>
+              {loyaltyError && <Alert severity="error">{loyaltyError}</Alert>}
+              {currentLoyaltyState?.settings.configured ? (
+                <>
+                  <Alert severity="info">
+                    {selectedCustomer.fullName ?? 'Customer'} has {currentLoyaltyState.balance.toLocaleString('en-IN')} points with this business.
+                    {' '}Rate: {currentLoyaltyState.settings.pointsPerCurrencyUnit} points = ₹1; cap: {currentLoyaltyState.settings.maxRedemptionPercent}% per purchase.
+                  </Alert>
+                  <TextField
+                    size="small"
+                    label="Loyalty points to redeem"
+                    type="number"
+                    value={invoiceForm.loyaltyPointsToRedeem}
+                    onChange={(event) => onInvoiceFieldChange('loyaltyPointsToRedeem', event.target.value)}
+                    slotProps={{ htmlInput: { min: 0, max: currentLoyaltyState.balance, step: 1 } }}
+                    helperText={`Available: ${currentLoyaltyState.balance.toLocaleString('en-IN')} points`}
+                  />
+                </>
+              ) : !loyaltyError && (
+                <Alert severity="info">This business has not enabled point redemption for this customer.</Alert>
+              )}
+            </Stack>
+          )}
+
           <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
             <Typography variant="subtitle2" sx={{ color: 'text.primary', fontWeight: 800 }}>{invoiceMode === 'membership' ? 'Invoice items' : 'Products'}</Typography>
             <Button size="small" startIcon={<Plus size={15} />} onClick={onAddItem} sx={{ textTransform: 'none' }}>{invoiceMode === 'membership' ? 'Add add-on' : 'Add product'}</Button>
@@ -272,7 +337,8 @@ export function InvoiceGeneratorCard({
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 0.6, px: 0.5 }}>
             <Typography variant="body2" color="text.secondary">Subtotal</Typography><Typography variant="body2" sx={{ textAlign: 'right' }}>{formatMoney(totals.subtotal)}</Typography>
             <Typography variant="body2" color="text.secondary">GST</Typography><Typography variant="body2" sx={{ textAlign: 'right' }}>{formatMoney(totals.tax)}</Typography>
-            <Typography variant="subtitle2" sx={{ color: 'text.primary', fontWeight: 900 }}>Total</Typography><Typography variant="subtitle2" sx={{ color: 'text.primary', textAlign: 'right', fontWeight: 900 }}>{formatMoney(totals.subtotal + totals.tax)}</Typography>
+            {loyaltyDiscount > 0 && <><Typography variant="body2" color="success.main">Loyalty discount ({loyaltyPoints} points)</Typography><Typography variant="body2" color="success.main" sx={{ textAlign: 'right' }}>−{formatMoney(loyaltyDiscount)}</Typography></>}
+            <Typography variant="subtitle2" sx={{ color: 'text.primary', fontWeight: 900 }}>Amount due</Typography><Typography variant="subtitle2" sx={{ color: 'text.primary', textAlign: 'right', fontWeight: 900 }}>{formatMoney(totals.subtotal + totals.tax - loyaltyDiscount)}</Typography>
           </Box>
 
           <TextField size="small" label="Due date" type="date" value={invoiceForm.dueDate} onChange={(event) => onInvoiceFieldChange('dueDate', event.target.value)} fullWidth slotProps={{ inputLabel: { shrink: true } }} />

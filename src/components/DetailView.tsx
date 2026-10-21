@@ -54,7 +54,7 @@ export function DetailView() {
   const [invoiceSearchText, setInvoiceSearchText] = useState('')
   const [invoiceMessage, setInvoiceMessage] = useState('')
   const [isInvoiceSubmitting, setIsInvoiceSubmitting] = useState(false)
-  const [invoiceForm, setInvoiceForm] = useState<BusinessInvoiceForm>(() => ({ customerId: '', dueDate: getDefaultDueDate(), items: [createInvoiceItem()] }))
+  const [invoiceForm, setInvoiceForm] = useState<BusinessInvoiceForm>(() => ({ customerId: '', dueDate: getDefaultDueDate(), loyaltyPointsToRedeem: '0', items: [createInvoiceItem()] }))
   const memberships = dashboard.data.memberships
     .filter((membership) => membership.customerId === customerDetail)
     .sort((first, second) => new Date(second.updatedAt ?? second.startDate ?? 0).getTime() - new Date(first.updatedAt ?? first.startDate ?? 0).getTime())
@@ -96,14 +96,14 @@ export function DetailView() {
   const formatCurrency = (value?: number) => typeof value === 'number' ? `₹${value.toLocaleString('en-IN')}` : '—'
 
   const openInvoiceDialog = () => {
-    setInvoiceForm({ customerId: detail.id, dueDate: getDefaultDueDate(), items: [createInvoiceItem()] })
+    setInvoiceForm({ customerId: detail.id, dueDate: getDefaultDueDate(), loyaltyPointsToRedeem: '0', items: [createInvoiceItem()] })
     setInvoiceCustomer(detail)
     setInvoiceSearchText('')
     setInvoiceMessage('')
     setInvoiceDialogOpen(true)
   }
 
-  const handleInvoiceFieldChange = (field: 'customerId' | 'dueDate', value: string) => {
+  const handleInvoiceFieldChange = (field: 'customerId' | 'dueDate' | 'loyaltyPointsToRedeem', value: string) => {
     setInvoiceForm((current) => ({ ...current, [field]: value }))
   }
 
@@ -143,6 +143,7 @@ export function DetailView() {
         gstAmount,
         totalAmount: Number((subtotal + gstAmount).toFixed(2)),
         status,
+        loyaltyPointsToRedeem: Math.max(0, Math.floor(Number(invoiceForm.loyaltyPointsToRedeem) || 0)),
       })
       if (!result.ok) {
         setInvoiceMessage(result.message ?? 'Invoice generation failed.')
@@ -152,7 +153,7 @@ export function DetailView() {
       setInvoiceMessage(status === 'DRAFT'
         ? `Invoice ${result.invoice?.invoiceNumber ?? 'draft'} saved as a draft.`
         : `Invoice ${result.invoice?.invoiceNumber ?? 'generated'} sent to the selected customer.`)
-      setInvoiceForm((current) => ({ ...current, customerId: '', items: [createInvoiceItem()] }))
+      setInvoiceForm((current) => ({ ...current, customerId: '', loyaltyPointsToRedeem: '0', items: [createInvoiceItem()] }))
       setInvoiceCustomer(null)
       setInvoiceSearchText('')
       dispatch(fetchBusinessDashboard(businessId))
@@ -170,7 +171,7 @@ export function DetailView() {
       records: memberships.map((membership) => ({
         id: membership.id,
         title: membership.planName ?? `Membership ${membership.id}`,
-        detail: `${formatDate(membership.startDate)}${membership.endDate ? ` - ${formatDate(membership.endDate)}` : ''} · ${formatCurrency(membership.price)}`,
+        detail: `${formatDate(membership.startDate)}${membership.endDate ? ` - ${formatDate(membership.endDate)}` : ''} · ${formatCurrency(membership.price)}${(membership.loyaltyPointsRedeemed ?? 0) > 0 ? ` · ${membership.loyaltyPointsRedeemed} points redeemed (${formatCurrency(membership.loyaltyDiscountAmount)} off)` : ''}`,
         status: membership.status ?? membership.paymentStatus ?? 'Recorded',
       })),
     },
@@ -180,7 +181,7 @@ export function DetailView() {
       records: invoices.map((invoice) => ({
         id: invoice.id,
         title: invoice.invoiceNumber ?? `Invoice ${invoice.id}`,
-        detail: `${formatDate(invoice.issueDate)} · ${formatCurrency(invoice.totalAmount)}`,
+        detail: `${formatDate(invoice.issueDate)} · ${formatCurrency(invoice.totalAmount)}${(invoice.loyaltyPointsRedeemed ?? 0) > 0 ? ` · ${invoice.loyaltyPointsRedeemed} points redeemed (${formatCurrency(invoice.loyaltyDiscountAmount)} off)` : ''}`,
         status: invoice.status ?? 'Recorded',
       })),
     },
@@ -201,7 +202,7 @@ export function DetailView() {
         id: appointment.id,
         title: appointment.serviceName ?? `Appointment ${appointment.id}`,
         detail: appointment.scheduledAt
-          ? new Date(appointment.scheduledAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+          ? `${new Date(appointment.scheduledAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}${(appointment.loyaltyPointsRedeemed ?? 0) > 0 ? ` · ${appointment.loyaltyPointsRedeemed} points redeemed (${formatCurrency(appointment.loyaltyDiscountAmount)} off)` : ''}`
           : 'Schedule not available',
         status: appointment.status ?? 'Booked',
       })),
@@ -408,7 +409,10 @@ export function DetailView() {
             onCustomerSearchChange={setInvoiceSearchText}
             onCustomerSelection={(customer) => {
               setInvoiceCustomer(customer)
-              if (customer) handleInvoiceFieldChange('customerId', String(customer.id))
+              if (customer) {
+                handleInvoiceFieldChange('customerId', String(customer.id))
+                handleInvoiceFieldChange('loyaltyPointsToRedeem', '0')
+              }
             }}
             onInvoiceFieldChange={handleInvoiceFieldChange}
             onInvoiceItemChange={handleInvoiceItemChange}

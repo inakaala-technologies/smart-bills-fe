@@ -31,6 +31,7 @@ export function CustomerInvoicesList({ invoices, businesses }: CustomerInvoicesL
       businessName,
       invoiceNumber: invoice.invoiceNumber ?? `INV-${invoice.id}`,
       status: invoice.status ?? 'SENT',
+      loyaltySummary: (invoice.loyaltyPointsRedeemed ?? 0) > 0 ? ` · ${invoice.loyaltyPointsRedeemed} loyalty points redeemed` : '',
       amount: formatCurrency(invoice.totalAmount),
       date: invoiceDate?.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) ?? '—',
       time: invoiceDate?.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }) ?? '',
@@ -50,7 +51,7 @@ export function CustomerInvoicesList({ invoices, businesses }: CustomerInvoicesL
             <RecentActivityItem
               key={entry.id}
               title={entry.businessName}
-              subtitle={`${entry.invoiceNumber} • ${entry.status}`}
+              subtitle={`${entry.invoiceNumber} • ${entry.status}${entry.loyaltySummary}`}
               amount={entry.amount}
               badge={entry.badge}
               date={entry.date}
