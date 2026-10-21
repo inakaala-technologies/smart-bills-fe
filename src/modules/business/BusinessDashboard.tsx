@@ -34,9 +34,24 @@ function formatCurrency(value?: number) {
   return `₹${value.toLocaleString('en-IN')}`
 }
 
+function getLocalDate() {
+  const date = new Date()
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
 function defaultDueDate() {
-  const dueDate = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7)
-  return dueDate.toISOString().slice(0, 10)
+  const date = new Date()
+  date.setDate(date.getDate() + 7)
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
 }
 
 export function BusinessDashboard() {
@@ -261,7 +276,8 @@ export function BusinessDashboard() {
     dispatch(setActiveTab('overview'))
   }
 
-  const handleCreateInvoice = async (status: 'DRAFT' | 'SENT') => {
+  const handleCreateInvoice = async (status: 'DRAFT' | 'SENT',
+  invoiceMode: 'products' | 'membership',) => {
     const businessId = selectedBusinessId ?? selectedBusiness?.id ?? data.businesses[0]?.id
     const customerId = Number(invoiceForm.customerId)
     const items = invoiceForm.items.map((item) => ({
@@ -284,21 +300,23 @@ export function BusinessDashboard() {
     const subtotal = Number(items.reduce((total, item) => total + item.quantity * item.unitPrice, 0).toFixed(2))
     const gstAmount = Number(items.reduce((total, item) => total + item.quantity * item.unitPrice * (item.gstRate / 100), 0).toFixed(2))
     const totalAmount = Number((subtotal + gstAmount).toFixed(2))
-    const issueDate = new Date().toISOString().slice(0, 10)
+    const issueDate = getLocalDate()
 
     setIsInvoiceSubmitting(true)
     try {
       const result = await createInvoice({
-        businessId,
-        customerId,
-        invoiceNumber: `INV-${Date.now()}`,
-        issueDate,
-        dueDate: invoiceForm.dueDate || new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString().slice(0, 10),
-        subtotal,
-        gstAmount,
-        totalAmount,
-        status,
-      })
+  businessId,
+  customerId,
+  invoiceNumber: `INV-${Date.now()}`,
+  issueDate,
+  ...(invoiceMode === 'membership'
+    ? { dueDate: invoiceForm.dueDate }
+    : {}),
+  subtotal,
+  gstAmount,
+  totalAmount,
+  status,
+})
 
       if (!result.ok) {
         setInvoiceMessage(result.message ?? 'Invoice generation failed.')
@@ -493,7 +511,7 @@ export function BusinessDashboard() {
                   onInvoiceItemChange={handleInvoiceItemChange}
                   onAddItem={handleAddInvoiceItem}
                   onRemoveItem={handleRemoveInvoiceItem}
-                  onCreateInvoice={(status) => void handleCreateInvoice(status)}
+                  onCreateInvoice={(status, invoiceMode) => void handleCreateInvoice(status, invoiceMode)}
                 />
               </Stack>
             )}
