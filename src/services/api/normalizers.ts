@@ -34,6 +34,7 @@ export function normalizeBusiness(raw: Partial<BusinessSummary> & Record<string,
     longitude: typeof raw.longitude === 'number' ? raw.longitude : undefined,
     status: typeof raw.status === 'string' ? raw.status : 'active',
     appointmentsEnabled: raw.appointmentsEnabled === true,
+    membershipsEnabled: raw.membershipsEnabled !== false,
   }
 }
 

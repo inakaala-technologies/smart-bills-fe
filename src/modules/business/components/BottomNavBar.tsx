@@ -12,10 +12,12 @@ const roleNav: Array<{ key: DashboardTab; label: string; icon: LucideIcon }> = [
 
 export type BottomNavBarProps = {
   activeTab: DashboardTab
+  membershipsEnabled: boolean
   onChangeTab: (tab: DashboardTab) => void
 }
 
-export function BottomNavBar({ activeTab, onChangeTab }: BottomNavBarProps) {
+export function BottomNavBar({ activeTab, membershipsEnabled, onChangeTab }: BottomNavBarProps) {
+  const visibleRoleNav = roleNav.filter((tab) => tab.key !== 'memberships' || membershipsEnabled)
   return (
     <Box
       sx={{
@@ -26,14 +28,14 @@ export function BottomNavBar({ activeTab, onChangeTab }: BottomNavBarProps) {
         backgroundColor: 'background.paper',
         borderTop: '1px solid var(--mui-palette-divider)',
         display: 'grid',
-        gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+        gridTemplateColumns: `repeat(${visibleRoleNav.length}, minmax(0, 1fr))`,
         py: 1.2,
         px: 1,
         zIndex: 10,
       }}
     >
-      {roleNav.map((tab) => {
-        const isActive = activeTab === tab.key || (tab.key === 'profile' && !['overview', 'customers', 'memberships', 'invoices'].includes(activeTab))
+      {visibleRoleNav.map((tab) => {
+        const isActive = activeTab === tab.key || (tab.key === 'profile' && !['overview', 'customers', 'memberships', 'invoices', 'appointments'].includes(activeTab))
         const Icon = tab.icon
 
         return (

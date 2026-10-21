@@ -19,6 +19,7 @@ export type BusinessSummary = {
   longitude?: number
   status?: string
   appointmentsEnabled?: boolean
+  membershipsEnabled?: boolean
 }
 
 export type CustomerSummary = {

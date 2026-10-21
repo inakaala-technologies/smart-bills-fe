@@ -4,10 +4,12 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import type { LocationValue } from '../../components/LocationPicker'
 import { createBusiness, createInvoice, searchCustomers, updateInvoiceStatus, type DashboardData } from '../../services/api'
+import { setBusinessMembershipsEnabled } from '../../services/api/businessApi'
+import { setBusinessAppointmentsEnabled } from '../../services/api/appointmentsApi'
 import { addProfile, getCurrentUser, logoutUser, switchAccount, type Role } from '../../services/auth'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import type { RootState } from '../../store/store'
-import { fetchBusinessDashboard, fetchBusinessSummary, setActiveTab, setSelectedBusinessId } from '../../store/businessDashboardSlice'
+import { fetchBusinessDashboard, fetchBusinessSummary, setActiveTab, setBusinessFeatures, setSelectedBusinessId } from '../../store/businessDashboardSlice'
 import { setAuthUser } from '../../store/authSlice'
 import { AppointmentListCard } from './components/AppointmentListCard'
 import { AppointmentServiceManager } from './components/AppointmentServiceManager'
@@ -26,6 +28,7 @@ import { BusinessInsightsWorkspace } from './components/BusinessInsightsWorkspac
 import { LoyaltyWorkspace } from './components/LoyaltyWorkspace'
 import { AddCustomerDialog } from './components/AddCustomerDialog'
 import { SendMembershipNotificationDialog } from './components/SendMembershipNotificationDialog'
+import type { BusinessFeature } from './components/BusinessProfileCard'
 import type { QuickActionId } from './components/QuickActionGrid'
 import type { DashboardTab } from '../types'
 import { normalizeBusinessType } from '../../constants/businessTypes'
@@ -67,6 +70,15 @@ export function BusinessDashboard() {
   }, [changeTab, dispatch, routeTab])
 
   const selectedBusiness = data.businesses.find((business) => business.id === selectedBusinessId) ?? data.businesses[0] ?? null
+  const appointmentsEnabled = selectedBusiness?.appointmentsEnabled ?? false
+  const membershipsEnabled = selectedBusiness?.membershipsEnabled ?? true
+
+  useEffect(() => {
+    if (!selectedBusiness) return
+    if ((activeTab === 'appointments' && !appointmentsEnabled) || (activeTab === 'memberships' && !membershipsEnabled)) {
+      changeTab('overview', true)
+    }
+  }, [activeTab, appointmentsEnabled, changeTab, membershipsEnabled, selectedBusiness])
 
   const createInvoiceItem = (): InvoiceLineItemForm => ({
     id: uuidv4(),
@@ -134,11 +146,29 @@ export function BusinessDashboard() {
       setIsInvoiceFormOpen(true)
     } else if (action === 'customer') {
       setIsAddCustomerOpen(true)
+    } else if (action === 'appointment') {
+      changeTab('appointments')
     } else if (action === 'membership') {
       changeTab('memberships')
     } else {
       setIsNotificationDialogOpen(true)
     }
+  }
+
+  const handleFeatureToggle = async (feature: BusinessFeature, enabled: boolean) => {
+    if (!selectedBusiness) return { ok: false, message: 'Select a business profile first.' }
+    const result = feature === 'appointments'
+      ? await setBusinessAppointmentsEnabled(selectedBusiness.id, enabled)
+      : await setBusinessMembershipsEnabled(selectedBusiness.id, enabled)
+    if (!result.ok || !result.business) {
+      return { ok: false, message: result.message ?? 'Could not update this feature.' }
+    }
+    dispatch(setBusinessFeatures({
+      businessId: selectedBusiness.id,
+      appointmentsEnabled: result.business.appointmentsEnabled ?? false,
+      membershipsEnabled: result.business.membershipsEnabled ?? true,
+    }))
+    return { ok: true }
   }
 
   useEffect(() => {
@@ -426,6 +456,8 @@ export function BusinessDashboard() {
             <Stack spacing={1.6}>
               <BusinessMenu
                 activeTab={activeTab}
+                appointmentsEnabled={appointmentsEnabled}
+                membershipsEnabled={membershipsEnabled}
                 anchorEl={menuAnchorEl}
                 isOpen={isMenuOpen}
                 onClose={() => setMenuAnchorEl(null)}
@@ -457,7 +489,7 @@ export function BusinessDashboard() {
                 }}
               />
 
-            {activeTab === 'overview' && <BusinessDashboardOverview onQuickAction={handleQuickAction} hasBusiness={Boolean(selectedBusiness)} />}
+            {activeTab === 'overview' && <BusinessDashboardOverview onQuickAction={handleQuickAction} hasBusiness={Boolean(selectedBusiness)} appointmentsEnabled={appointmentsEnabled} membershipsEnabled={membershipsEnabled} />}
 
             {activeTab === 'businesses' && (
               <BusinessOverview
@@ -545,7 +577,7 @@ export function BusinessDashboard() {
 
             {activeTab === 'insights' && selectedBusiness && <BusinessInsightsWorkspace key={selectedBusiness.id} businessId={selectedBusiness.id} />}
 
-            {activeTab === 'memberships' && selectedBusiness && (
+            {activeTab === 'memberships' && membershipsEnabled && selectedBusiness && (
               <MembershipWorkspace
                 key={selectedBusiness.id}
                 businessId={selectedBusiness.id}
@@ -555,7 +587,7 @@ export function BusinessDashboard() {
               />
             )}
 
-            {activeTab === 'appointments' && (
+            {activeTab === 'appointments' && appointmentsEnabled && (
               <Stack spacing={1.6}>
                 {selectedBusiness && (
                   <AppointmentServiceManager
@@ -582,9 +614,12 @@ export function BusinessDashboard() {
                 profileId={selectedBusiness?.profileId}
                 isCreatingBusiness={isCreatingBusiness}
                 businessMessage={businessMessage}
-                onBusinessFieldChange={handleBusinessFieldChange}
+                  appointmentsEnabled={appointmentsEnabled}
+                  membershipsEnabled={membershipsEnabled}
+                  onBusinessFieldChange={handleBusinessFieldChange}
                   onLocationChange={handleBusinessLocationChange}
-                onSave={handleSaveBusinessProfile}
+                  onFeatureToggle={handleFeatureToggle}
+                  onSave={handleSaveBusinessProfile}
               />
             )}
           </Stack>
@@ -608,7 +643,7 @@ export function BusinessDashboard() {
           </>
         )}
 
-        <BottomNavBar activeTab={activeTab} onChangeTab={changeTab} />
+        <BottomNavBar activeTab={activeTab} membershipsEnabled={membershipsEnabled} onChangeTab={changeTab} />
       </Paper>
     </Container>
   </Box>

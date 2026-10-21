@@ -1,5 +1,5 @@
 import { Box, Typography } from '@mui/material'
-import { Bell, Building2, ChevronRight, FileText, ReceiptText, UserRound, Users, WalletCards } from 'lucide-react'
+import { Bell, CalendarCheck2, Building2, ChevronRight, FileText, ReceiptText, UserRound, Users, WalletCards } from 'lucide-react'
 import { ActivityPanel } from './ActivityPanel'
 import { QuickActionGrid, type QuickActionId } from './QuickActionGrid'
 import { RevenueTrendChart } from './RevenueTrendChart'
@@ -10,7 +10,7 @@ function formatCurrency(value?: number) {
   return `₹${value.toLocaleString('en-IN')}`
 }
 
-export function BusinessDashboardOverview({ onQuickAction, hasBusiness }: { onQuickAction: (action: QuickActionId) => void; hasBusiness: boolean }) {
+export function BusinessDashboardOverview({ onQuickAction, hasBusiness, appointmentsEnabled, membershipsEnabled }: { onQuickAction: (action: QuickActionId) => void; hasBusiness: boolean; appointmentsEnabled: boolean; membershipsEnabled: boolean }) {
   const { data, loading, summary } = useAppSelector((state) => state.businessDashboard)
   const pendingPayments = data.payments.filter((payment) => /pending/i.test(payment.status ?? ''))
   const summaryCards = [
@@ -103,8 +103,14 @@ export function BusinessDashboardOverview({ onQuickAction, hasBusiness }: { onQu
       <QuickActionGrid actions={[
         { id: 'invoice', label: 'Create Invoice', icon: ReceiptText, onClick: () => onQuickAction('invoice'), disabled: !hasBusiness },
         { id: 'customer', label: 'Add Customer', icon: UserRound, onClick: () => onQuickAction('customer'), disabled: !hasBusiness },
-        { id: 'membership', label: 'Membership', icon: Building2, onClick: () => onQuickAction('membership'), disabled: !hasBusiness },
-        { id: 'notification', label: 'Send Notification', icon: Bell, onClick: () => onQuickAction('notification'), disabled: !hasBusiness },
+        ...(appointmentsEnabled
+          ? [{ id: 'appointment' as const, label: 'Appointments', icon: CalendarCheck2, onClick: () => onQuickAction('appointment'), disabled: !hasBusiness }]
+          : membershipsEnabled
+            ? [{ id: 'membership' as const, label: 'Membership', icon: Building2, onClick: () => onQuickAction('membership'), disabled: !hasBusiness }]
+            : []),
+        ...(membershipsEnabled
+          ? [{ id: 'notification' as const, label: 'Send Notification', icon: Bell, onClick: () => onQuickAction('notification'), disabled: !hasBusiness }]
+          : []),
       ]} />
 
       <Box sx={{ backgroundColor: 'background.paper', borderRadius: 2.4, p: 1.35, border: '1px solid var(--mui-palette-divider)', boxShadow: '0 4px 14px rgba(0, 0, 0, 0.14)' }}>

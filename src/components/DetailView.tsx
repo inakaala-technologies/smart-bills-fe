@@ -284,6 +284,8 @@ export function DetailView() {
               />
               <BusinessMenu
                 activeTab={businessState.activeTab}
+                appointmentsEnabled={business?.appointmentsEnabled ?? false}
+                membershipsEnabled={business?.membershipsEnabled ?? true}
                 anchorEl={menuAnchorEl}
                 isOpen={isMenuOpen}
                 onClose={() => setMenuAnchorEl(null)}
@@ -424,7 +426,7 @@ export function DetailView() {
       )}
           </Box>
 
-          <BottomNavBar activeTab="customers" onChangeTab={handleNavigateTab} />
+          <BottomNavBar activeTab="customers" membershipsEnabled={business?.membershipsEnabled ?? true} onChangeTab={handleNavigateTab} />
         </Paper>
       </Container>
     </Box>
