@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
-import { addCustomerToBusiness } from '../../../services/api'
-import { Alert, Autocomplete, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, IconButton, MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography, Divider } from '@mui/material'
-import { Plus, Trash2, X} from 'lucide-react'
-import { type DashboardData } from '../../../services/api'
+import { addCustomerToBusiness, type DashboardData } from '../../../services/api'
+import { Alert, Autocomplete, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, IconButton, MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
+import { ArrowRight, CalendarClock, CheckCircle2, CircleDollarSign, PackagePlus, Plus, ReceiptText, Trash2, UserRound, X } from 'lucide-react'
 import { fetchLoyaltyBalance, fetchLoyaltySettings, type LoyaltyProgramSettings } from '../../../services/api'
 import { fetchBusinessMembershipPlans } from '../../../store/businessDashboardSlice'
 import { useAppDispatch, useAppSelector } from '../../../store/hooks'
-import {getBusinessProducts, type BusinessProduct, } from '../../../services/api/billingApi'
+import { getBusinessProducts, type BusinessProduct } from '../../../services/api/billingApi'
 
 export type InvoiceLineItemForm = {
   id: string
@@ -44,8 +43,7 @@ export type InvoiceGeneratorCardProps = {
   onInvoiceItemChange: (id: string, field: InvoiceLineItemField, value: string) => void
   onAddItem: () => void
   onRemoveItem: (id: string) => void
-  onCreateInvoice: (status: 'DRAFT' | 'SENT',
-  invoiceMode: 'products' | 'membership') => void
+  onCreateInvoice: (status: 'DRAFT' | 'SENT' | 'PAID', invoiceMode: 'products' | 'membership') => void
 }
 
 export function InvoiceGeneratorCard({
@@ -80,7 +78,8 @@ export function InvoiceGeneratorCard({
   const [productsLoading, setProductsLoading] = useState(false)
   const [productsError, setProductsError] = useState('')
   const [isBillPreviewOpen, setIsBillPreviewOpen] = useState(false)
-    const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false)
+  const [previewError, setPreviewError] = useState('')
+  const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false)
   const [newCustomerName, setNewCustomerName] = useState('')
   const [newCustomerPhone, setNewCustomerPhone] = useState('')
   const [newCustomerEmail, setNewCustomerEmail] = useState('')
@@ -175,6 +174,7 @@ export function InvoiceGeneratorCard({
   const handleClose = () => {
     setInvoiceModeOverride(null)
     setSelectedMembershipId('')
+    setPreviewError('')
     onInvoiceFieldChange('loyaltyPointsToRedeem', '0')
     onClose()
   }
@@ -241,6 +241,7 @@ const handleAddCustomer = async () => {
   
   const handleContinueToPreview = () => {
     if (!selectedCustomer) {
+      setPreviewError('Select a customer before continuing.')
       return
     }
 
@@ -248,19 +249,19 @@ const handleAddCustomer = async () => {
       invoiceForm.items.some(
         (item) =>
           !item.productName.trim() ||
+          !Number.isFinite(Number(item.quantity)) ||
           Number(item.quantity) <= 0 ||
+          !Number.isFinite(Number(item.unitPrice)) ||
           Number(item.unitPrice) <= 0 ||
-          item.gstRate.trim() === '' ||
+          !Number.isFinite(Number(item.gstRate)) ||
           Number(item.gstRate) < 0
       )
     ) {
+      setPreviewError('Complete each item with a name, quantity, price, and valid GST rate.')
       return
     }
 
-    if (!invoiceForm.dueDate) {
-      return
-    }
-
+    setPreviewError('')
     setIsBillPreviewOpen(true)
   }
 
@@ -311,15 +312,30 @@ const handleAddCustomer = async () => {
   }
 
   return (
-      <>
-    <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm" scroll="paper">
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, color: 'text.primary', fontWeight: 900 }}>
-        Generate invoice
-        <IconButton aria-label="Close invoice form" onClick={handleClose} size="small"><X size={18} /></IconButton>
+    <>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      fullWidth
+      maxWidth="sm"
+      scroll="paper"
+      sx={{ '& .MuiDialog-paper': { borderRadius: { xs: 2.5, sm: 3.2 }, overflow: 'hidden', boxShadow: '0 24px 70px rgba(14, 45, 38, 0.24)' } }}
+    >
+      <DialogTitle sx={{ p: { xs: 0.8, sm: 1.2 }, bgcolor: '#f4f7f6' }}>
+        <Stack direction="row" spacing={1.2} sx={{ alignItems: 'center', px: { xs: 1.3, sm: 2 }, py: 1.5, borderRadius: 2.4, color: '#fff', background: 'linear-gradient(120deg, #075f50 0%, #0a8b70 100%)' }}>
+          <Box sx={{ width: 40, height: 40, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 1.6, bgcolor: 'rgba(255,255,255,0.14)' }}>
+            <ReceiptText size={20} />
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="h6" sx={{ fontWeight: 900, lineHeight: 1.15 }}>Create invoice</Typography>
+            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.78)' }}>Prepare a clear bill for your customer</Typography>
+          </Box>
+          <IconButton aria-label="Close invoice form" onClick={handleClose} size="small" sx={{ color: '#fff' }}><X size={19} /></IconButton>
+        </Stack>
       </DialogTitle>
       {!isBillPreviewOpen ? (
-        <DialogContent dividers>
-        <Stack spacing={1.5} sx={{ pt: 0.3 }}>
+      <DialogContent dividers sx={{ p: { xs: 1.4, sm: 2.4 }, bgcolor: '#f4f7f6' }}>
+        <Stack spacing={1.8}>
           {!membershipPlansLoading && membershipPlans.length > 0 && (
             <ToggleButtonGroup
               exclusive
@@ -327,6 +343,13 @@ const handleAddCustomer = async () => {
               value={invoiceMode}
               aria-label="Invoice type"
               onChange={(_, value: 'products' | 'membership' | null) => value && setInvoiceModeOverride(value)}
+              sx={{
+                p: 0.4,
+                bgcolor: '#e7eeec',
+                borderRadius: 2,
+                '& .MuiToggleButton-root': { flex: 1, minHeight: 40, border: 0, borderRadius: '8px !important', color: 'text.secondary', fontWeight: 800, textTransform: 'none' },
+                '& .Mui-selected': { bgcolor: 'background.paper !important', color: 'primary.main !important', boxShadow: '0 2px 7px rgba(20, 54, 48, 0.12)' },
+              }}
             >
               <ToggleButton value="products">Products</ToggleButton>
               <ToggleButton value="membership">Membership</ToggleButton>
@@ -335,12 +358,17 @@ const handleAddCustomer = async () => {
 
           {membershipPlansError && <Alert severity="error">{membershipPlansError}</Alert>}
 
+          <Box>
+            <Stack direction="row" spacing={0.8} sx={{ alignItems: 'center', mb: 0.9 }}>
+              <Box sx={{ width: 25, height: 25, display: 'grid', placeItems: 'center', borderRadius: '50%', bgcolor: 'primary.main', color: '#fff' }}><UserRound size={14} /></Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>Customer</Typography>
+            </Stack>
           {invoiceMode === 'products' ? (
           <FormControl fullWidth size="small">
             {selectedCustomer ? (
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, border: '1px solid var(--mui-palette-divider)', borderRadius: 2.8, px: 1.2, py: 1, backgroundColor: 'background.paper', minHeight: 62 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, border: '1px solid', borderColor: 'success.light', borderRadius: 2, px: 1.3, py: 1.1, background: 'linear-gradient(120deg, rgba(15, 139, 112, 0.07), rgba(15, 139, 112, 0.015))', minHeight: 68 }}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-                  <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase' }}>Selected customer</Typography>
+                  <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 850, letterSpacing: 0.4, textTransform: 'uppercase' }}>Selected customer</Typography>
                   <Typography variant="body2" sx={{ fontWeight: 800, color: 'text.primary', whiteSpace: 'normal', lineHeight: 1.4, wordBreak: 'break-word' }}>
                     {selectedCustomer.fullName ?? 'Customer'}
                   </Typography>
@@ -391,7 +419,7 @@ const handleAddCustomer = async () => {
                 filterOptions={(options) => options}
                 getOptionLabel={getCustomerLabel}
                 isOptionEqualToValue={(option, value) => option.id === value.id}
-                renderInput={(params) => <TextField {...params} label="Search customer" placeholder="Name, email or mobile" sx={{ '& .MuiInputBase-root': { borderRadius: 2.4, backgroundColor: 'background.paper' } }} />}
+                renderInput={(params) => <TextField {...params} label="Search customer" placeholder="Name, email or mobile" sx={{ '& .MuiInputBase-root': { borderRadius: 1.8, backgroundColor: 'background.paper' } }} />}
                 renderOption={(props, customer) => (
                   <Box component="li" {...props} key={customer.id} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', py: 1 }}>
                     <Typography variant="body2" sx={{ fontWeight: 700 }}>{customer.fullName ?? 'Customer'}</Typography>
@@ -445,6 +473,7 @@ const handleAddCustomer = async () => {
               <Alert severity="info">This creates a one-time invoice using the member’s saved plan price. Membership dates and automatic renewals are not changed.</Alert>
             </Stack>
           )}
+          </Box>
 
           {selectedCustomer && (
             <Stack spacing={0.8}>
@@ -472,102 +501,173 @@ const handleAddCustomer = async () => {
           )}
 
           <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
-            <Typography variant="subtitle2" sx={{ color: 'text.primary', fontWeight: 800 }}>{productsError && <Alert severity="warning">{productsError}</Alert>}{invoiceMode === 'membership' ? 'Invoice items' : 'Products'}</Typography>
-            <Button size="small" startIcon={<Plus size={15} />} onClick={onAddItem} sx={{ textTransform: 'none' }}>{invoiceMode === 'membership' ? 'Add add-on' : 'Add product'}</Button>
+            <Box>
+              <Stack direction="row" spacing={0.8} sx={{ alignItems: 'center' }}>
+                <Box sx={{ width: 25, height: 25, display: 'grid', placeItems: 'center', borderRadius: '50%', bgcolor: 'primary.main', color: '#fff' }}><PackagePlus size={14} /></Box>
+                <Typography variant="subtitle2" sx={{ color: 'text.primary', fontWeight: 850 }}>{invoiceMode === 'membership' ? 'Invoice items' : 'Products & services'}</Typography>
+              </Stack>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.35, ml: 4 }}>Add the items included in this bill.</Typography>
+            </Box>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<Plus size={15} />}
+              onClick={onAddItem}
+              sx={{ flexShrink: 0, px: 1.2, borderRadius: 1.8, fontWeight: 750, textTransform: 'none' }}
+            >
+              {invoiceMode === 'membership' ? 'Add add-on' : 'Add item'}
+            </Button>
           </Stack>
 
           <Stack spacing={1}>
-            {invoiceForm.items.map((item, index) => (
-              <Paper key={item.id} variant="outlined" sx={{ p: 1.2, borderRadius: 1.5, boxShadow: 'none' }}>
+            {invoiceForm.items.map((item, index) => {
+              const quantity = Number(item.quantity)
+              const unitPrice = Number(item.unitPrice)
+              const gstRate = Number(item.gstRate)
+              const lineTotal = quantity > 0 && unitPrice > 0
+                ? quantity * unitPrice * (1 + (gstRate >= 0 ? gstRate : 0) / 100)
+                : 0
+              return (
+              <Paper key={item.id} variant="outlined" sx={{ p: { xs: 1.15, sm: 1.5 }, borderRadius: 2, boxShadow: '0 3px 12px rgba(20, 54, 48, 0.045)', borderColor: 'rgba(32, 54, 56, 0.12)' }}>
                 <Stack spacing={1}>
                   <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800 }}>Product {index + 1}</Typography>
-                    <IconButton aria-label={`Remove product ${index + 1}`} size="small" onClick={() => onRemoveItem(item.id)} disabled={invoiceForm.items.length <= 1} sx={{ color: 'error.main' }}><Trash2 size={15} /></IconButton>
+                    <Stack direction="row" spacing={0.7} sx={{ alignItems: 'center', minWidth: 0 }}>
+                      <Chip size="small" label={`${index + 1}`.padStart(2, '0')} sx={{ height: 22, minWidth: 30, fontSize: 10, fontWeight: 850, bgcolor: 'action.hover' }} />
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 750 }}>Item</Typography>
+                    </Stack>
+                    <Stack direction="row" spacing={0.8} sx={{ alignItems: 'center' }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 750 }}>Line total</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 850 }}>{formatMoney(lineTotal)}</Typography>
+                      <IconButton aria-label={`Remove item ${index + 1}`} size="small" onClick={() => onRemoveItem(item.id)} disabled={invoiceForm.items.length <= 1} sx={{ ml: 0.2, color: 'text.secondary', '&:hover': { color: 'error.main', bgcolor: 'error.50' } }}><Trash2 size={15} /></IconButton>
+                    </Stack>
                   </Stack>
                   <Autocomplete<BusinessProduct, false, false, true>
-                  freeSolo
-                  fullWidth
-                  options={businessProducts}
-                  loading={productsLoading}
-                  value={item.productName}
-                  getOptionLabel={(option) =>
-                    typeof option === 'string' ? option : option.name
-                  }
-                  isOptionEqualToValue={(option, value) =>
-                    typeof value !== 'string' && option.id === value.id
-                  }
-                  onInputChange={(_, value, reason) => {
-                    if (reason === 'input' || reason === 'clear') {
-                      onInvoiceItemChange(item.id, 'productName', value)
-                    }
-                  }}
-                  onChange={(_, value) => {
-                    if (typeof value === 'string') {
-                      onInvoiceItemChange(item.id, 'productName', value)
-                      return
-                    }
-
-                    if (!value) {
-                      onInvoiceItemChange(item.id, 'productName', '')
-                      return
-                    }
-
-                    onInvoiceItemChange(item.id, 'productName', value.name)
-                    onInvoiceItemChange(item.id, 'unitPrice', String(value.price))
-                    onInvoiceItemChange(item.id, 'gstRate', String(value.gstRate ?? 0))
-                  }}
-                  renderOption={(props, product) => (
-                    <Box component="li" {...props} key={product.id}>
-                      <Box>
-                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                          {product.name}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          ₹{Number(product.price).toLocaleString('en-IN')}
-                          {' · '}
-                          {product.unit || 'Unit not specified'}
-                          {' · GST '}
-                          {product.gstRate ?? 0}%
-                        </Typography>
-                      </Box>
-                    </Box>
-                  )}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      size="small"
-                      label="Product name"
-                      placeholder="Select a saved product or type a name"
-                      helperText={
-                        productsLoading
-                          ? 'Loading saved products…'
-                          : productsError
-                            ? 'Saved products could not be loaded. You can still enter a product manually.'
-                            : businessProducts.length === 0
-                              ? 'No saved products available. Enter a product name manually.'
-                              : 'Select a saved product to fill in its price and GST, or type manually.'
+                    freeSolo
+                    fullWidth
+                    options={businessProducts}
+                    loading={productsLoading}
+                    value={item.productName}
+                    getOptionLabel={(option) => typeof option === 'string' ? option : option.name}
+                    isOptionEqualToValue={(option, value) => typeof value !== 'string' && option.id === value.id}
+                    onInputChange={(_, value, reason) => {
+                      if (reason === 'input' || reason === 'clear') {
+                        onInvoiceItemChange(item.id, 'productName', value)
                       }
-                    />
-                  )}
-                />
-                  <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1 }}>
-                    <TextField size="small" label="Quantity" type="number" value={item.quantity} onChange={(event) => onInvoiceItemChange(item.id, 'quantity', event.target.value)} slotProps={{ htmlInput: { min: 1, step: 1 } }} />
+                    }}
+                    onChange={(_, value) => {
+                      if (typeof value === 'string') {
+                        onInvoiceItemChange(item.id, 'productName', value)
+                        return
+                      }
+
+                      if (!value) {
+                        onInvoiceItemChange(item.id, 'productName', '')
+                        return
+                      }
+
+                      onInvoiceItemChange(item.id, 'productName', value.name)
+                      onInvoiceItemChange(item.id, 'unitPrice', String(value.price))
+                      onInvoiceItemChange(item.id, 'gstRate', String(value.gstRate ?? 0))
+                    }}
+                    renderOption={(props, product) => (
+                      <Box component="li" {...props} key={product.id}>
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 700 }}>{product.name}</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            ₹{Number(product.price).toLocaleString('en-IN')}
+                            {' · '}
+                            {product.unit || 'Unit not specified'}
+                            {' · GST '}
+                            {product.gstRate ?? 0}%
+                          </Typography>
+                        </Box>
+                      </Box>
+                    )}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        size="small"
+                        label={invoiceMode === 'membership' ? 'Add-on name' : 'Product or service'}
+                        placeholder="Select a saved item or type a name"
+                        helperText={
+                          productsLoading
+                            ? 'Loading saved products…'
+                            : productsError
+                              ? 'Saved products could not be loaded. You can still enter an item manually.'
+                              : businessProducts.length === 0
+                                ? 'No saved products available. Enter an item name manually.'
+                                : 'Select a saved item to fill its price and GST, or type manually.'
+                        }
+                      />
+                    )}
+                  />
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '0.8fr 1.2fr 0.85fr', gap: { xs: 0.7, sm: 1 } }}>
+                    <TextField size="small" label="Qty" type="number" value={item.quantity} onChange={(event) => onInvoiceItemChange(item.id, 'quantity', event.target.value)} slotProps={{ htmlInput: { min: 1, step: 1 } }} />
                     <TextField size="small" label="Unit price" type="number" value={item.unitPrice} onChange={(event) => onInvoiceItemChange(item.id, 'unitPrice', event.target.value)} slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }} />
                     <TextField size="small" label="GST %" type="number" value={item.gstRate} onChange={(event) => onInvoiceItemChange(item.id, 'gstRate', event.target.value)} slotProps={{ htmlInput: { min: 0, step: 0.01 } }} />
                   </Box>
                 </Stack>
               </Paper>
-            ))}
+              )
+            })}
           </Stack>
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 0.6, px: 0.5 }}>
-            <Typography variant="body2" color="text.secondary">Subtotal</Typography><Typography variant="body2" sx={{ textAlign: 'right' }}>{formatMoney(totals.subtotal)}</Typography>
-            <Typography variant="body2" color="text.secondary">GST</Typography><Typography variant="body2" sx={{ textAlign: 'right' }}>{formatMoney(totals.tax)}</Typography>
-            {loyaltyDiscount > 0 && <><Typography variant="body2" color="success.main">Loyalty discount ({loyaltyPoints} points)</Typography><Typography variant="body2" color="success.main" sx={{ textAlign: 'right' }}>−{formatMoney(loyaltyDiscount)}</Typography></>}
-            <Typography variant="subtitle2" sx={{ color: 'text.primary', fontWeight: 900 }}>Amount due</Typography><Typography variant="subtitle2" sx={{ color: 'text.primary', textAlign: 'right', fontWeight: 900 }}>{formatMoney(totals.subtotal + totals.tax - loyaltyDiscount)}</Typography>
-          </Box>
+          <Paper variant="outlined" sx={{ p: { xs: 1.4, sm: 1.8 }, borderRadius: 2.2, borderColor: 'rgba(32, 54, 56, 0.12)', boxShadow: '0 4px 14px rgba(20, 54, 48, 0.045)' }}>
+            <Stack spacing={1}>
+              <Stack direction="row" spacing={0.8} sx={{ alignItems: 'center', mb: 0.3 }}>
+                <Box sx={{ width: 25, height: 25, display: 'grid', placeItems: 'center', borderRadius: '50%', bgcolor: 'primary.main', color: '#fff' }}><CircleDollarSign size={14} /></Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>Invoice summary</Typography>
+              </Stack>
+              <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
+                <Typography variant="body2" color="text.secondary">Subtotal</Typography><Typography variant="body2" sx={{ fontWeight: 700 }}>{formatMoney(totals.subtotal)}</Typography>
+              </Stack>
+              <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
+                <Typography variant="body2" color="text.secondary">GST</Typography><Typography variant="body2" sx={{ fontWeight: 700 }}>{formatMoney(totals.tax)}</Typography>
+              </Stack>
+              {loyaltyDiscount > 0 && (
+                <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
+                  <Typography variant="body2" color="success.main">Loyalty discount ({loyaltyPoints} points)</Typography>
+                  <Typography variant="body2" color="success.main" sx={{ fontWeight: 750 }}>−{formatMoney(loyaltyDiscount)}</Typography>
+                </Stack>
+              )}
+              <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', gap: 1, mt: 0.4, pt: 1.1, borderTop: '1px solid', borderColor: 'divider' }}>
+                <Box>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>{invoiceForm.dueDate ? 'Amount due' : 'Amount paid'}</Typography>
+                  <Typography variant="caption" color="text.secondary">Including applicable taxes</Typography>
+                </Box>
+                <Typography variant="h5" color="primary.main" sx={{ fontWeight: 900, letterSpacing: '-0.04em' }}>{formatMoney(totals.subtotal + totals.tax - loyaltyDiscount)}</Typography>
+              </Stack>
+            </Stack>
+          </Paper>
 
-          <TextField size="small" label={invoiceMode === 'membership' ? 'Due date' : 'Invoice date'} type="date" value={invoiceForm.dueDate} onChange={(event) => onInvoiceFieldChange('dueDate', event.target.value)} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
+          <Paper variant="outlined" sx={{ p: { xs: 1.4, sm: 1.8 }, borderRadius: 2.2, borderColor: invoiceForm.dueDate ? 'warning.light' : 'success.light', bgcolor: invoiceForm.dueDate ? 'rgba(183, 121, 31, 0.035)' : 'rgba(22, 132, 95, 0.035)' }}>
+            <Stack direction="row" spacing={0.9} sx={{ alignItems: 'center', mb: 1 }}>
+              <Box sx={{ width: 25, height: 25, display: 'grid', placeItems: 'center', borderRadius: '50%', bgcolor: invoiceForm.dueDate ? 'warning.main' : 'success.main', color: '#fff' }}><CalendarClock size={14} /></Box>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>Payment timing</Typography>
+                <Typography variant="caption" color="text.secondary">Choose whether this bill is already paid or due later.</Typography>
+              </Box>
+              <Chip
+                size="small"
+                icon={invoiceForm.dueDate ? <CalendarClock size={13} /> : <CheckCircle2 size={13} />}
+                label={invoiceForm.dueDate ? 'Pending' : 'Paid'}
+                color={invoiceForm.dueDate ? 'warning' : 'success'}
+                sx={{ fontWeight: 800 }}
+              />
+            </Stack>
+            <TextField
+              size="small"
+              label="Due date (optional)"
+              type="date"
+              value={invoiceForm.dueDate}
+              onChange={(event) => onInvoiceFieldChange('dueDate', event.target.value)}
+              helperText={invoiceForm.dueDate ? `This invoice will be pending and due on ${invoiceForm.dueDate}.` : 'Leave blank to record this invoice as paid.'}
+              fullWidth
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.7, bgcolor: 'background.paper' } }}
+            />
+          </Paper>
+          {previewError && <Alert severity="error">{previewError}</Alert>}
           {invoiceMessage && <Alert severity={invoiceMessageSeverity}>{invoiceMessage}</Alert>}
         </Stack>
           </DialogContent>
@@ -743,49 +843,40 @@ const handleAddCustomer = async () => {
           </Box>
         </Paper>
       </DialogContent>
-    )}
-      
-<DialogActions sx={{ px: 2, py: 1.5 }}>
-  {!isBillPreviewOpen ? (
-    <>
-      <Button onClick={handleClose} color="inherit">
-        Cancel
-      </Button>
-      <Button
-        onClick={() => onCreateInvoice('DRAFT', invoiceMode)}
-        disabled={isSubmitting}
-      >
-        Save draft
-      </Button>
-      <Button
-        variant="contained"
-        onClick={handleContinueToPreview}
-        disabled={isSubmitting}
-      >
-        Continue
-      </Button>
-    </>
-  ) : (
-    <>
-      <Button onClick={() => setIsBillPreviewOpen(false)} color="inherit">
-        Back to edit
-      </Button>
-      <Button
-        onClick={() => onCreateInvoice('DRAFT', invoiceMode)}
-        disabled={isSubmitting}
-      >
-        Save draft
-      </Button>
-      <Button
-        variant="contained"
-        onClick={() => onCreateInvoice('SENT', invoiceMode)}
-        disabled={isSubmitting}
-      >
-        {isSubmitting ? 'Saving…' : 'Save & send'}
-      </Button>
-    </>
-  )}
-</DialogActions>
+      )}
+      <DialogActions sx={{ px: { xs: 1.2, sm: 2.2 }, py: 1.2, gap: 0.8, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', '& .MuiButton-root': { minHeight: 40, borderRadius: 1.8, fontWeight: 800, textTransform: 'none', whiteSpace: 'nowrap' } }}>
+        {!isBillPreviewOpen ? (
+          <>
+            <Button onClick={handleClose} color="inherit" sx={{ px: { xs: 0.8, sm: 1.5 } }}>Cancel</Button>
+            <Box sx={{ flex: 1 }} />
+            <Button onClick={() => onCreateInvoice('DRAFT', invoiceMode)} disabled={isSubmitting} variant="outlined" sx={{ px: { xs: 1, sm: 1.8 } }}>Save draft</Button>
+            <Button
+              variant="contained"
+              onClick={handleContinueToPreview}
+              disabled={isSubmitting}
+              endIcon={<ArrowRight size={15} />}
+              sx={{ px: { xs: 1, sm: 2 }, fontSize: { xs: 10, sm: 13 }, boxShadow: '0 5px 12px rgba(8, 123, 101, 0.2)' }}
+            >
+              Continue
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button onClick={() => setIsBillPreviewOpen(false)} color="inherit" sx={{ px: { xs: 0.8, sm: 1.5 } }}>Back to edit</Button>
+            <Box sx={{ flex: 1 }} />
+            <Button onClick={() => onCreateInvoice('DRAFT', invoiceMode)} disabled={isSubmitting} variant="outlined" sx={{ px: { xs: 1, sm: 1.8 } }}>Save draft</Button>
+            <Button
+              variant="contained"
+              onClick={() => onCreateInvoice(invoiceForm.dueDate ? 'SENT' : 'PAID', invoiceMode)}
+              disabled={isSubmitting}
+              endIcon={<ArrowRight size={15} />}
+              sx={{ px: { xs: 1, sm: 2 }, fontSize: { xs: 10, sm: 13 }, boxShadow: '0 5px 12px rgba(8, 123, 101, 0.2)' }}
+            >
+              {isSubmitting ? 'Saving…' : invoiceForm.dueDate ? 'Create pending invoice' : 'Create paid invoice'}
+            </Button>
+          </>
+        )}
+      </DialogActions>
     </Dialog>
 
     <Dialog

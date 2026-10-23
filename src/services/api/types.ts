@@ -300,7 +300,7 @@ export type InvoiceCreateRequest = {
   subtotal: number
   gstAmount: number
   totalAmount: number
-  status?: string
+  status?: 'DRAFT' | 'SENT' | 'PAID'
   loyaltyPointsToRedeem?: number
 }
 

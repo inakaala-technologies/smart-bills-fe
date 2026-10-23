@@ -1,5 +1,6 @@
-import { Box, ButtonBase, Typography } from '@mui/material'
-import { Bell, CalendarCheck2, Building2, ChevronRight, FileText, ReceiptText, UserRound, Users, WalletCards } from 'lucide-react'
+import { useState } from 'react'
+import { Box, ButtonBase, Chip, Dialog, DialogContent, DialogTitle, IconButton, Stack, Typography } from '@mui/material'
+import { Bell, CalendarCheck2, Building2, ChevronRight, FileText, ReceiptText, UserRound, Users, WalletCards, X } from 'lucide-react'
 import { ActivityPanel } from './ActivityPanel'
 import { QuickActionGrid, type QuickActionId } from './QuickActionGrid'
 import { RevenueTrendChart } from './RevenueTrendChart'
@@ -10,8 +11,9 @@ function formatCurrency(value?: number) {
   return `₹${value.toLocaleString('en-IN')}`
 }
 
-export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, hasBusiness, appointmentsEnabled, membershipsEnabled }: { onQuickAction: (action: QuickActionId) => void; onOpenInsights: () => void; hasBusiness: boolean; appointmentsEnabled: boolean; membershipsEnabled: boolean }) {
+export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpenInvoice, hasBusiness, appointmentsEnabled, membershipsEnabled }: { onQuickAction: (action: QuickActionId) => void; onOpenInsights: () => void; onOpenInvoice: (invoiceId: number) => void; hasBusiness: boolean; appointmentsEnabled: boolean; membershipsEnabled: boolean }) {
   const { data, loading, summary } = useAppSelector((state) => state.businessDashboard)
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<number | null>(null)
   const pendingPayments = data.payments.filter((payment) => /pending/i.test(payment.status ?? ''))
   const now = new Date()
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
@@ -19,6 +21,9 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, hasBu
     appointment.scheduledAt?.slice(0, 10) === today
     && !['CANCELLED', 'NO_SHOW'].includes(appointment.status?.toUpperCase() ?? '')
   ))
+  const newAppointmentCount = data.appointments.filter((appointment) => (
+    appointment.status?.toUpperCase() === 'BOOKED'
+  )).length
   const appointmentCustomerCount = new Set(
     appointmentsToday.map((appointment) => appointment.customerId).filter((customerId): customerId is number => customerId != null),
   ).size
@@ -95,18 +100,22 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, hasBu
           : '—',
       })))
     .map((entry) => ({
+      id: entry.id,
       label: entry.name,
       detail: `${entry.meta} • ${entry.date}`,
       value: formatCurrency(entry.amount),
     }))
-  const upcomingRenewals = (summary?.upcomingRenewals?.length
-    ? summary.upcomingRenewals
-    : data.appointments.slice(0, 3).map((appointment) => ({
-        id: appointment.id,
-        name: appointment.serviceName ?? `Appointment ${appointment.id}`,
-        daysLeft: 3,
-        note: appointment.status ?? 'BOOKED',
-      })))
+  const upcomingAppointments = data.appointments
+    .filter((appointment) => {
+      const status = appointment.status?.toUpperCase() ?? 'BOOKED'
+      return ['BOOKED', 'CONFIRMED'].includes(status)
+        && Boolean(appointment.scheduledAt)
+        && new Date(appointment.scheduledAt ?? '').getTime() >= now.getTime()
+    })
+    .sort((first, second) => new Date(first.scheduledAt ?? '').getTime() - new Date(second.scheduledAt ?? '').getTime())
+    .slice(0, 3)
+  const selectedAppointment = data.appointments.find((appointment) => appointment.id === selectedAppointmentId)
+  const selectedAppointmentCustomer = data.customers.find((customer) => customer.id === selectedAppointment?.customerId)
 
   return (
     <>
@@ -166,7 +175,7 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, hasBu
         { id: 'invoice', label: 'Create Invoice', icon: ReceiptText, onClick: () => onQuickAction('invoice'), disabled: !hasBusiness },
         { id: 'customer', label: 'Add Customer', icon: UserRound, onClick: () => onQuickAction('customer'), disabled: !hasBusiness },
         ...(appointmentsEnabled
-          ? [{ id: 'appointment' as const, label: 'Appointments', icon: CalendarCheck2, onClick: () => onQuickAction('appointment'), disabled: !hasBusiness }]
+          ? [{ id: 'appointment' as const, label: 'Appointments', icon: CalendarCheck2, onClick: () => onQuickAction('appointment'), disabled: !hasBusiness, badge: newAppointmentCount }]
           : membershipsEnabled
             ? [{ id: 'membership' as const, label: 'Membership', icon: Building2, onClick: () => onQuickAction('membership'), disabled: !hasBusiness }]
             : []),
@@ -184,9 +193,89 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, hasBu
       </Box>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1 }}>
-        <ActivityPanel title="Recent Transactions" entries={recentActivity.map((entry) => ({ label: entry.label, detail: entry.detail, value: entry.value, badge: entry.label.slice(0, 2) }))} emptyTitle="No activity" emptyDescription="Financial activity will show here." />
-        <ActivityPanel title="Upcoming Renewals" entries={upcomingRenewals.map((entry) => ({ label: entry.name, detail: entry.note, value: `${entry.daysLeft} days`, badge: entry.name.slice(0, 2) }))} emptyTitle="No renewals" emptyDescription="No renewals scheduled." />
+        <ActivityPanel
+          title="Recent Transactions"
+          entries={recentActivity.map((entry) => ({
+            label: entry.label,
+            detail: entry.detail,
+            value: entry.value,
+            badge: entry.label.slice(0, 2),
+            ariaLabel: `View invoice ${entry.label}`,
+            onClick: () => onOpenInvoice(entry.id),
+          }))}
+          emptyTitle="No activity"
+          emptyDescription="Financial activity will show here."
+        />
+        <ActivityPanel
+          title="Upcoming Appointments"
+          entries={upcomingAppointments.map((appointment) => ({
+            label: appointment.serviceName ?? 'Appointment',
+            detail: appointment.status ?? 'BOOKED',
+            value: appointment.scheduledAt
+              ? new Date(appointment.scheduledAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+              : '—',
+            badge: (appointment.serviceName ?? 'AP').slice(0, 2),
+            ariaLabel: `View appointment details for ${appointment.serviceName ?? `appointment ${appointment.id}`}`,
+            onClick: () => setSelectedAppointmentId(appointment.id),
+          }))}
+          emptyTitle="No appointments"
+          emptyDescription="Upcoming customer appointments will appear here."
+        />
       </Box>
+
+      <Dialog open={selectedAppointmentId != null} onClose={() => setSelectedAppointmentId(null)} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, pr: 1.5 }}>
+          <Typography component="span" variant="h6" sx={{ fontWeight: 800 }}>Appointment details</Typography>
+          <IconButton aria-label="Close appointment details" onClick={() => setSelectedAppointmentId(null)} size="small">
+            <X size={18} />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          {selectedAppointment ? (
+            <Stack spacing={1.2}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1, p: 1.3, borderRadius: 2, bgcolor: 'primary.light' }}>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 800, overflowWrap: 'anywhere' }}>
+                    {selectedAppointment.serviceName ?? 'Appointment'}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {selectedAppointmentCustomer?.fullName ?? selectedAppointmentCustomer?.firstName ?? 'Customer'}
+                  </Typography>
+                </Box>
+                <Chip size="small" label={(selectedAppointment.status ?? 'BOOKED').replace('_', ' ')} color="primary" sx={{ fontWeight: 700 }} />
+              </Box>
+              <AppointmentDetailRow
+                label="Scheduled"
+                value={selectedAppointment.scheduledAt
+                  ? new Date(selectedAppointment.scheduledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+                  : 'Schedule pending'}
+              />
+              {selectedAppointment.durationMinutes != null && <AppointmentDetailRow label="Duration" value={`${selectedAppointment.durationMinutes} minutes`} />}
+              {selectedAppointment.servicePrice != null && (
+                <AppointmentDetailRow
+                  label="Amount"
+                  value={formatCurrency(selectedAppointment.servicePrice - (selectedAppointment.loyaltyDiscountAmount ?? 0))}
+                />
+              )}
+              {selectedAppointmentCustomer?.email && <AppointmentDetailRow label="Email" value={selectedAppointmentCustomer.email} />}
+              {selectedAppointmentCustomer?.phoneNumber && <AppointmentDetailRow label="Phone" value={selectedAppointmentCustomer.phoneNumber} />}
+              {selectedAppointment.notes && <AppointmentDetailRow label="Customer note" value={selectedAppointment.notes} />}
+              {selectedAppointment.businessNote && <AppointmentDetailRow label="Business note" value={selectedAppointment.businessNote} />}
+            </Stack>
+          ) : (
+            <Typography color="text.secondary">Appointment details are unavailable. Refresh the dashboard and try again.</Typography>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
+  )
+}
+
+function AppointmentDetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1, py: 0.8, borderBottom: '1px solid', borderColor: 'divider' }}>
+      <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, fontWeight: 700 }}>{label}</Typography>
+      <Typography variant="body2" sx={{ textAlign: 'right', overflowWrap: 'anywhere' }}>{value}</Typography>
+    </Box>
   )
 }
