@@ -1,5 +1,5 @@
 import { Button, Card, CardContent, MenuItem, TextField, Typography, Box, Stack } from '@mui/material'
-import { Plus } from 'lucide-react'
+import { Plus, Package, ChevronRight } from 'lucide-react'
 import type { Role } from '../../../services/auth'
 import { LocationPicker, type LocationValue } from '../../../components/LocationPicker'
 import { BUSINESS_TYPES } from '../../../constants/businessTypes'
@@ -14,9 +14,11 @@ export type BusinessProfileCardProps = {
   onBusinessFieldChange: (field: 'name' | 'legalName' | 'phone' | 'address' | 'businessType', value: string) => void
   onLocationChange: (value: LocationValue) => void
   onSave: () => void
+  onManageProducts: () => void
+  activeProductCount?: number
 }
 
-export function BusinessProfileCard({ authUser, businessForm, location, profileId, isCreatingBusiness, businessMessage, onBusinessFieldChange, onLocationChange, onSave }: BusinessProfileCardProps) {
+export function BusinessProfileCard({ authUser, businessForm, location, profileId, isCreatingBusiness, businessMessage, onBusinessFieldChange, onLocationChange, onSave, onManageProducts, activeProductCount = 0 }: BusinessProfileCardProps) {
   return (
     <Card variant="outlined" sx={{ borderRadius: 3.2, border: '1px solid var(--mui-palette-divider)', backgroundColor: 'background.paper', boxShadow: '0 12px 22px rgba(0,0,0,0.14)' }}>
       <CardContent sx={{ p: 1.7 }}>
@@ -48,6 +50,43 @@ export function BusinessProfileCard({ authUser, businessForm, location, profileI
             )}
             {BUSINESS_TYPES.map((type) => <MenuItem key={type.value} value={type.value}>{type.label}</MenuItem>)}
           </TextField>
+
+          {/* Products management row */}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 2,
+              p: 1.5,
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 2.5,
+              backgroundColor: 'action.hover',
+            }}
+          >
+            <Stack direction="row" spacing={1.5} alignItems="center">
+              <Package size={22} />
+              <Box>
+                <Typography sx={{ fontWeight: 800 }}>
+                  Products
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {activeProductCount} saved products
+                </Typography>
+              </Box>
+            </Stack>
+
+            <Button
+              variant="outlined"
+              size="small"
+              endIcon={<ChevronRight size={16} />}
+              onClick={onManageProducts}
+              sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
+            >
+              Manage
+            </Button>
+          </Box>
           <TextField
             size="small"
             label="Email"

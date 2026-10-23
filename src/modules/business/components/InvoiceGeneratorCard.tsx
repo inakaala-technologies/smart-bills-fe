@@ -5,6 +5,7 @@ import { ArrowRight, Plus, Trash2, X} from 'lucide-react'
 import { type DashboardData } from '../../../services/api'
 import { fetchBusinessMembershipPlans } from '../../../store/businessDashboardSlice'
 import { useAppDispatch, useAppSelector } from '../../../store/hooks'
+import {getBusinessProducts, type BusinessProduct, } from '../../../services/api/billingApi'
 
 export type InvoiceLineItemForm = {
   id: string
@@ -32,6 +33,7 @@ export type InvoiceGeneratorCardProps = {
   isCustomerSearching: boolean
   invoiceForm: BusinessInvoiceForm
   invoiceMessage: string
+  invoiceMessageSeverity: 'error' | 'success'
   isSubmitting: boolean
   onClose: () => void
   onCustomerSearchChange: (value: string) => void
@@ -54,6 +56,7 @@ export function InvoiceGeneratorCard({
   isCustomerSearching,
   invoiceForm,
   invoiceMessage,
+  invoiceMessageSeverity,
   isSubmitting,
   onClose,
   onCustomerSearchChange,
@@ -71,6 +74,9 @@ export function InvoiceGeneratorCard({
   const membershipPlansError = membershipPlanState?.error ?? ''
   const [invoiceModeOverride, setInvoiceModeOverride] = useState<'products' | 'membership' | null>(null)
   const [selectedMembershipId, setSelectedMembershipId] = useState('')
+  const [businessProducts, setBusinessProducts] = useState<BusinessProduct[]>([])
+  const [productsLoading, setProductsLoading] = useState(false)
+  const [productsError, setProductsError] = useState('')
   const [isBillPreviewOpen, setIsBillPreviewOpen] = useState(false)
     const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false)
   const [newCustomerName, setNewCustomerName] = useState('')
@@ -81,11 +87,63 @@ export function InvoiceGeneratorCard({
   const invoiceMode = invoiceModeOverride ?? (membershipPlans.length > 0 ? 'membership' : 'products')
 
   useEffect(() => {
+    if (!open) {
+      setIsBillPreviewOpen(false)
+      setInvoiceModeOverride(null)
+      setSelectedMembershipId('')
+    }
+  }, [open])
+
+  useEffect(() => {
     if (!open || !businessId) return
     if (!membershipPlanState?.loaded && !membershipPlanState?.loading) {
       void dispatch(fetchBusinessMembershipPlans(businessId))
     }
   }, [businessId, dispatch, membershipPlanState?.loaded, membershipPlanState?.loading, open])
+  useEffect(() => {
+  if (!open || !businessId) {
+    setBusinessProducts([])
+    return
+  }
+
+  let cancelled = false
+
+  const loadProducts = async () => {
+    setProductsLoading(true)
+    setProductsError('')
+
+    try {
+      const result = await getBusinessProducts(businessId)
+
+      if (cancelled) return
+
+      if (!result.ok) {
+        setBusinessProducts([])
+        setProductsError(result.message ?? 'Could not load saved products.')
+        return
+      }
+
+      setBusinessProducts(
+        result.products.filter((product) => product.status === 'ACTIVE')
+      )
+    } catch {
+      if (!cancelled) {
+        setBusinessProducts([])
+        setProductsError('Could not load saved products.')
+      }
+    } finally {
+      if (!cancelled) {
+        setProductsLoading(false)
+      }
+    }
+  }
+
+  void loadProducts()
+
+  return () => {
+    cancelled = true
+  }
+}, [open, businessId])
 
   const handleClose = () => {
     setInvoiceModeOverride(null)
@@ -349,7 +407,7 @@ const handleAddCustomer = async () => {
           )}
 
           <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
-            <Typography variant="subtitle2" sx={{ color: 'text.primary', fontWeight: 800 }}>{invoiceMode === 'membership' ? 'Invoice items' : 'Products'}</Typography>
+            <Typography variant="subtitle2" sx={{ color: 'text.primary', fontWeight: 800 }}>{productsError && <Alert severity="warning">{productsError}</Alert>}{invoiceMode === 'membership' ? 'Invoice items' : 'Products'}</Typography>
             <Button size="small" startIcon={<Plus size={15} />} onClick={onAddItem} sx={{ textTransform: 'none' }}>{invoiceMode === 'membership' ? 'Add add-on' : 'Add product'}</Button>
           </Stack>
 
@@ -361,7 +419,72 @@ const handleAddCustomer = async () => {
                     <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800 }}>Product {index + 1}</Typography>
                     <IconButton aria-label={`Remove product ${index + 1}`} size="small" onClick={() => onRemoveItem(item.id)} disabled={invoiceForm.items.length <= 1} sx={{ color: 'error.main' }}><Trash2 size={15} /></IconButton>
                   </Stack>
-                  <TextField size="small" label="Product name" value={item.productName} onChange={(event) => onInvoiceItemChange(item.id, 'productName', event.target.value)} fullWidth />
+                  <Autocomplete<BusinessProduct, false, false, true>
+                  freeSolo
+                  fullWidth
+                  options={businessProducts}
+                  loading={productsLoading}
+                  value={item.productName}
+                  getOptionLabel={(option) =>
+                    typeof option === 'string' ? option : option.name
+                  }
+                  isOptionEqualToValue={(option, value) =>
+                    typeof value !== 'string' && option.id === value.id
+                  }
+                  onInputChange={(_, value, reason) => {
+                    if (reason === 'input' || reason === 'clear') {
+                      onInvoiceItemChange(item.id, 'productName', value)
+                    }
+                  }}
+                  onChange={(_, value) => {
+                    if (typeof value === 'string') {
+                      onInvoiceItemChange(item.id, 'productName', value)
+                      return
+                    }
+
+                    if (!value) {
+                      onInvoiceItemChange(item.id, 'productName', '')
+                      return
+                    }
+
+                    onInvoiceItemChange(item.id, 'productName', value.name)
+                    onInvoiceItemChange(item.id, 'unitPrice', String(value.price))
+                    onInvoiceItemChange(item.id, 'gstRate', String(value.gstRate ?? 0))
+                  }}
+                  renderOption={(props, product) => (
+                    <Box component="li" {...props} key={product.id}>
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {product.name}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          ₹{Number(product.price).toLocaleString('en-IN')}
+                          {' · '}
+                          {product.unit || 'Unit not specified'}
+                          {' · GST '}
+                          {product.gstRate ?? 0}%
+                        </Typography>
+                      </Box>
+                    </Box>
+                  )}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      size="small"
+                      label="Product name"
+                      placeholder="Select a saved product or type a name"
+                      helperText={
+                        productsLoading
+                          ? 'Loading saved products…'
+                          : productsError
+                            ? 'Saved products could not be loaded. You can still enter a product manually.'
+                            : businessProducts.length === 0
+                              ? 'No saved products available. Enter a product name manually.'
+                              : 'Select a saved product to fill in its price and GST, or type manually.'
+                      }
+                    />
+                  )}
+                />
                   <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1 }}>
                     <TextField size="small" label="Quantity" type="number" value={item.quantity} onChange={(event) => onInvoiceItemChange(item.id, 'quantity', event.target.value)} slotProps={{ htmlInput: { min: 1, step: 1 } }} />
                     <TextField size="small" label="Unit price" type="number" value={item.unitPrice} onChange={(event) => onInvoiceItemChange(item.id, 'unitPrice', event.target.value)} slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }} />
@@ -379,7 +502,7 @@ const handleAddCustomer = async () => {
           </Box>
 
           <TextField size="small" label={invoiceMode === 'membership' ? 'Due date' : 'Invoice date'} type="date" value={invoiceForm.dueDate} onChange={(event) => onInvoiceFieldChange('dueDate', event.target.value)} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
-          {invoiceMessage && <Alert severity={invoiceMessage.toLowerCase().includes('failed') || invoiceMessage.toLowerCase().includes('select') || invoiceMessage.toLowerCase().includes('enter') ? 'error' : 'success'}>{invoiceMessage}</Alert>}
+          {invoiceMessage && <Alert severity={invoiceMessageSeverity}>{invoiceMessage}</Alert>}
         </Stack>
           </DialogContent>
     ) : (

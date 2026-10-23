@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Box, Container, Paper, Stack, Typography } from '@mui/material'
+import { Alert, Box, Button, Container, Paper, Snackbar, Stack, Typography } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import type { LocationValue } from '../../components/LocationPicker'
@@ -7,6 +7,9 @@ import { createBusiness, createInvoice, searchCustomers, updateInvoiceStatus, ty
 import { addProfile, getCurrentUser, logoutUser, switchAccount, type Role } from '../../services/auth'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import type { RootState } from '../../store/store'
+import { ArrowLeft } from 'lucide-react'
+import { BusinessProductsSection } from './components/BusinessProductsSection'
+import { getBusinessProducts } from '../../services/api/billingApi'
 import { fetchBusinessDashboard, fetchBusinessSummary, setActiveTab, setSelectedBusinessId } from '../../store/businessDashboardSlice'
 import { setAuthUser } from '../../store/authSlice'
 import { AppointmentListCard } from './components/AppointmentListCard'
@@ -78,8 +81,12 @@ export function BusinessDashboard() {
     items: [createInvoiceItem()],
   }))
   const [invoiceMessage, setInvoiceMessage] = useState('')
+  const [invoiceMessageSeverity, setInvoiceMessageSeverity] = useState<'error' | 'success'>('success')
+  const [isInvoiceSuccessToastOpen, setIsInvoiceSuccessToastOpen] = useState(false)
   const [isInvoiceSubmitting, setIsInvoiceSubmitting] = useState(false)
   const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false)
+  const [isProductsViewOpen, setIsProductsViewOpen] = useState(false)
+  const [activeProductCount, setActiveProductCount] = useState(0)
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false)
   const [isNotificationDialogOpen, setIsNotificationDialogOpen] = useState(false)
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
@@ -140,6 +147,39 @@ export function BusinessDashboard() {
   useEffect(() => {
     if (selectedBusiness) dispatch(fetchBusinessSummary(selectedBusiness.id))
   }, [dispatch, selectedBusiness])
+
+  useEffect(() => {
+  let cancelled = false
+
+  const loadActiveProductCount = async () => {
+    if (!selectedBusiness?.id) {
+      setActiveProductCount(0)
+      return
+    }
+
+    try {
+      const result = await getBusinessProducts(selectedBusiness.id)
+
+      if (cancelled) return
+
+      if (result.ok) {
+        const count = result.products.filter(
+          (product) => product.status === 'ACTIVE',
+        ).length
+
+        setActiveProductCount(count)
+      }
+    } catch (error) {
+      console.error('Failed to load active product count:', error)
+    }
+  }
+
+  void loadActiveProductCount()
+
+  return () => {
+    cancelled = true
+  }
+}, [selectedBusiness?.id])
 
   useEffect(() => {
     if (!data.businesses.length || selectedBusinessId !== null) return
@@ -288,11 +328,13 @@ export function BusinessDashboard() {
     }))
 
     if (!businessId || !customerId) {
+      setInvoiceMessageSeverity('error')
       setInvoiceMessage('Select a customer before generating an invoice.')
-      return
+      return 
     }
 
     if (items.some((item) => !item.productName.trim() || !Number.isFinite(item.quantity) || item.quantity <= 0 || !Number.isFinite(item.unitPrice) || item.unitPrice <= 0 || !Number.isFinite(item.gstRate) || item.gstRate < 0)) {
+      setInvoiceMessageSeverity('error')
       setInvoiceMessage('Enter a product name, positive quantity and price, and a valid GST rate for every product.')
       return
     }
@@ -319,19 +361,26 @@ export function BusinessDashboard() {
 })
 
       if (!result.ok) {
-        setInvoiceMessage(result.message ?? 'Invoice generation failed.')
-        return
-      }
+  setInvoiceMessageSeverity('error')
+  setInvoiceMessage(result.message ?? 'Invoice generation failed.')
+  return
+}
 
-      setInvoiceMessage(status === 'DRAFT'
-        ? `Invoice ${result.invoice?.invoiceNumber ?? 'draft'} saved as a draft.`
-        : `Invoice ${result.invoice?.invoiceNumber ?? 'generated'} sent to the selected customer.`)
-      setInvoiceForm((current) => ({ ...current, customerId: '', items: [createInvoiceItem()] }))
-      setSelectedCustomer(null)
-      setCustomerSearchText('')
-      dispatch(fetchBusinessDashboard(businessId))
+if (status === 'SENT') {
+  setInvoiceMessage('')
+  setIsInvoiceFormOpen(false)
+  setIsInvoiceSuccessToastOpen(true)
+} else {
+  setInvoiceMessageSeverity('success')
+  setInvoiceMessage(`Invoice ${result.invoice?.invoiceNumber ?? 'draft'} saved as a draft.`)
+}
+setInvoiceForm((current) => ({ ...current, customerId: '', items: [createInvoiceItem()] }))
+setSelectedCustomer(null)
+setCustomerSearchText('')
+dispatch(fetchBusinessDashboard(businessId))
     } catch (error) {
-      setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation failed.')
+setInvoiceMessageSeverity('error')
+setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation failed.')
     } finally {
       setIsInvoiceSubmitting(false)
     }
@@ -451,7 +500,24 @@ export function BusinessDashboard() {
                   navigate('/')
                 }}
               />
+              {isProductsViewOpen ? (
+            <Stack spacing={2}>
+              <Button
+                variant="text"
+                startIcon={<ArrowLeft size={18} />}
+                onClick={() => setIsProductsViewOpen(false)}
+                sx={{ alignSelf: 'flex-start', textTransform: 'none' }}
+              >
+                Back to Business Profile
+              </Button>
 
+              <BusinessProductsSection
+                businessId={selectedBusiness?.id ?? null}
+                onProductCountChange={setActiveProductCount}
+              />
+            </Stack>
+          ) : (
+            <>
             {activeTab === 'overview' && <BusinessDashboardOverview onQuickAction={handleQuickAction} hasBusiness={Boolean(selectedBusiness)} />}
 
             {activeTab === 'businesses' && (
@@ -498,6 +564,7 @@ export function BusinessDashboard() {
                   isCustomerSearching={isCustomerSearching}
                   invoiceForm={invoiceForm}
                   invoiceMessage={invoiceMessage}
+                  invoiceMessageSeverity={invoiceMessageSeverity}
                   isSubmitting={isInvoiceSubmitting}
                   onClose={() => setIsInvoiceFormOpen(false)}
                   onCustomerSearchChange={setCustomerSearchText}
@@ -564,14 +631,18 @@ export function BusinessDashboard() {
               <BusinessProfileCard
                 authUser={authUser}
                 businessForm={businessForm}
-                  location={businessLocation}
+                location={businessLocation}
                 profileId={selectedBusiness?.profileId}
                 isCreatingBusiness={isCreatingBusiness}
                 businessMessage={businessMessage}
                 onBusinessFieldChange={handleBusinessFieldChange}
                   onLocationChange={handleBusinessLocationChange}
                 onSave={handleSaveBusinessProfile}
+                onManageProducts={() => setIsProductsViewOpen(true)}
+                activeProductCount={activeProductCount}
               />
+            )}
+            </>
             )}
           </Stack>
         </Box>
@@ -593,6 +664,21 @@ export function BusinessDashboard() {
             />
           </>
         )}
+
+        <Snackbar
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+          open={isInvoiceSuccessToastOpen}
+          autoHideDuration={2500}
+          onClose={() => setIsInvoiceSuccessToastOpen(false)}
+        >
+          <Alert
+            severity="success"
+            variant="filled"
+            sx={{ width: '100%', py: 0.25 }}
+          >
+            Invoice sent successfully!
+          </Alert>
+        </Snackbar>
 
         <BottomNavBar activeTab={activeTab} onChangeTab={(tab) => dispatch(setActiveTab(tab))} />
       </Paper>
