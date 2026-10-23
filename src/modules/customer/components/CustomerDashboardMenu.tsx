@@ -5,13 +5,12 @@ import { UserRound, type LucideIcon } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { ProfileManagerDialog } from '../../../components/ProfileManagerDialog'
 import { logoutUser, type Role } from '../../../services/auth'
-import { useAppDispatch } from '../../../store/hooks'
-import { setActiveTab } from '../../../store/customerDashboardSlice'
 import type { DashboardTab } from '../../types'
 
 type CustomerDashboardMenuProps = {
   tabs: Array<{ key: DashboardTab; label: string; icon: LucideIcon }>
   activeTab: DashboardTab
+  onChangeTab: (tab: DashboardTab) => void
   anchorEl: null | HTMLElement
   isOpen: boolean
   onClose: () => void
@@ -25,6 +24,7 @@ type CustomerDashboardMenuProps = {
 export function CustomerDashboardMenu({
   tabs,
   activeTab,
+  onChangeTab,
   anchorEl,
   isOpen,
   onClose,
@@ -34,7 +34,6 @@ export function CustomerDashboardMenu({
   onSwitchAccount,
   onAddProfile,
 }: CustomerDashboardMenuProps) {
-  const dispatch = useAppDispatch()
   const navigate = useNavigate()
   const [managerOpen, setManagerOpen] = useState(false)
 
@@ -66,7 +65,7 @@ export function CustomerDashboardMenu({
               key={tab.key}
               selected={activeTab === tab.key}
               onClick={() => {
-                dispatch(setActiveTab(tab.key))
+                onChangeTab(tab.key)
                 onClose()
               }}
               sx={{ gap: 1, py: 1.1, fontWeight: 600 }}

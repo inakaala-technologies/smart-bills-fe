@@ -85,6 +85,12 @@ const businessDashboardSlice = createSlice({
       }
       state.selectedBusinessId = action.payload
     },
+    setBusinessFeatures: (state, action: PayloadAction<{ businessId: number; appointmentsEnabled: boolean; membershipsEnabled: boolean }>) => {
+      const business = state.data.businesses.find((item) => item.id === action.payload.businessId)
+      if (!business) return
+      business.appointmentsEnabled = action.payload.appointmentsEnabled
+      business.membershipsEnabled = action.payload.membershipsEnabled
+    },
     resetBusinessDashboard: () => initialState,
   },
   extraReducers: (builder) => {
@@ -153,5 +159,5 @@ const businessDashboardSlice = createSlice({
   },
 })
 
-export const { setActiveTab, setBusinessMembershipPlans, setSelectedBusinessId, resetBusinessDashboard } = businessDashboardSlice.actions
+export const { setActiveTab, setBusinessMembershipPlans, setSelectedBusinessId, setBusinessFeatures, resetBusinessDashboard } = businessDashboardSlice.actions
 export default businessDashboardSlice.reducer

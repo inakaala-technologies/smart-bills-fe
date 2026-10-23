@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Alert,
   Box,
@@ -18,6 +18,7 @@ import {
 import {
   CalendarCheck2,
   ChevronRight,
+  Award,
   FileText,
   Home,
   LayoutGrid,
@@ -25,7 +26,7 @@ import {
   UserRound,
   type LucideIcon,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { DashboardListRow } from '../../components/DashboardListRow'
 import { BusinessTypeFilter } from '../../components/BusinessTypeFilter'
@@ -38,6 +39,7 @@ import { CustomerDashboardMenu } from './components/CustomerDashboardMenu'
 import { CustomerInvoicesList } from './components/CustomerInvoicesList'
 import { CustomerProfilePanel } from './components/CustomerProfilePanel'
 import { CustomerAppointmentsPanel } from './components/CustomerAppointmentsPanel'
+import { CustomerLoyaltyPanel } from './components/CustomerLoyaltyPanel'
 import { fetchNearbyOffers, type DashboardData } from '../../services/api'
 import { addProfile, logoutUser, switchAccount, type Role } from '../../services/auth'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
@@ -46,14 +48,18 @@ import { setAuthUser } from '../../store/authSlice'
 import { setActiveTab, setSelectedBusinessId } from '../../store/customerDashboardSlice'
 import type { DashboardTab } from '../types'
 import { getBusinessTypeLabel, normalizeBusinessType } from '../../constants/businessTypes'
+import { FamilyManagementDialog } from './components/FamilyManagementDialog'
 
 const roleNav: Array<{ key: DashboardTab; label: string; icon: LucideIcon }> = [
   { key: 'overview', label: 'Home', icon: Home },
   { key: 'businesses', label: 'Businesses', icon: LayoutGrid },
   { key: 'invoices', label: 'Documents', icon: FileText },
   { key: 'appointments', label: 'Bookings', icon: CalendarCheck2 },
+  { key: 'rewards', label: 'Rewards', icon: Award },
   { key: 'profile', label: 'Profile', icon: UserRound },
 ]
+
+const customerDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'appointments', 'rewards', 'memberships', 'profile']
 
 function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
@@ -62,12 +68,13 @@ function formatCurrency(value?: number) {
 
 export function CustomerDashboard() {
   const navigate = useNavigate()
+  const { tab: routeTab } = useParams()
   const dispatch = useAppDispatch()
   const authUser = useAppSelector((state: RootState) => state.auth.authUser)
   const accountRoles = new Set((authUser?.accounts ?? []).map((account) => account.role).concat(authUser?.role ?? 'CUSTOMER'))
   const availableAccounts = (authUser?.accounts ?? []).filter((account) => account.role !== authUser?.role)
   const missingProfileRoles = (['BUSINESS', 'CUSTOMER'] as Role[]).filter((role) => role !== authUser?.role && !accountRoles.has(role))
-  const { data, loading, activeTab } = useAppSelector((state: RootState) => state.customerDashboard)
+  const { data, loading, activeTab, selectedCustomerId } = useAppSelector((state: RootState) => state.customerDashboard)
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
   const [managerOpen, setManagerOpen] = useState(false)
   const [businessTypeFilter, setBusinessTypeFilter] = useState('ALL')
@@ -81,6 +88,7 @@ export function CustomerDashboard() {
   )
   const customerLatitude = data.customers[0]?.latitude
   const customerLongitude = data.customers[0]?.longitude
+  const [familyDialogOpen, setFamilyDialogOpen] = useState(false)
 
   useEffect(() => {
     if (customerLatitude === undefined || customerLongitude === undefined) return
@@ -91,9 +99,19 @@ export function CustomerDashboard() {
     return () => { isCurrent = false }
   }, [customerLatitude, customerLongitude])
 
-  const handleChangeTab = (tab: DashboardTab) => {
+  const handleChangeTab = useCallback((tab: DashboardTab, replace = false) => {
     dispatch(setActiveTab(tab))
-  }
+    navigate(`/dashboard/${tab}`, { replace })
+  }, [dispatch, navigate])
+
+  useEffect(() => {
+    const matchingTab = customerDashboardTabs.find((tab) => tab === routeTab)
+    if (matchingTab) {
+      dispatch(setActiveTab(matchingTab))
+    } else {
+      handleChangeTab('overview', true)
+    }
+  }, [dispatch, handleChangeTab, routeTab])
 
   const upcomingAppointmentActivities = data.appointments
     .filter((appointment) => {
@@ -137,10 +155,10 @@ export function CustomerDashboard() {
       subtitle: `Invoice #${invoice.invoiceNumber ?? invoice.id}`,
       date: invoice.issueDate
         ? new Date(invoice.issueDate).toLocaleDateString('en-IN', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric',
-          })
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        })
         : '—',
       amount: formatCurrency(invoice.totalAmount),
       icon: ShoppingCart,
@@ -197,6 +215,7 @@ export function CustomerDashboard() {
             <CustomerDashboardMenu
               tabs={roleNav}
               activeTab={activeTab}
+              onChangeTab={handleChangeTab}
               anchorEl={menuAnchorEl}
               isOpen={isMenuOpen}
               onClose={() => setMenuAnchorEl(null)}
@@ -250,6 +269,12 @@ export function CustomerDashboard() {
               }}
             />
 
+            <FamilyManagementDialog
+              open={familyDialogOpen}
+              onClose={() => setFamilyDialogOpen(false)}
+              currentUserId={Number(authUser?.id)}
+            />
+
             {activeTab === 'overview' && (
               <Box>
                 {/* 1. Hero Card */}
@@ -282,7 +307,7 @@ export function CustomerDashboard() {
                     </Typography>
                     <Typography
                       variant="body2"
-                      onClick={() => dispatch(setActiveTab('invoices'))}
+                      onClick={() => handleChangeTab('invoices')}
                       sx={{
                         color: 'primary.main',
                         fontWeight: 700,
@@ -394,7 +419,7 @@ export function CustomerDashboard() {
                               <Typography
                                 sx={{
                                   fontWeight: 700,
-                                    color: 'text.primary',
+                                  color: 'text.primary',
                                   fontSize: '15px',
                                   letterSpacing: '-0.02em',
                                   flexShrink: 0,
@@ -514,6 +539,12 @@ export function CustomerDashboard() {
                               <Typography sx={{ color: 'text.secondary' }}>GST</Typography>
                               <Typography sx={{ color: 'text.primary' }}>{formatCurrency(selectedInvoice.gstAmount)}</Typography>
                             </Box>
+                            {(selectedInvoice.loyaltyPointsRedeemed ?? 0) > 0 && (
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                                <Typography sx={{ color: 'success.main' }}>Loyalty discount ({selectedInvoice.loyaltyPointsRedeemed} points)</Typography>
+                                <Typography sx={{ color: 'success.main' }}>−{formatCurrency(selectedInvoice.loyaltyDiscountAmount)}</Typography>
+                              </Box>
+                            )}
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, pt: 0.7, borderTop: '1px solid var(--mui-palette-divider)' }}>
                               <Typography sx={{ color: 'text.primary', fontWeight: 800 }}>Total</Typography>
                               <Typography sx={{ color: 'primary.main', fontWeight: 800 }}>{formatCurrency(selectedInvoice.totalAmount)}</Typography>
@@ -574,7 +605,13 @@ export function CustomerDashboard() {
             )}
 
             {activeTab === 'invoices' && <CustomerInvoicesList invoices={data.invoices} businesses={data.businesses} />}
-            {activeTab === 'appointments' && <CustomerAppointmentsPanel appointments={data.appointments} businesses={data.businesses} />}
+            {activeTab === 'appointments' && <CustomerAppointmentsPanel appointments={data.appointments} businesses={data.businesses} customerId={selectedCustomerId} />}
+            {activeTab === 'rewards' && (
+              <CustomerLoyaltyPanel
+                customerId={selectedCustomerId}
+                businesses={data.businesses}
+              />
+            )}
             {activeTab === 'memberships' && (
               <Stack spacing={1.2}>
                 <Box>
@@ -615,6 +652,7 @@ export function CustomerDashboard() {
                 onOpenManageDialog={() => setManagerOpen(true)}
                 onOpenBusinesses={() => dispatch(setActiveTab('businesses'))}
                 onOpenDocuments={() => dispatch(setActiveTab('invoices'))}
+                onOpenFamily={() => setFamilyDialogOpen(true)}
                 onOpenBusiness={(businessId) => {
                   dispatch(setSelectedBusinessId(businessId))
                   navigate(`/business/${businessId}`)
@@ -627,64 +665,64 @@ export function CustomerDashboard() {
             )}
           </Box>
 
-        {/* Bottom Navigation Bar matching the reference */}
-        <Box
-          sx={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            backgroundColor: 'background.paper',
-            borderTop: '1px solid var(--mui-palette-divider)',
-            display: 'grid',
-            gridTemplateColumns: `repeat(${roleNav.length}, minmax(0, 1fr))`,
-            py: 1.2,
-            px: 1,
-            zIndex: 10,
-          }}
-        >
-          {roleNav.map((tab) => {
-            const isActive = activeTab === tab.key
-            const Icon = tab.icon
+          {/* Bottom Navigation Bar matching the reference */}
+          <Box
+            sx={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              backgroundColor: 'background.paper',
+              borderTop: '1px solid var(--mui-palette-divider)',
+              display: 'grid',
+              gridTemplateColumns: `repeat(${roleNav.length}, minmax(0, 1fr))`,
+              py: 1.2,
+              px: 1,
+              zIndex: 10,
+            }}
+          >
+            {roleNav.map((tab) => {
+              const isActive = activeTab === tab.key
+              const Icon = tab.icon
 
-            return (
-              <Box
-                key={tab.key}
-                onClick={() => handleChangeTab(tab.key)}
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 0.6,
-                  cursor: 'pointer',
-                  color: isActive ? 'primary.main' : 'text.secondary',
-                  transition: 'color 0.18s ease',
-                  py: 0.5,
-                }}
-              >
-                <Icon
-                  size={22}
-                  strokeWidth={isActive ? 2.6 : 2}
-                  color={isActive ? 'var(--mui-palette-primary-main)' : 'var(--mui-palette-text-secondary)'}
-                />
-                <Typography
-                  variant="caption"
+              return (
+                <Box
+                  key={tab.key}
+                  onClick={() => handleChangeTab(tab.key)}
                   sx={{
-                    fontWeight: isActive ? 800 : 600,
-                    fontSize: '11px',
-                    lineHeight: 1,
-                    letterSpacing: '-0.01em',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 0.6,
+                    cursor: 'pointer',
+                    color: isActive ? 'primary.main' : 'text.secondary',
+                    transition: 'color 0.18s ease',
+                    py: 0.5,
                   }}
                 >
-                  {tab.label}
-                </Typography>
-              </Box>
-            )
-          })}
-        </Box>
-      </Paper>
-    </Container>
-  </Box>
+                  <Icon
+                    size={22}
+                    strokeWidth={isActive ? 2.6 : 2}
+                    color={isActive ? 'var(--mui-palette-primary-main)' : 'var(--mui-palette-text-secondary)'}
+                  />
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontWeight: isActive ? 800 : 600,
+                      fontSize: '11px',
+                      lineHeight: 1,
+                      letterSpacing: '-0.01em',
+                    }}
+                  >
+                    {tab.label}
+                  </Typography>
+                </Box>
+              )
+            })}
+          </Box>
+        </Paper>
+      </Container>
+    </Box>
   )
 }

@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, Box, Button, Container, Paper, Snackbar, Stack, Typography } from '@mui/material'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import type { LocationValue } from '../../components/LocationPicker'
 import { createBusiness, createInvoice, searchCustomers, updateInvoiceStatus, type DashboardData } from '../../services/api'
+import { setBusinessMembershipsEnabled } from '../../services/api/businessApi'
+import { setBusinessAppointmentsEnabled } from '../../services/api/appointmentsApi'
 import { addProfile, getCurrentUser, logoutUser, switchAccount, type Role } from '../../services/auth'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import type { RootState } from '../../store/store'
 import { ArrowLeft } from 'lucide-react'
 import { BusinessProductsSection } from './components/BusinessProductsSection'
 import { getBusinessProducts } from '../../services/api/billingApi'
-import { fetchBusinessDashboard, fetchBusinessSummary, setActiveTab, setSelectedBusinessId } from '../../store/businessDashboardSlice'
+import { fetchBusinessDashboard, fetchBusinessSummary, setActiveTab,setBusinessFeatures, setSelectedBusinessId } from '../../store/businessDashboardSlice'
 import { setAuthUser } from '../../store/authSlice'
 import { AppointmentListCard } from './components/AppointmentListCard'
 import { AppointmentServiceManager } from './components/AppointmentServiceManager'
@@ -26,11 +28,16 @@ import { InvoiceListPanel } from './components/InvoiceListPanel'
 import { MembershipWorkspace } from './components/MembershipWorkspace'
 import { CustomerRetentionWorkspace } from './components/CustomerRetentionWorkspace'
 import { BusinessInsightsWorkspace } from './components/BusinessInsightsWorkspace'
+import { LoyaltyWorkspace } from './components/LoyaltyWorkspace'
 import { AddCustomerDialog } from './components/AddCustomerDialog'
 import { SendMembershipNotificationDialog } from './components/SendMembershipNotificationDialog'
+import type { BusinessFeature } from './components/BusinessProfileCard'
 import type { QuickActionId } from './components/QuickActionGrid'
+import type { DashboardTab } from '../types'
 import { normalizeBusinessType } from '../../constants/businessTypes'
 import { v4 as uuidv4 } from 'uuid';
+
+const businessDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'customers', 'appointments', 'memberships', 'loyalty', 'offers', 'retention', 'insights', 'profile']
 
 function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
@@ -59,14 +66,37 @@ function defaultDueDate() {
 
 export function BusinessDashboard() {
   const navigate = useNavigate()
+  const { tab: routeTab } = useParams()
   const dispatch = useAppDispatch()
   const authUser = getCurrentUser()
   const accountRoles = new Set((authUser?.accounts ?? []).map((account) => account.role).concat(authUser?.role ?? 'BUSINESS'))
   const availableAccounts = (authUser?.accounts ?? []).filter((account) => account.role !== authUser?.role)
   const missingProfileRoles = (['BUSINESS', 'CUSTOMER'] as Role[]).filter((role) => role !== authUser?.role && !accountRoles.has(role))
   const { data, activeTab, selectedBusinessId } = useAppSelector((state: RootState) => state.businessDashboard)
+  const changeTab = useCallback((tab: DashboardTab, replace = false) => {
+    dispatch(setActiveTab(tab))
+    navigate(`/dashboard/${tab}`, { replace })
+  }, [dispatch, navigate])
+
+  useEffect(() => {
+    const matchingTab = businessDashboardTabs.find((tab) => tab === routeTab)
+    if (matchingTab) {
+      dispatch(setActiveTab(matchingTab))
+    } else {
+      changeTab('overview', true)
+    }
+  }, [changeTab, dispatch, routeTab])
 
   const selectedBusiness = data.businesses.find((business) => business.id === selectedBusinessId) ?? data.businesses[0] ?? null
+  const appointmentsEnabled = selectedBusiness?.appointmentsEnabled ?? false
+  const membershipsEnabled = selectedBusiness?.membershipsEnabled ?? true
+
+  useEffect(() => {
+    if (!selectedBusiness) return
+    if ((activeTab === 'appointments' && !appointmentsEnabled) || (activeTab === 'memberships' && !membershipsEnabled)) {
+      changeTab('overview', true)
+    }
+  }, [activeTab, appointmentsEnabled, changeTab, membershipsEnabled, selectedBusiness])
 
   const createInvoiceItem = (): InvoiceLineItemForm => ({
     id: uuidv4(),
@@ -78,6 +108,7 @@ export function BusinessDashboard() {
   const [invoiceForm, setInvoiceForm] = useState<BusinessInvoiceForm>(() => ({
     customerId: data.customers[0]?.id ?? '',
     dueDate: defaultDueDate(),
+    loyaltyPointsToRedeem: '0',
     items: [createInvoiceItem()],
   }))
   const [invoiceMessage, setInvoiceMessage] = useState('')
@@ -133,15 +164,33 @@ export function BusinessDashboard() {
   const handleQuickAction = (action: QuickActionId) => {
     if (action === 'invoice') {
       setInvoiceMessage('')
-      dispatch(setActiveTab('invoices'))
+      changeTab('invoices')
       setIsInvoiceFormOpen(true)
     } else if (action === 'customer') {
       setIsAddCustomerOpen(true)
+    } else if (action === 'appointment') {
+      changeTab('appointments')
     } else if (action === 'membership') {
-      dispatch(setActiveTab('memberships'))
+      changeTab('memberships')
     } else {
       setIsNotificationDialogOpen(true)
     }
+  }
+
+  const handleFeatureToggle = async (feature: BusinessFeature, enabled: boolean) => {
+    if (!selectedBusiness) return { ok: false, message: 'Select a business profile first.' }
+    const result = feature === 'appointments'
+      ? await setBusinessAppointmentsEnabled(selectedBusiness.id, enabled)
+      : await setBusinessMembershipsEnabled(selectedBusiness.id, enabled)
+    if (!result.ok || !result.business) {
+      return { ok: false, message: result.message ?? 'Could not update this feature.' }
+    }
+    dispatch(setBusinessFeatures({
+      businessId: selectedBusiness.id,
+      appointmentsEnabled: result.business.appointmentsEnabled ?? false,
+      membershipsEnabled: result.business.membershipsEnabled ?? true,
+    }))
+    return { ok: true }
   }
 
   useEffect(() => {
@@ -221,7 +270,7 @@ export function BusinessDashboard() {
     }
   }, [customerSearchText, data.customers])
 
-  const handleInvoiceInput = (field: 'customerId' | 'dueDate', value: string) => {
+  const handleInvoiceInput = (field: 'customerId' | 'dueDate' | 'loyaltyPointsToRedeem', value: string) => {
     setInvoiceForm((current) => ({ ...current, [field]: value }))
   }
 
@@ -313,7 +362,7 @@ export function BusinessDashboard() {
     setBusinessMessage('Business profile saved successfully.')
     setIsCreatingBusiness(false)
     dispatch(fetchBusinessDashboard(savedBusiness.id ?? undefined))
-    dispatch(setActiveTab('overview'))
+    changeTab('overview')
   }
 
   const handleCreateInvoice = async (status: 'DRAFT' | 'SENT',
@@ -358,6 +407,7 @@ export function BusinessDashboard() {
   gstAmount,
   totalAmount,
   status,
+  loyaltyPointsToRedeem: Math.max(0, Math.floor(Number(invoiceForm.loyaltyPointsToRedeem) || 0)),
 })
 
       if (!result.ok) {
@@ -366,18 +416,27 @@ export function BusinessDashboard() {
   return
 }
 
-if (status === 'SENT') {
-  setInvoiceMessage('')
-  setIsInvoiceFormOpen(false)
-  setIsInvoiceSuccessToastOpen(true)
-} else {
-  setInvoiceMessageSeverity('success')
-  setInvoiceMessage(`Invoice ${result.invoice?.invoiceNumber ?? 'draft'} saved as a draft.`)
-}
-setInvoiceForm((current) => ({ ...current, customerId: '', items: [createInvoiceItem()] }))
-setSelectedCustomer(null)
-setCustomerSearchText('')
-dispatch(fetchBusinessDashboard(businessId))
+      if (status === 'SENT') {
+        setInvoiceMessage('')
+        setIsInvoiceFormOpen(false)
+        setIsInvoiceSuccessToastOpen(true)
+      } else {
+        setInvoiceMessageSeverity('success')
+        setInvoiceMessage(
+          `Invoice ${result.invoice?.invoiceNumber ?? 'draft'} saved as a draft.`
+        )
+      }
+
+      setInvoiceForm((current) => ({
+        ...current,
+        customerId: '',
+        loyaltyPointsToRedeem: '0',
+        items: [createInvoiceItem()],
+      }))
+
+      setSelectedCustomer(null)
+      setCustomerSearchText('')
+      dispatch(fetchBusinessDashboard(businessId))
     } catch (error) {
 setInvoiceMessageSeverity('error')
 setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation failed.')
@@ -417,6 +476,9 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
       status: invoice.status ?? 'SENT',
       dueDate: invoice.dueDate,
       amount: formatCurrency(invoice.totalAmount),
+      loyaltyDetails: (invoice.loyaltyPointsRedeemed ?? 0) > 0
+        ? `${invoice.loyaltyPointsRedeemed} points redeemed · ${formatCurrency(invoice.loyaltyDiscountAmount)} discount`
+        : undefined,
       date: invoiceDate && !Number.isNaN(invoiceDate.getTime())
         ? invoiceDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
         : '—',
@@ -470,10 +532,12 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
             <Stack spacing={1.6}>
               <BusinessMenu
                 activeTab={activeTab}
+                appointmentsEnabled={appointmentsEnabled}
+                membershipsEnabled={membershipsEnabled}
                 anchorEl={menuAnchorEl}
                 isOpen={isMenuOpen}
                 onClose={() => setMenuAnchorEl(null)}
-                onChangeTab={(tab) => dispatch(setActiveTab(tab))}
+                onChangeTab={changeTab}
                 currentRole={authUser?.role ?? 'BUSINESS'}
                 availableAccounts={availableAccounts}
                 missingProfileRoles={missingProfileRoles}
@@ -518,7 +582,7 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
             </Stack>
           ) : (
             <>
-            {activeTab === 'overview' && <BusinessDashboardOverview onQuickAction={handleQuickAction} hasBusiness={Boolean(selectedBusiness)} />}
+              {activeTab === 'overview' && <BusinessDashboardOverview onQuickAction={handleQuickAction} onOpenInsights={() => changeTab('insights')} hasBusiness={Boolean(selectedBusiness)} appointmentsEnabled={appointmentsEnabled} membershipsEnabled={membershipsEnabled} />}
 
             {activeTab === 'businesses' && (
               <BusinessOverview
@@ -546,7 +610,7 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
               <Stack spacing={1.6}>
                 <InvoiceListPanel
                   invoiceRows={invoiceRows}
-                  onBack={() => dispatch(setActiveTab('overview'))}
+                  onBack={() => changeTab('overview')}
                   onCreateInvoice={() => {
                     setInvoiceMessage('')
                     setIsInvoiceFormOpen(true)
@@ -572,6 +636,7 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
                     setSelectedCustomer(customer)
                     if (customer) {
                       handleInvoiceInput('customerId', String(customer.id))
+                      handleInvoiceInput('loyaltyPointsToRedeem', '0')
                     }
                   }}
                   onInvoiceFieldChange={handleInvoiceInput}
@@ -583,7 +648,7 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
               </Stack>
             )}
 
-            {activeTab === 'customers' && <CustomerListCard customers={data.customers} onOpenCustomer={handleOpenCustomer} />}
+            {activeTab === 'customers' && selectedBusiness && <CustomerListCard businessId={selectedBusiness.id} customers={data.customers} onOpenCustomer={handleOpenCustomer} />}
 
             {activeTab === 'retention' && selectedBusiness && (
               <CustomerRetentionWorkspace
@@ -596,9 +661,17 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
               />
             )}
 
-            {activeTab === 'insights' && selectedBusiness && <BusinessInsightsWorkspace key={selectedBusiness.id} businessId={selectedBusiness.id} />}
+            {activeTab === 'loyalty' && selectedBusiness && (
+              <LoyaltyWorkspace
+                key={selectedBusiness.id}
+                businessId={selectedBusiness.id}
+                products={data.products}
+              />
+            )}
 
-            {activeTab === 'memberships' && selectedBusiness && (
+            {activeTab === 'insights' && selectedBusiness && <BusinessInsightsWorkspace key={selectedBusiness.id} businessId={selectedBusiness.id} appointmentsEnabled={appointmentsEnabled} membershipsEnabled={membershipsEnabled} />}
+
+            {activeTab === 'memberships' && membershipsEnabled && selectedBusiness && (
               <MembershipWorkspace
                 key={selectedBusiness.id}
                 businessId={selectedBusiness.id}
@@ -608,7 +681,7 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
               />
             )}
 
-            {activeTab === 'appointments' && (
+            {activeTab === 'appointments' && appointmentsEnabled && (
               <Stack spacing={1.6}>
                 {selectedBusiness && (
                   <AppointmentServiceManager
@@ -635,11 +708,14 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
                 profileId={selectedBusiness?.profileId}
                 isCreatingBusiness={isCreatingBusiness}
                 businessMessage={businessMessage}
-                onBusinessFieldChange={handleBusinessFieldChange}
+                  appointmentsEnabled={appointmentsEnabled}
+                  membershipsEnabled={membershipsEnabled}
+                  onBusinessFieldChange={handleBusinessFieldChange}
                   onLocationChange={handleBusinessLocationChange}
                 onSave={handleSaveBusinessProfile}
                 onManageProducts={() => setIsProductsViewOpen(true)}
                 activeProductCount={activeProductCount}
+                onFeatureToggle={handleFeatureToggle}
               />
             )}
             </>
@@ -680,7 +756,7 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
           </Alert>
         </Snackbar>
 
-        <BottomNavBar activeTab={activeTab} onChangeTab={(tab) => dispatch(setActiveTab(tab))} />
+        <BottomNavBar activeTab={activeTab} membershipsEnabled={membershipsEnabled} onChangeTab={(tab) => dispatch(setActiveTab(tab))} />
       </Paper>
     </Container>
   </Box>

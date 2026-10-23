@@ -19,6 +19,7 @@ export type BusinessSummary = {
   longitude?: number
   status?: string
   appointmentsEnabled?: boolean
+  membershipsEnabled?: boolean
 }
 
 export type CustomerSummary = {
@@ -91,6 +92,8 @@ export type InvoiceSummary = {
   subtotal?: number
   gstAmount?: number
   totalAmount?: number
+  loyaltyPointsRedeemed?: number
+  loyaltyDiscountAmount?: number
   status?: string
 }
 
@@ -114,6 +117,8 @@ export type AppointmentSummary = {
   appointmentServiceId?: number
   serviceName?: string
   servicePrice?: number
+  loyaltyPointsRedeemed?: number
+  loyaltyDiscountAmount?: number
   scheduledAt?: string
   durationMinutes?: number
   status?: string
@@ -149,6 +154,8 @@ export type MembershipSummary = {
   planId?: number
   planName?: string
   price?: number
+  loyaltyPointsRedeemed?: number
+  loyaltyDiscountAmount?: number
   startDate?: string
   endDate?: string
   updatedAt?: string
@@ -167,6 +174,35 @@ export type MembershipPlanSummary = {
   benefits?: string
   maxMembers?: number
   active: boolean
+}
+
+export type LoyaltyTargetType = 'PRODUCT' | 'SERVICE' | 'MEMBERSHIP'
+
+export type LoyaltyRule = {
+  id: number
+  businessId: number
+  targetType: LoyaltyTargetType
+  targetId: number
+  points: number
+  active: boolean
+}
+
+export type LoyaltyBalance = {
+  businessId: number
+  customerId: number
+  balance: number
+}
+
+export type LoyaltyCustomerBalance = {
+  customerId: number
+  balance: number
+}
+
+export type LoyaltyProgramSettings = {
+  businessId: number
+  configured: boolean
+  pointsPerCurrencyUnit: number | null
+  maxRedemptionPercent: number | null
 }
 
 export type MembershipNotificationSummary = {
@@ -265,6 +301,7 @@ export type InvoiceCreateRequest = {
   gstAmount: number
   totalAmount: number
   status?: string
+  loyaltyPointsToRedeem?: number
 }
 
 export type AppointmentCreateRequest = {
@@ -273,6 +310,7 @@ export type AppointmentCreateRequest = {
   scheduledAt: string
   staffUserId?: number
   notes?: string
+  loyaltyPointsToRedeem?: number
 }
 
 export type AppointmentServiceRequest = Omit<AppointmentServiceSummary, 'id' | 'businessId'> & {
@@ -280,4 +318,3 @@ export type AppointmentServiceRequest = Omit<AppointmentServiceSummary, 'id' | '
 }
 
 export type AppointmentStatus = 'BOOKED' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW'
-

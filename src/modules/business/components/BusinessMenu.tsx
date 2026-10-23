@@ -1,5 +1,5 @@
 import { alpha, Divider, Menu, MenuItem } from '@mui/material'
-import { Building2, CalendarCheck2, ChartColumnIncreasing, Home, Megaphone, ReceiptText, UserRound, UsersRound } from 'lucide-react'
+import { Award, BadgeCheck, Building2, CalendarCheck2, ChartColumnIncreasing, Home, Megaphone, ReceiptText, UserRound, UsersRound } from 'lucide-react'
 import { useState } from 'react'
 import { ProfileManagerDialog } from '../../../components/ProfileManagerDialog'
 import type { DashboardTab } from '../../types'
@@ -10,6 +10,8 @@ const roleNav: Array<{ key: DashboardTab; label: string }> = [
   { key: 'businesses', label: 'Business' },
   { key: 'invoices', label: 'Invoices' },
   { key: 'appointments', label: 'Appointments' },
+  { key: 'memberships', label: 'Memberships' },
+  { key: 'loyalty', label: 'Loyalty points' },
   { key: 'retention', label: 'Retention' },
   { key: 'insights', label: 'Insights' },
   { key: 'offers', label: 'Offers' },
@@ -23,6 +25,8 @@ export type BusinessMenuProps = {
   onClose: () => void
   onChangeTab: (tab: DashboardTab) => void
   onLogout: () => void
+  appointmentsEnabled: boolean
+  membershipsEnabled: boolean
   currentRole?: Role
   availableAccounts?: Array<{ role: Role }>
   missingProfileRoles?: Role[]
@@ -30,8 +34,12 @@ export type BusinessMenuProps = {
   onAddProfile?: (role: Role) => void
 }
 
-export function BusinessMenu({ activeTab, anchorEl, isOpen, onClose, onChangeTab, onLogout, currentRole = 'BUSINESS', availableAccounts = [], missingProfileRoles = [], onSwitchAccount, onAddProfile }: BusinessMenuProps) {
+export function BusinessMenu({ activeTab, anchorEl, isOpen, onClose, onChangeTab, onLogout, appointmentsEnabled, membershipsEnabled, currentRole = 'BUSINESS', availableAccounts = [], missingProfileRoles = [], onSwitchAccount, onAddProfile }: BusinessMenuProps) {
   const [managerOpen, setManagerOpen] = useState(false)
+  const visibleRoleNav = roleNav.filter((tab) => (
+    (tab.key !== 'appointments' || appointmentsEnabled)
+    && (tab.key !== 'memberships' || membershipsEnabled)
+  ))
 
   return (
     <>
@@ -54,7 +62,7 @@ export function BusinessMenu({ activeTab, anchorEl, isOpen, onClose, onChangeTab
           },
         }}
       >
-        {roleNav.map((tab) => (
+        {visibleRoleNav.map((tab) => (
           <MenuItem
             key={tab.key}
             selected={activeTab === tab.key}
@@ -64,7 +72,7 @@ export function BusinessMenu({ activeTab, anchorEl, isOpen, onClose, onChangeTab
             }}
             sx={{ gap: 1, py: 1.1, fontWeight: 600 }}
           >
-            {tab.key === 'overview' ? <Home size={16} /> : tab.key === 'businesses' ? <Building2 size={16} /> : tab.key === 'invoices' ? <ReceiptText size={16} /> : tab.key === 'appointments' ? <CalendarCheck2 size={16} /> : tab.key === 'offers' ? <Megaphone size={16} /> : tab.key === 'retention' ? <UsersRound size={16} /> : tab.key === 'insights' ? <ChartColumnIncreasing size={16} /> : <UserRound size={16} />}
+            {tab.key === 'overview' ? <Home size={16} /> : tab.key === 'businesses' ? <Building2 size={16} /> : tab.key === 'invoices' ? <ReceiptText size={16} /> : tab.key === 'appointments' ? <CalendarCheck2 size={16} /> : tab.key === 'memberships' ? <BadgeCheck size={16} /> : tab.key === 'loyalty' ? <Award size={16} /> : tab.key === 'offers' ? <Megaphone size={16} /> : tab.key === 'retention' ? <UsersRound size={16} /> : tab.key === 'insights' ? <ChartColumnIncreasing size={16} /> : <UserRound size={16} />}
             {tab.label}
           </MenuItem>
         ))}

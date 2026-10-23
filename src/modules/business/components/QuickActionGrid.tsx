@@ -1,7 +1,7 @@
 import { Box, ButtonBase, Typography } from '@mui/material'
 import type { LucideIcon } from 'lucide-react'
 
-export type QuickActionId = 'invoice' | 'customer' | 'membership' | 'notification'
+export type QuickActionId = 'invoice' | 'customer' | 'membership' | 'appointment' | 'notification'
 
 export type QuickActionCardProps = {
   id: QuickActionId

@@ -10,6 +10,7 @@ export type InvoiceListRow = {
   status: string
   dueDate?: string
   amount: string
+  loyaltyDetails?: string
   date: string
   badge: string
 }
@@ -171,6 +172,11 @@ export function InvoiceListPanel({ invoiceRows, onBack, onCreateInvoice, onUpdat
                     </IconButton>
                   </Tooltip>
                 </Box>
+                {row.loyaltyDetails && (
+                  <Typography variant="caption" sx={{ display: 'block', mt: 0.4, color: 'success.main', fontWeight: 700 }}>
+                    {row.loyaltyDetails}
+                  </Typography>
+                )}
                 <Stack direction="row" spacing={0.7} sx={{ mt: 0.6, flexWrap: 'wrap' }}>
                   {isDraft ? (
                     <Button size="small" startIcon={<Send size={12} />} onClick={() => void handleUpdateStatus(row, 'SENT')} disabled={isSaving} sx={{ minHeight: 26, px: 0.8, py: 0.2, border: '1px solid var(--mui-palette-divider)', borderRadius: '999px', color: 'primary.main', fontSize: 9, fontWeight: 700, lineHeight: 1, textTransform: 'none' }}>

@@ -30,6 +30,7 @@ export async function createManagedMembership(businessId: number, request: {
   phone?: string
   startDate: string
   paymentStatus: 'PAID' | 'PENDING' | 'FREE'
+  loyaltyPointsToRedeem?: number
 }): Promise<{ ok: boolean; membership?: MembershipSummary; message?: string }> {
   try {
     const { data } = await apiClient.post<Record<string, unknown>>(`/api/v1/businesses/${businessId}/memberships`, request)

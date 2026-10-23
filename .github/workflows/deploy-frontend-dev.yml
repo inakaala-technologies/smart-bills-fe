@@ -1,0 +1,169 @@
+name: Deploy Smart Bills frontend to dev
+
+on:
+  push:
+    branches: [dev, 'feature/**', improvements]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  NODE_VERSION: '22'
+  DEPLOYMENT_BUCKET: bhive-deployments-dev
+  VITE_API_URL: http://13.233.126.174:8084
+
+jobs:
+  deploy:
+    name: Deploy React web to EC2 (nginx)
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        env:
+          VITE_API_URL: ${{ env.VITE_API_URL }}
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::615299739840:role/github-actions-deploy-dev
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Create deployment package
+        run: |
+          mkdir -p staging/nginx
+          cp -r dist staging/
+          cp Dockerfile docker-compose.smart-bills-fe-dev.yml staging/
+          cp nginx/react-nginx-container.conf staging/nginx/
+          cd staging
+          tar -czf ../smart-bills-fe-deployment.tar.gz .
+
+      - name: Upload to S3
+        run: |
+          aws s3 cp smart-bills-fe-deployment.tar.gz \
+            s3://${{ env.DEPLOYMENT_BUCKET }}/smart-bills-fe-deployment.tar.gz
+
+      - name: Deploy React web on EC2 via Docker
+        env:
+          EC2_INSTANCE_ID: i-05017512a3f92da35
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=[
+              "set -e",
+              "APP_DIR=/opt/apps/smart-bills-fe-dev",
+              "mkdir -p $APP_DIR",
+              "cd $APP_DIR",
+              "if [ -f docker-compose.smart-bills-fe-dev.yml ]; then docker-compose -f docker-compose.smart-bills-fe-dev.yml down --remove-orphans; fi",
+              "rm -rf dist nginx",
+              "aws s3 cp s3://${{ env.DEPLOYMENT_BUCKET }}/smart-bills-fe-deployment.tar.gz .",
+              "tar -xzf smart-bills-fe-deployment.tar.gz",
+              "rm -f smart-bills-fe-deployment.tar.gz",
+              "docker-compose -f docker-compose.smart-bills-fe-dev.yml up -d --build --no-deps",
+              "rm -rf dist"
+            ]' \
+            --output text \
+            --query 'Command.CommandId' \
+            --region ${{ env.AWS_REGION }})
+          echo "SSM Command ID: $COMMAND_ID"
+          echo "Waiting for deployment command to complete..."
+          if ! aws ssm wait command-executed \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --region ${{ env.AWS_REGION }}; then
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$EC2_INSTANCE_ID" \
+              --region ${{ env.AWS_REGION }} \
+              --query 'Status' \
+              --output text)
+            if [ "$STATUS" != "Success" ]; then
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$EC2_INSTANCE_ID" \
+                --region ${{ env.AWS_REGION }} \
+                --query 'StandardErrorContent' \
+                --output text
+              exit 1
+            fi
+          fi
+          STATUS=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Status' \
+            --output text)
+          echo "Deployment status: $STATUS"
+          if [ "$STATUS" != "Success" ]; then
+            aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$EC2_INSTANCE_ID" \
+              --region ${{ env.AWS_REGION }} \
+              --query 'StandardErrorContent' \
+              --output text
+            exit 1
+          fi
+
+      - name: Deployment summary
+        run: |
+          echo "Smart Bills frontend deployment to dev completed!"
+          echo "App: smart-bills-fe-dev"
+          echo "Environment: dev"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Host port: 3004"
+
+      - name: Verify deployment
+        env:
+          EC2_INSTANCE_ID: i-05017512a3f92da35
+        run: |
+          VERIFY_ID=$(aws ssm send-command \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=[
+              "docker ps --quiet --filter name=smart-bills-fe-dev --filter status=running | grep -q . && echo \"Smart Bills frontend container is running\""
+            ]' \
+            --output text \
+            --query 'Command.CommandId' \
+            --region ${{ env.AWS_REGION }})
+          if ! aws ssm wait command-executed \
+            --command-id "$VERIFY_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --region ${{ env.AWS_REGION }}; then
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$VERIFY_ID" \
+              --instance-id "$EC2_INSTANCE_ID" \
+              --region ${{ env.AWS_REGION }} \
+              --query 'Status' \
+              --output text)
+            if [ "$STATUS" != "Success" ]; then
+              aws ssm get-command-invocation \
+                --command-id "$VERIFY_ID" \
+                --instance-id "$EC2_INSTANCE_ID" \
+                --region ${{ env.AWS_REGION }} \
+                --query 'StandardErrorContent' \
+                --output text
+              exit 1
+            fi
+          fi
+          aws ssm get-command-invocation \
+            --command-id "$VERIFY_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'StandardOutputContent' \
+            --output text

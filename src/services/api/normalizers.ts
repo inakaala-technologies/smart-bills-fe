@@ -34,6 +34,7 @@ export function normalizeBusiness(raw: Partial<BusinessSummary> & Record<string,
     longitude: typeof raw.longitude === 'number' ? raw.longitude : undefined,
     status: typeof raw.status === 'string' ? raw.status : 'active',
     appointmentsEnabled: raw.appointmentsEnabled === true,
+    membershipsEnabled: raw.membershipsEnabled !== false,
   }
 }
 
@@ -85,6 +86,8 @@ export function normalizeInvoice(raw: Partial<InvoiceSummary> & Record<string, u
     subtotal: typeof raw.subtotal === 'number' ? raw.subtotal : Number(raw.subtotal ?? 0),
     gstAmount: typeof raw.gstAmount === 'number' ? raw.gstAmount : Number(raw.gstAmount ?? 0),
     totalAmount: typeof raw.totalAmount === 'number' ? raw.totalAmount : Number(raw.totalAmount ?? 0),
+    loyaltyPointsRedeemed: Number(raw.loyaltyPointsRedeemed ?? 0),
+    loyaltyDiscountAmount: Number(raw.loyaltyDiscountAmount ?? 0),
     status: typeof raw.status === 'string' ? raw.status : 'DRAFT',
   }
 }
@@ -112,6 +115,8 @@ export function normalizeAppointment(raw: Partial<AppointmentSummary> & Record<s
     appointmentServiceId: typeof raw.appointmentServiceId === 'number' ? raw.appointmentServiceId : undefined,
     serviceName: typeof raw.serviceName === 'string' ? raw.serviceName : 'Appointment service',
     servicePrice: typeof raw.servicePrice === 'number' ? raw.servicePrice : Number(raw.servicePrice ?? 0),
+    loyaltyPointsRedeemed: Number(raw.loyaltyPointsRedeemed ?? 0),
+    loyaltyDiscountAmount: Number(raw.loyaltyDiscountAmount ?? 0),
     scheduledAt: typeof raw.scheduledAt === 'string' ? raw.scheduledAt : undefined,
     durationMinutes: typeof raw.durationMinutes === 'number' ? raw.durationMinutes : Number(raw.durationMinutes ?? 0),
     status: typeof raw.status === 'string' ? raw.status : 'BOOKED',
@@ -142,6 +147,8 @@ export function normalizeMembership(raw: Partial<MembershipSummary> & Record<str
     planId: typeof raw.planId === 'number' ? raw.planId : undefined,
     planName: typeof raw.planName === 'string' ? raw.planName : 'Membership',
     price: typeof raw.price === 'number' ? raw.price : Number(raw.price ?? 0),
+    loyaltyPointsRedeemed: Number(raw.loyaltyPointsRedeemed ?? 0),
+    loyaltyDiscountAmount: Number(raw.loyaltyDiscountAmount ?? 0),
     startDate: typeof raw.startDate === 'string' ? raw.startDate : undefined,
     endDate: typeof raw.endDate === 'string' ? raw.endDate : undefined,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Box } from '@mui/material'
-import { Navigate, Route, Routes, useParams } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { DetailView } from '../components/DetailView'
 import { BusinessDetailPage } from '../components/BusinessDetailPage'
 import { CustomerBusinessDetailPage } from '../components/CustomerBusinessDetailPage'
@@ -13,7 +13,7 @@ import { getCurrentUser, getCurrentUserProfile, type Role } from '../services/au
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import type { RootState } from '../store/store'
 import { fetchAdminDashboard } from '../store/adminDashboardSlice'
-import { fetchBusinessDashboard } from '../store/businessDashboardSlice'
+import { fetchBusinessDashboard, fetchBusinessSummary } from '../store/businessDashboardSlice'
 import { fetchCustomerDashboard } from '../store/customerDashboardSlice'
 import { appStyles } from '../theme/styles'
 import { setAuthUser } from '../store/authSlice'
@@ -32,6 +32,7 @@ function BusinessDetailRoute({
 }) {
   const { id } = useParams()
   const [business, setBusiness] = useState<BusinessSummary | null>(fallbackBusiness)
+  const [loadedBusinessId, setLoadedBusinessId] = useState<number | null>(null)
   const [invoiceCount, setInvoiceCount] = useState(0)
   const [paymentCount, setPaymentCount] = useState(0)
   const [payments, setPayments] = useState<PaymentSummary[]>([])
@@ -55,6 +56,7 @@ function BusinessDetailRoute({
       .catch(() => {
         setBusiness(fallbackBusiness)
       })
+      .finally(() => setLoadedBusinessId(businessId))
 
     fetchDashboardData(businessId, role)
       .then((detailData) => {
@@ -129,6 +131,10 @@ function BusinessDetailRoute({
     return <Navigate to="/dashboard" replace />
   }
 
+  if (loadedBusinessId !== businessId) {
+    return <Box sx={{ minHeight: '50vh' }} />
+  }
+
   if (!business) {
     return <Navigate to="/dashboard" replace />
   }
@@ -163,6 +169,7 @@ function BusinessDetailRoute({
 
 export default function AppRoutes() {
   const dispatch = useAppDispatch()
+  const location = useLocation()
   const adminState = useAppSelector((state: RootState) => state.adminDashboard)
   const businessState = useAppSelector((state: RootState) => state.businessDashboard)
   const customerState = useAppSelector((state: RootState) => state.customerDashboard)
@@ -201,7 +208,7 @@ export default function AppRoutes() {
   const selectedBusinessId = dashboardRole === 'ADMIN' ? adminState.selectedBusinessId : dashboardRole === 'CUSTOMER' ? customerState.selectedBusinessId : businessState.selectedBusinessId
 
   useEffect(() => {
-    if (!authUser?.id) {
+    if (!authUser?.id || !location.pathname.startsWith('/dashboard')) {
       return
     }
 
@@ -216,7 +223,10 @@ export default function AppRoutes() {
     }
 
     dispatch(fetchBusinessDashboard(selectedBusinessId ?? undefined))
-  }, [authUser?.id, dashboardRole, dispatch, selectedBusinessId])
+    if (location.pathname === '/dashboard/overview' && selectedBusinessId !== null) {
+      dispatch(fetchBusinessSummary(selectedBusinessId))
+    }
+  }, [authUser?.id, dashboardRole, dispatch, location.key, location.pathname, selectedBusinessId])
 
   const businessDetail = useMemo(
     () => data.businesses.find((business) => business.id === selectedBusinessId) ?? data.businesses[0] ?? null,
@@ -232,7 +242,7 @@ export default function AppRoutes() {
         />
 
         <Route
-          path="/dashboard"
+          path="/dashboard/:tab?"
           element={
             <AuthenticatedRoute>
               {dashboardRole === 'ADMIN' ? (

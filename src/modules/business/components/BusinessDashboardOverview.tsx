@@ -1,5 +1,5 @@
-import { Box, Typography } from '@mui/material'
-import { Bell, Building2, ChevronRight, FileText, ReceiptText, UserRound, Users, WalletCards } from 'lucide-react'
+import { Box, ButtonBase, Typography } from '@mui/material'
+import { Bell, CalendarCheck2, Building2, ChevronRight, FileText, ReceiptText, UserRound, Users, WalletCards } from 'lucide-react'
 import { ActivityPanel } from './ActivityPanel'
 import { QuickActionGrid, type QuickActionId } from './QuickActionGrid'
 import { RevenueTrendChart } from './RevenueTrendChart'
@@ -10,9 +10,61 @@ function formatCurrency(value?: number) {
   return `₹${value.toLocaleString('en-IN')}`
 }
 
-export function BusinessDashboardOverview({ onQuickAction, hasBusiness }: { onQuickAction: (action: QuickActionId) => void; hasBusiness: boolean }) {
+export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, hasBusiness, appointmentsEnabled, membershipsEnabled }: { onQuickAction: (action: QuickActionId) => void; onOpenInsights: () => void; hasBusiness: boolean; appointmentsEnabled: boolean; membershipsEnabled: boolean }) {
   const { data, loading, summary } = useAppSelector((state) => state.businessDashboard)
   const pendingPayments = data.payments.filter((payment) => /pending/i.test(payment.status ?? ''))
+  const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const appointmentsToday = data.appointments.filter((appointment) => (
+    appointment.scheduledAt?.slice(0, 10) === today
+    && !['CANCELLED', 'NO_SHOW'].includes(appointment.status?.toUpperCase() ?? '')
+  ))
+  const appointmentCustomerCount = new Set(
+    appointmentsToday.map((appointment) => appointment.customerId).filter((customerId): customerId is number => customerId != null),
+  ).size
+  const invoicesToday = data.invoices.filter((invoice) => invoice.issueDate === today)
+  const invoiceCustomerCount = new Set(
+    invoicesToday.map((invoice) => invoice.customerId).filter((customerId): customerId is number => customerId != null),
+  ).size
+  const activeMembershipCount = data.memberships.filter((membership) => membership.status?.toUpperCase() === 'ACTIVE').length
+  const featureCustomerMetric = appointmentsEnabled
+    ? {
+        label: "Today's Appointment Customers",
+        value: String(appointmentCustomerCount),
+        detail: 'Unique customers with appointments today',
+        icon: CalendarCheck2,
+        tone: 'blue',
+      }
+    : membershipsEnabled
+      ? {
+          label: 'Active Memberships',
+          value: String(activeMembershipCount),
+          detail: 'Currently active memberships',
+          icon: Users,
+          tone: 'blue',
+        }
+      : {
+          label: "Today's Invoice Customers",
+          value: String(invoiceCustomerCount),
+          detail: 'Unique customers with invoices created today',
+          icon: UserRound,
+          tone: 'blue',
+        }
+  const dailyActivityMetric = appointmentsEnabled || !membershipsEnabled
+    ? {
+        label: "Today's Invoices",
+        value: String(invoicesToday.length),
+        detail: 'Invoices created today',
+        icon: FileText,
+        tone: 'green',
+      }
+    : {
+        label: 'New Customers',
+        value: String(summary?.newCustomers ?? data.customers.length),
+        detail: `${data.customers.length} customer profiles`,
+        icon: UserRound,
+        tone: 'green',
+      }
   const summaryCards = [
     {
       label: 'Total Revenue',
@@ -21,13 +73,7 @@ export function BusinessDashboardOverview({ onQuickAction, hasBusiness }: { onQu
       icon: WalletCards,
       tone: 'green',
     },
-    {
-      label: 'Active Members',
-      value: String(summary?.activeMembers ?? data.customers.length),
-      detail: `${data.memberships.filter((membership) => membership.status === 'ACTIVE').length} active memberships`,
-      icon: Users,
-      tone: 'blue',
-    },
+    featureCustomerMetric,
     {
       label: 'Pending Payments',
       value: formatCurrency(summary?.pendingPayments ?? pendingPayments.reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0)),
@@ -35,13 +81,7 @@ export function BusinessDashboardOverview({ onQuickAction, hasBusiness }: { onQu
       icon: FileText,
       tone: 'amber',
     },
-    {
-      label: 'New Customers',
-      value: String(summary?.newCustomers ?? data.customers.length),
-      detail: `${data.customers.length} customer profiles`,
-      icon: UserRound,
-      tone: 'green',
-    },
+    dailyActivityMetric,
   ]
   const recentActivity = (summary?.recentTransactions?.length
     ? summary.recentTransactions
@@ -71,7 +111,29 @@ export function BusinessDashboardOverview({ onQuickAction, hasBusiness }: { onQu
   return (
     <>
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1.1 }}>
-        <Box sx={{ gridColumn: '1 / -1', position: 'relative', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', alignItems: 'center', overflow: 'hidden', borderRadius: 2.6, background: 'linear-gradient(135deg, #078b68 0%, #04785e 100%)', color: '#ffffff', px: 1.8, py: 1.35, boxShadow: '0 8px 18px rgba(0, 115, 83, 0.16)' }}>
+        <ButtonBase
+          type="button"
+          aria-label="Open business insights"
+          onClick={onOpenInsights}
+          disabled={!hasBusiness}
+          sx={{
+            gridColumn: '1 / -1',
+            position: 'relative',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            alignItems: 'center',
+            overflow: 'hidden',
+            borderRadius: 2.6,
+            background: 'linear-gradient(135deg, #078b68 0%, #04785e 100%)',
+            color: '#ffffff',
+            px: 1.8,
+            py: 1.35,
+            boxShadow: '0 8px 18px rgba(0, 115, 83, 0.16)',
+            textAlign: 'left',
+            '&:hover': { filter: 'brightness(1.04)' },
+            '&.Mui-disabled': { color: '#ffffff', opacity: 0.7 },
+          }}
+        >
           {summaryCards.slice(0, 2).map((card, index) => (
             <Box key={card.label} sx={{ minWidth: 0, pr: index === 1 ? 2.8 : 1.1, pl: index === 1 ? 1.6 : 0, borderRight: index === 0 ? '1px solid rgba(255,255,255,0.18)' : 'none' }}>
               <Typography sx={{ fontSize: 12, fontWeight: 600, lineHeight: 1.25, color: 'rgba(255,255,255,0.9)' }}>{card.label}</Typography>
@@ -80,7 +142,7 @@ export function BusinessDashboardOverview({ onQuickAction, hasBusiness }: { onQu
             </Box>
           ))}
           <ChevronRight size={19} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', color: '#ffffff' }} />
-        </Box>
+        </ButtonBase>
 
         {summaryCards.slice(2).map((card) => {
           const Icon = card.icon
@@ -103,8 +165,14 @@ export function BusinessDashboardOverview({ onQuickAction, hasBusiness }: { onQu
       <QuickActionGrid actions={[
         { id: 'invoice', label: 'Create Invoice', icon: ReceiptText, onClick: () => onQuickAction('invoice'), disabled: !hasBusiness },
         { id: 'customer', label: 'Add Customer', icon: UserRound, onClick: () => onQuickAction('customer'), disabled: !hasBusiness },
-        { id: 'membership', label: 'Membership', icon: Building2, onClick: () => onQuickAction('membership'), disabled: !hasBusiness },
-        { id: 'notification', label: 'Send Notification', icon: Bell, onClick: () => onQuickAction('notification'), disabled: !hasBusiness },
+        ...(appointmentsEnabled
+          ? [{ id: 'appointment' as const, label: 'Appointments', icon: CalendarCheck2, onClick: () => onQuickAction('appointment'), disabled: !hasBusiness }]
+          : membershipsEnabled
+            ? [{ id: 'membership' as const, label: 'Membership', icon: Building2, onClick: () => onQuickAction('membership'), disabled: !hasBusiness }]
+            : []),
+        ...(membershipsEnabled
+          ? [{ id: 'notification' as const, label: 'Send Notification', icon: Bell, onClick: () => onQuickAction('notification'), disabled: !hasBusiness }]
+          : []),
       ]} />
 
       <Box sx={{ backgroundColor: 'background.paper', borderRadius: 2.4, p: 1.35, border: '1px solid var(--mui-palette-divider)', boxShadow: '0 4px 14px rgba(0, 0, 0, 0.14)' }}>
