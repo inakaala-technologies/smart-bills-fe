@@ -20,7 +20,7 @@ export function AuthPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const submittingRef = useRef(false)
 
-  const updateLoginForm = (field: 'email' | 'password', value: string) => {
+  const updateLoginForm = (field: 'identifier' | 'password', value: string) => {
     dispatch(setLoginForm({ field, value }))
   }
 
@@ -29,16 +29,16 @@ export function AuthPage() {
   }
 
   const handleLogin = async () => {
-    const email = loginForm.email.trim()
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !loginForm.password) {
-      dispatch(setAuthError('Enter a valid email address and password.'))
+    const identifier = loginForm.identifier.trim()
+    if (!identifier || !loginForm.password) {
+      dispatch(setAuthError('Enter your email or phone number and password.'))
       return
     }
     if (submittingRef.current) return
     submittingRef.current = true
     setIsSubmitting(true)
     try {
-      const result = await loginUser({ ...loginForm, email })
+      const result = await loginUser({ ...loginForm, identifier })
 
       if (!result.ok || !result.user) {
         dispatch(setAuthError(result.message ?? 'Login failed.'))
@@ -123,12 +123,13 @@ export function AuthPage() {
               <TextField
                 fullWidth
                 label="Mobile number or Email"
-                type="email"
+                type="text"
+                autoComplete="username"
                 required
                 disabled={isSubmitting}
                 slotProps={{ htmlInput: { maxLength: 254 } }}
-                value={loginForm.email}
-                onChange={(event) => updateLoginForm('email', event.target.value)}
+                value={loginForm.identifier}
+                onChange={(event) => updateLoginForm('identifier', event.target.value)}
                 sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.25, backgroundColor: 'background.paper' } }}
               />
 
@@ -161,7 +162,7 @@ export function AuthPage() {
           <Box sx={{ px: { xs: 2.25, sm: 3 }, py: { xs: 2.25, sm: 3 }, backgroundColor: 'background.paper' }}>
             {!signupRole ? (
               <Stack spacing={1.6}>
-                  <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: 0 }}>
+                <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: 0 }}>
                   Choose your account type
                 </Typography>
                 <Button
@@ -183,7 +184,7 @@ export function AuthPage() {
               </Stack>
             ) : (
               <Stack spacing={1.6}>
-                  <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: 0 }}>
+                <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: 0 }}>
                   Create {signupRole === 'BUSINESS' ? 'Business' : 'Customer'} account
                 </Typography>
                 <TextField

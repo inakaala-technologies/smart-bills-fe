@@ -17,7 +17,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { ChevronRight, CircleHelp, FileText, LogOut, Pencil, Save, Settings, ShieldCheck } from 'lucide-react'
+import { ChevronRight, CircleHelp, FileText, LogOut, Pencil, Save, Settings, ShieldCheck, UsersRound } from 'lucide-react'
 import { BusinessTypeIcon } from '../../../components/BusinessTypeIcon'
 import { LocationPicker, type LocationValue } from '../../../components/LocationPicker'
 import type { DashboardData } from '../../../services/api'
@@ -30,11 +30,12 @@ type CustomerProfilePanelProps = {
   onOpenManageDialog: () => void
   onOpenBusinesses: () => void
   onOpenDocuments: () => void
+  onOpenFamily: () => void
   onOpenBusiness: (businessId: number) => void
   onLogout: () => void
 }
 
-export function CustomerProfilePanel({ authUser, data, onProfileUpdated, onOpenManageDialog, onOpenBusinesses, onOpenDocuments, onOpenBusiness, onLogout }: CustomerProfilePanelProps) {
+export function CustomerProfilePanel({ authUser, data, onProfileUpdated, onOpenManageDialog, onOpenBusinesses, onOpenDocuments, onOpenFamily, onOpenBusiness, onLogout }: CustomerProfilePanelProps) {
   const [helpOpen, setHelpOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [editName, setEditName] = useState('')
@@ -98,6 +99,7 @@ export function CustomerProfilePanel({ authUser, data, onProfileUpdated, onOpenM
 
   const profileActions = [
     { label: 'My Documents', icon: FileText, onClick: onOpenDocuments, trailing: data.documents.length > 0 ? `${data.documents.length}` : undefined },
+    { label: 'Family', icon: UsersRound, onClick: onOpenFamily },
     { label: 'Settings', icon: Settings, onClick: onOpenManageDialog },
     { label: 'Help & Support', icon: CircleHelp, onClick: () => setHelpOpen(true) },
     { label: 'Log Out', icon: LogOut, onClick: onLogout, danger: true },
