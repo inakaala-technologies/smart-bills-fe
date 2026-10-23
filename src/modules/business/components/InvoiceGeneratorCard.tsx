@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { addCustomerToBusiness } from '../../../services/api'
 import { Alert, Autocomplete, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, IconButton, MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography, Divider } from '@mui/material'
-import { ArrowRight, Plus, Trash2, X} from 'lucide-react'
+import { Plus, Trash2, X} from 'lucide-react'
 import { type DashboardData } from '../../../services/api'
 import { fetchLoyaltyBalance, fetchLoyaltySettings, type LoyaltyProgramSettings } from '../../../services/api'
 import { fetchBusinessMembershipPlans } from '../../../store/businessDashboardSlice'

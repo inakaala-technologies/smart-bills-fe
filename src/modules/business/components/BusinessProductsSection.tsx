@@ -284,7 +284,7 @@ onProductCountChange?.(activeProducts.length)
           }}
         >
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Stack direction="row" spacing={1} alignItems="center">
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
               <Box
                 sx={{
                   width: 40,
@@ -377,9 +377,8 @@ onProductCountChange?.(activeProducts.length)
               <Box>
                 <Stack
                   direction="row"
-                  alignItems="center"
                   spacing={1}
-                  sx={{ mb: 0.5 }}
+                  sx={{ mb: 0.5, alignItems:"center" }}
                 >
                   <Typography
                     variant="h6"
@@ -740,8 +739,7 @@ onProductCountChange?.(activeProducts.length)
                         <Stack
                           direction="row"
                           useFlexGap
-                          flexWrap="wrap"
-                          gap={1}
+                          sx={{ flexWrap: "wrap", gap: 1 }}
                         >
                           <Box
                             sx={{
@@ -871,7 +869,7 @@ onProductCountChange?.(activeProducts.length)
                         <Stack
                           direction="row"
                           spacing={1}
-                          alignItems="center"
+                          sx={{ alignItems: "center" }}
                         >
                           <Button
                             variant="outlined"
