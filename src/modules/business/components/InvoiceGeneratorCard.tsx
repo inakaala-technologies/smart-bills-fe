@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Alert, Autocomplete, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, IconButton, MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
-import { ArrowRight, Plus, Trash2, X } from 'lucide-react'
+import { addCustomerToBusiness } from '../../../services/api'
+import { Alert, Autocomplete, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, IconButton, MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography, Divider } from '@mui/material'
+import { Plus, Trash2, X} from 'lucide-react'
 import { type DashboardData } from '../../../services/api'
 import { fetchLoyaltyBalance, fetchLoyaltySettings, type LoyaltyProgramSettings } from '../../../services/api'
 import { fetchBusinessMembershipPlans } from '../../../store/businessDashboardSlice'
 import { useAppDispatch, useAppSelector } from '../../../store/hooks'
+import {getBusinessProducts, type BusinessProduct, } from '../../../services/api/billingApi'
 
 export type InvoiceLineItemForm = {
   id: string
@@ -33,6 +35,7 @@ export type InvoiceGeneratorCardProps = {
   isCustomerSearching: boolean
   invoiceForm: BusinessInvoiceForm
   invoiceMessage: string
+  invoiceMessageSeverity: 'error' | 'success'
   isSubmitting: boolean
   onClose: () => void
   onCustomerSearchChange: (value: string) => void
@@ -41,7 +44,8 @@ export type InvoiceGeneratorCardProps = {
   onInvoiceItemChange: (id: string, field: InvoiceLineItemField, value: string) => void
   onAddItem: () => void
   onRemoveItem: (id: string) => void
-  onCreateInvoice: (status: 'DRAFT' | 'SENT') => void
+  onCreateInvoice: (status: 'DRAFT' | 'SENT',
+  invoiceMode: 'products' | 'membership') => void
 }
 
 export function InvoiceGeneratorCard({
@@ -54,6 +58,7 @@ export function InvoiceGeneratorCard({
   isCustomerSearching,
   invoiceForm,
   invoiceMessage,
+  invoiceMessageSeverity,
   isSubmitting,
   onClose,
   onCustomerSearchChange,
@@ -71,13 +76,31 @@ export function InvoiceGeneratorCard({
   const membershipPlansError = membershipPlanState?.error ?? ''
   const [invoiceModeOverride, setInvoiceModeOverride] = useState<'products' | 'membership' | null>(null)
   const [selectedMembershipId, setSelectedMembershipId] = useState('')
+  const [businessProducts, setBusinessProducts] = useState<BusinessProduct[]>([])
+  const [productsLoading, setProductsLoading] = useState(false)
+  const [productsError, setProductsError] = useState('')
+  const [isBillPreviewOpen, setIsBillPreviewOpen] = useState(false)
+    const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false)
+  const [newCustomerName, setNewCustomerName] = useState('')
+  const [newCustomerPhone, setNewCustomerPhone] = useState('')
+  const [newCustomerEmail, setNewCustomerEmail] = useState('')
+  const [isAddingCustomer, setIsAddingCustomer] = useState(false)
+  const [addCustomerMessage, setAddCustomerMessage] = useState('')
+  const invoiceMode = invoiceModeOverride ?? (membershipPlans.length > 0 ? 'membership' : 'products')
+
+  useEffect(() => {
+    if (!open) {
+      setIsBillPreviewOpen(false)
+      setInvoiceModeOverride(null)
+      setSelectedMembershipId('')
+    }
+  }, [open])
   const [loyaltyState, setLoyaltyState] = useState<{
     customerId: number
     balance: number
     settings: LoyaltyProgramSettings
   } | null>(null)
   const [loyaltyError, setLoyaltyError] = useState('')
-  const invoiceMode = invoiceModeOverride ?? (membershipPlans.length > 0 ? 'membership' : 'products')
 
   useEffect(() => {
     if (!open || !selectedCustomer) {
@@ -104,6 +127,50 @@ export function InvoiceGeneratorCard({
       void dispatch(fetchBusinessMembershipPlans(businessId))
     }
   }, [businessId, dispatch, membershipPlanState?.loaded, membershipPlanState?.loading, open])
+  useEffect(() => {
+  if (!open || !businessId) {
+    setBusinessProducts([])
+    return
+  }
+
+  let cancelled = false
+
+  const loadProducts = async () => {
+    setProductsLoading(true)
+    setProductsError('')
+
+    try {
+      const result = await getBusinessProducts(businessId)
+
+      if (cancelled) return
+
+      if (!result.ok) {
+        setBusinessProducts([])
+        setProductsError(result.message ?? 'Could not load saved products.')
+        return
+      }
+
+      setBusinessProducts(
+        result.products.filter((product) => product.status === 'ACTIVE')
+      )
+    } catch {
+      if (!cancelled) {
+        setBusinessProducts([])
+        setProductsError('Could not load saved products.')
+      }
+    } finally {
+      if (!cancelled) {
+        setProductsLoading(false)
+      }
+    }
+  }
+
+  void loadProducts()
+
+  return () => {
+    cancelled = true
+  }
+}, [open, businessId])
 
   const handleClose = () => {
     setInvoiceModeOverride(null)
@@ -111,6 +178,49 @@ export function InvoiceGeneratorCard({
     onInvoiceFieldChange('loyaltyPointsToRedeem', '0')
     onClose()
   }
+
+  
+const handleAddCustomer = async () => {
+  const name = newCustomerName.trim()
+  const phone = newCustomerPhone.trim()
+  const email = newCustomerEmail.trim()
+
+  if (!name || !phone) {
+    setAddCustomerMessage('Enter the customer name and mobile number.')
+    return
+  }
+
+  setIsAddingCustomer(true)
+  setAddCustomerMessage('')
+
+  try {
+    const result = await addCustomerToBusiness(businessId, {
+      name,
+      phone,
+      email: email || undefined,
+    })
+
+    if (!result.ok || !result.customer) {
+      setAddCustomerMessage(result.message ?? 'Could not add this customer.')
+      return
+    }
+
+    onCustomerSelection(result.customer)
+    onInvoiceFieldChange('customerId', String(result.customer.id))
+    onCustomerSearchChange('')
+
+    setNewCustomerName('')
+    setNewCustomerPhone('')
+    setNewCustomerEmail('')
+    setIsAddCustomerOpen(false)
+    setAddCustomerMessage('')
+  } catch {
+    setAddCustomerMessage('Could not add this customer. Please try again.')
+  } finally {
+    setIsAddingCustomer(false)
+  }
+}
+
 
   const getCustomerLabel = (customer: { fullName?: string; email?: string; phoneNumber?: string } | null | undefined) => {
     if (!customer) return ''
@@ -128,6 +238,42 @@ export function InvoiceGeneratorCard({
     }
   }, { subtotal: 0, tax: 0 })
   const formatMoney = (amount: number) => `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  
+  const handleContinueToPreview = () => {
+    if (!selectedCustomer) {
+      return
+    }
+
+    if (
+      invoiceForm.items.some(
+        (item) =>
+          !item.productName.trim() ||
+          Number(item.quantity) <= 0 ||
+          Number(item.unitPrice) <= 0 ||
+          item.gstRate.trim() === '' ||
+          Number(item.gstRate) < 0
+      )
+    ) {
+      return
+    }
+
+    if (!invoiceForm.dueDate) {
+      return
+    }
+
+    setIsBillPreviewOpen(true)
+  }
+
+  const business = data.businesses.find(
+    (item) => item.id === businessId
+  )
+  const businessName =
+    business?.businessName ??
+    business?.name ??
+    business?.companyName ??
+    business?.legalName ??
+    'Business'
+
   const billableMemberships = data.memberships.filter((membership) =>
     membership.businessId === businessId
       && membership.customerId != null
@@ -165,12 +311,14 @@ export function InvoiceGeneratorCard({
   }
 
   return (
+      <>
     <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm" scroll="paper">
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, color: 'text.primary', fontWeight: 900 }}>
         Generate invoice
         <IconButton aria-label="Close invoice form" onClick={handleClose} size="small"><X size={18} /></IconButton>
       </DialogTitle>
-      <DialogContent dividers>
+      {!isBillPreviewOpen ? (
+        <DialogContent dividers>
         <Stack spacing={1.5} sx={{ pt: 0.3 }}>
           {!membershipPlansLoading && membershipPlans.length > 0 && (
             <ToggleButtonGroup
@@ -217,6 +365,7 @@ export function InvoiceGeneratorCard({
                 </Button>
               </Box>
             ) : (
+                <Stack spacing={1}>
               <Autocomplete
                 options={customerSearchResults.length > 0 ? customerSearchResults : data.customers}
                 value={selectedCustomer}
@@ -255,6 +404,18 @@ export function InvoiceGeneratorCard({
                 autoHighlight
                 disablePortal
               />
+                <Button
+                fullWidth
+                startIcon={<Plus size={16} />}
+                onClick={() => {
+                  setAddCustomerMessage('')
+                  setIsAddCustomerOpen(true)
+                }}
+                sx={{ textTransform: 'none', justifyContent: 'flex-start' }}
+              >
+                Add New Customer
+              </Button>
+              </Stack>
             )}
           </FormControl>
           ) : (
@@ -311,7 +472,7 @@ export function InvoiceGeneratorCard({
           )}
 
           <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
-            <Typography variant="subtitle2" sx={{ color: 'text.primary', fontWeight: 800 }}>{invoiceMode === 'membership' ? 'Invoice items' : 'Products'}</Typography>
+            <Typography variant="subtitle2" sx={{ color: 'text.primary', fontWeight: 800 }}>{productsError && <Alert severity="warning">{productsError}</Alert>}{invoiceMode === 'membership' ? 'Invoice items' : 'Products'}</Typography>
             <Button size="small" startIcon={<Plus size={15} />} onClick={onAddItem} sx={{ textTransform: 'none' }}>{invoiceMode === 'membership' ? 'Add add-on' : 'Add product'}</Button>
           </Stack>
 
@@ -323,7 +484,72 @@ export function InvoiceGeneratorCard({
                     <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800 }}>Product {index + 1}</Typography>
                     <IconButton aria-label={`Remove product ${index + 1}`} size="small" onClick={() => onRemoveItem(item.id)} disabled={invoiceForm.items.length <= 1} sx={{ color: 'error.main' }}><Trash2 size={15} /></IconButton>
                   </Stack>
-                  <TextField size="small" label="Product name" value={item.productName} onChange={(event) => onInvoiceItemChange(item.id, 'productName', event.target.value)} fullWidth />
+                  <Autocomplete<BusinessProduct, false, false, true>
+                  freeSolo
+                  fullWidth
+                  options={businessProducts}
+                  loading={productsLoading}
+                  value={item.productName}
+                  getOptionLabel={(option) =>
+                    typeof option === 'string' ? option : option.name
+                  }
+                  isOptionEqualToValue={(option, value) =>
+                    typeof value !== 'string' && option.id === value.id
+                  }
+                  onInputChange={(_, value, reason) => {
+                    if (reason === 'input' || reason === 'clear') {
+                      onInvoiceItemChange(item.id, 'productName', value)
+                    }
+                  }}
+                  onChange={(_, value) => {
+                    if (typeof value === 'string') {
+                      onInvoiceItemChange(item.id, 'productName', value)
+                      return
+                    }
+
+                    if (!value) {
+                      onInvoiceItemChange(item.id, 'productName', '')
+                      return
+                    }
+
+                    onInvoiceItemChange(item.id, 'productName', value.name)
+                    onInvoiceItemChange(item.id, 'unitPrice', String(value.price))
+                    onInvoiceItemChange(item.id, 'gstRate', String(value.gstRate ?? 0))
+                  }}
+                  renderOption={(props, product) => (
+                    <Box component="li" {...props} key={product.id}>
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {product.name}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          ₹{Number(product.price).toLocaleString('en-IN')}
+                          {' · '}
+                          {product.unit || 'Unit not specified'}
+                          {' · GST '}
+                          {product.gstRate ?? 0}%
+                        </Typography>
+                      </Box>
+                    </Box>
+                  )}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      size="small"
+                      label="Product name"
+                      placeholder="Select a saved product or type a name"
+                      helperText={
+                        productsLoading
+                          ? 'Loading saved products…'
+                          : productsError
+                            ? 'Saved products could not be loaded. You can still enter a product manually.'
+                            : businessProducts.length === 0
+                              ? 'No saved products available. Enter a product name manually.'
+                              : 'Select a saved product to fill in its price and GST, or type manually.'
+                      }
+                    />
+                  )}
+                />
                   <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1 }}>
                     <TextField size="small" label="Quantity" type="number" value={item.quantity} onChange={(event) => onInvoiceItemChange(item.id, 'quantity', event.target.value)} slotProps={{ htmlInput: { min: 1, step: 1 } }} />
                     <TextField size="small" label="Unit price" type="number" value={item.unitPrice} onChange={(event) => onInvoiceItemChange(item.id, 'unitPrice', event.target.value)} slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }} />
@@ -341,17 +567,297 @@ export function InvoiceGeneratorCard({
             <Typography variant="subtitle2" sx={{ color: 'text.primary', fontWeight: 900 }}>Amount due</Typography><Typography variant="subtitle2" sx={{ color: 'text.primary', textAlign: 'right', fontWeight: 900 }}>{formatMoney(totals.subtotal + totals.tax - loyaltyDiscount)}</Typography>
           </Box>
 
-          <TextField size="small" label="Due date" type="date" value={invoiceForm.dueDate} onChange={(event) => onInvoiceFieldChange('dueDate', event.target.value)} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
-          {invoiceMessage && <Alert severity={invoiceMessage.toLowerCase().includes('failed') || invoiceMessage.toLowerCase().includes('select') || invoiceMessage.toLowerCase().includes('enter') ? 'error' : 'success'}>{invoiceMessage}</Alert>}
+          <TextField size="small" label={invoiceMode === 'membership' ? 'Due date' : 'Invoice date'} type="date" value={invoiceForm.dueDate} onChange={(event) => onInvoiceFieldChange('dueDate', event.target.value)} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
+          {invoiceMessage && <Alert severity={invoiceMessageSeverity}>{invoiceMessage}</Alert>}
         </Stack>
+          </DialogContent>
+    ) : (
+      <DialogContent dividers>
+         <Paper
+          variant="outlined"
+          sx={{ p: { xs: 2, sm: 3 }, borderRadius: 2, boxShadow: 'none' }}
+        >
+         
+        <Stack spacing={0.5} sx={{ mb: 2 }}>
+          <Typography variant="h5" sx={{ fontWeight: 900 }}>
+            {businessName}
+          </Typography>
+
+          {business?.businessType && (
+            <Typography variant="body2" color="text.secondary">
+              {business.businessType}
+            </Typography>
+          )}
+
+          {business?.address && (
+            <Typography variant="body2" color="text.secondary">
+              {business.address}
+            </Typography>
+          )}
+
+          {(business?.city || business?.region || business?.country) && (
+            <Typography variant="body2" color="text.secondary">
+              {[business.city, business.region, business.country]
+                .filter(Boolean)
+                .join(', ')}
+            </Typography>
+          )}
+
+          {business?.phone && (
+            <Typography variant="body2">
+              Phone: {business.phone}
+            </Typography>
+          )}
+
+          {business?.email && (
+            <Typography variant="body2">
+              Email: {business.email}
+            </Typography>
+          )}
+
+          {business?.gstin && (
+            <Typography variant="body2">
+              GSTIN: {business.gstin}
+            </Typography>
+          )}
+
+          {business?.pan && (
+            <Typography variant="body2">
+              PAN: {business.pan}
+            </Typography>
+          )}
+        </Stack>
+
+        <Divider sx={{ my: 2 }} />
+
+        <Typography variant="h5" sx={{ fontWeight: 900, mb: 0.5 }}>
+          INVOICE
+        </Typography>
+
+
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Bill summary
+          </Typography>
+
+          <Box sx={{ borderTop: '1px solid', borderColor: 'divider', my: 2 }} />
+
+          <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 0.5 }}>
+            Bill To
+          </Typography>
+
+          <Typography variant="body2">
+            {selectedCustomer?.fullName ?? 'No customer selected'}
+          </Typography>
+
+          {selectedCustomer?.phoneNumber && (
+            <Typography variant="body2" color="text.secondary">
+              {selectedCustomer.phoneNumber}
+            </Typography>
+          )}
+
+          {selectedCustomer?.email && (
+            <Typography variant="body2" color="text.secondary">
+              {selectedCustomer.email}
+            </Typography>
+          )}
+
+          <Box sx={{ mt: 2, mb: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              {invoiceMode === 'membership' ? 'Due date' : 'Invoice date'}
+            </Typography>
+            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+              {invoiceForm.dueDate || 'Not selected'}
+            </Typography>
+          </Box>
+
+          <Box sx={{ borderTop: '1px solid', borderColor: 'divider', my: 2 }} />
+
+          <Stack spacing={1.5}>
+            {invoiceForm.items.map((item, index) => {
+              const quantity = Number(item.quantity) || 0
+              const unitPrice = Number(item.unitPrice) || 0
+              const gstRate = Number(item.gstRate) || 0
+              const amount = quantity * unitPrice
+              const tax = amount * gstRate / 100
+
+              return (
+                <Box
+                  key={item.id}
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1fr) auto',
+                    gap: 1,
+                    pb: 1.5,
+                    borderBottom: '1px solid',
+                    borderColor: 'divider',
+                  }}
+                >
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                      {item.productName.trim() || `Item ${index + 1}`}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {quantity} × {formatMoney(unitPrice)} · GST {gstRate}%
+                    </Typography>
+                  </Box>
+
+                  <Typography
+                    variant="body2"
+                    sx={{ fontWeight: 700, textAlign: 'right' }}
+                  >
+                    {formatMoney(amount + tax)}
+                  </Typography>
+                </Box>
+              )
+            })}
+          </Stack>
+
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto',
+              gap: 1,
+              mt: 2,
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              Subtotal
+            </Typography>
+            <Typography variant="body2">
+              {formatMoney(totals.subtotal)}
+            </Typography>
+
+            <Typography variant="body2" color="text.secondary">
+              GST
+            </Typography>
+            <Typography variant="body2">
+              {formatMoney(totals.tax)}
+            </Typography>
+
+            <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
+              Total
+            </Typography>
+            <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
+              {formatMoney(totals.subtotal + totals.tax)}
+            </Typography>
+          </Box>
+        </Paper>
       </DialogContent>
-      <DialogActions sx={{ px: 2, py: 1.5 }}>
-        <Button onClick={handleClose} color="inherit">Cancel</Button>
-        <Button onClick={() => onCreateInvoice('DRAFT')} disabled={isSubmitting} sx={{ fontWeight: 700 }}>Save draft</Button>
-        <Button variant="contained" onClick={() => onCreateInvoice('SENT')} disabled={isSubmitting} endIcon={<ArrowRight size={15} />} sx={{ fontWeight: 800 }}>
-          {isSubmitting ? 'Saving…' : 'Save & send'}
-        </Button>
-      </DialogActions>
+    )}
+      
+<DialogActions sx={{ px: 2, py: 1.5 }}>
+  {!isBillPreviewOpen ? (
+    <>
+      <Button onClick={handleClose} color="inherit">
+        Cancel
+      </Button>
+      <Button
+        onClick={() => onCreateInvoice('DRAFT', invoiceMode)}
+        disabled={isSubmitting}
+      >
+        Save draft
+      </Button>
+      <Button
+        variant="contained"
+        onClick={handleContinueToPreview}
+        disabled={isSubmitting}
+      >
+        Continue
+      </Button>
+    </>
+  ) : (
+    <>
+      <Button onClick={() => setIsBillPreviewOpen(false)} color="inherit">
+        Back to edit
+      </Button>
+      <Button
+        onClick={() => onCreateInvoice('DRAFT', invoiceMode)}
+        disabled={isSubmitting}
+      >
+        Save draft
+      </Button>
+      <Button
+        variant="contained"
+        onClick={() => onCreateInvoice('SENT', invoiceMode)}
+        disabled={isSubmitting}
+      >
+        {isSubmitting ? 'Saving…' : 'Save & send'}
+      </Button>
+    </>
+  )}
+</DialogActions>
     </Dialog>
+
+    <Dialog
+      open={isAddCustomerOpen}
+      onClose={() => {
+        if (!isAddingCustomer) setIsAddCustomerOpen(false)
+      }}
+      fullWidth
+      maxWidth="xs"
+    >
+      <Box
+        component="form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void handleAddCustomer()
+        }}
+      >
+        <DialogTitle>Add New Customer</DialogTitle>
+
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            {addCustomerMessage && (
+              <Alert severity="error">{addCustomerMessage}</Alert>
+            )}
+
+            <TextField
+              autoFocus
+              required
+              fullWidth
+              label="Customer name"
+              value={newCustomerName}
+              onChange={(event) => setNewCustomerName(event.target.value)}
+            />
+
+            <TextField
+              required
+              fullWidth
+              label="Mobile number"
+              type="tel"
+              value={newCustomerPhone}
+              onChange={(event) => setNewCustomerPhone(event.target.value)}
+            />
+
+            <TextField
+              fullWidth
+              label="Email address (optional)"
+              type="email"
+              value={newCustomerEmail}
+              onChange={(event) => setNewCustomerEmail(event.target.value)}
+            />
+          </Stack>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 2, py: 1.5 }}>
+          <Button
+            onClick={() => setIsAddCustomerOpen(false)}
+            disabled={isAddingCustomer}
+          >
+            Cancel
+          </Button>
+
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={isAddingCustomer}
+          >
+            {isAddingCustomer ? 'Adding...' : 'Add customer'}
+          </Button>
+        </DialogActions>
+      </Box>
+    </Dialog>
+    
+  </>
   )
 }

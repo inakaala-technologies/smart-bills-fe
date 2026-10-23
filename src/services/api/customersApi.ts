@@ -32,17 +32,31 @@ export async function searchCustomers(query: string): Promise<CustomerSummary[]>
   }
 }
 
-export async function addCustomerToBusiness(businessId: number, customer: { name: string; phone: string; email?: string }): Promise<{ ok: boolean; message?: string }> {
-  try {
+export async function addCustomerToBusiness(businessId: number, customer: { name: string; phone: string; email?: string }): Promise<{ ok: boolean; customer?: CustomerSummary; message?: string }> { 
+   try {
     const profileResponse = await apiClient.post<Record<string, unknown>>('/api/v1/customers', customer)
-    if (!profileResponse.data.id) return { ok: false, message: 'Could not create the customer profile.' }
+    const customerId = Number(profileResponse.data.id)
 
+    if (!Number.isFinite(customerId) || customerId <= 0) {
+      return { ok: false, message: 'Could not create the customer profile.' }
+    }
+    
     await apiClient.post('/api/v1/business-customers', {
       businessId,
-      customerProfileId: Number(profileResponse.data.id),
+      customerProfileId: customerId,
       status: 'ACTIVE',
     })
-    return { ok: true }
+    return {
+      ok: true,
+      customer: {
+        id: customerId,
+        fullName: customer.name.trim(),
+        firstName: customer.name.trim(),
+        email: customer.email,
+        phoneNumber: customer.phone,
+        businessId,
+        },
+      }
   } catch (error) {
     if (error instanceof ApiClientError && error.status && error.status >= 400) {
       return { ok: false, message: error.message || 'Could not add this customer.' }

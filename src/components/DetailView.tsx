@@ -53,6 +53,8 @@ export function DetailView() {
   const [invoiceCustomer, setInvoiceCustomer] = useState<DashboardData['customers'][number] | null>(null)
   const [invoiceSearchText, setInvoiceSearchText] = useState('')
   const [invoiceMessage, setInvoiceMessage] = useState('')
+  const [invoiceMessageSeverity] =
+  useState<'success' | 'error'>('success')
   const [isInvoiceSubmitting, setIsInvoiceSubmitting] = useState(false)
   const [invoiceForm, setInvoiceForm] = useState<BusinessInvoiceForm>(() => ({ customerId: '', dueDate: getDefaultDueDate(), loyaltyPointsToRedeem: '0', items: [createInvoiceItem()] }))
   const memberships = dashboard.data.memberships
@@ -407,6 +409,7 @@ export function DetailView() {
             invoiceForm={invoiceForm}
             invoiceMessage={invoiceMessage}
             isSubmitting={isInvoiceSubmitting}
+            invoiceMessageSeverity={invoiceMessageSeverity}
             onClose={() => setInvoiceDialogOpen(false)}
             onCustomerSearchChange={setInvoiceSearchText}
             onCustomerSelection={(customer) => {
