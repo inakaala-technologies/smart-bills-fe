@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Alert,
   Box,
@@ -26,8 +26,9 @@ import {
   UserRound,
   type LucideIcon,
 } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
+import { AppointmentDetailDialog } from '../../components/AppointmentDetailDialog'
 import { DashboardListRow } from '../../components/DashboardListRow'
 import { BusinessTypeFilter } from '../../components/BusinessTypeFilter'
 import { BusinessTypeIcon } from '../../components/BusinessTypeIcon'
@@ -39,13 +40,12 @@ import { CustomerDashboardMenu } from './components/CustomerDashboardMenu'
 import { CustomerInvoicesList } from './components/CustomerInvoicesList'
 import { CustomerProfilePanel } from './components/CustomerProfilePanel'
 import { CustomerAppointmentsPanel } from './components/CustomerAppointmentsPanel'
-import { CustomerLoyaltyPanel } from './components/CustomerLoyaltyPanel'
 import { fetchNearbyOffers, type DashboardData } from '../../services/api'
 import { addProfile, logoutUser, switchAccount, type Role } from '../../services/auth'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import type { RootState } from '../../store/store'
 import { setAuthUser } from '../../store/authSlice'
-import { setActiveTab, setSelectedBusinessId } from '../../store/customerDashboardSlice'
+import { setActiveTab, setSelectedBusinessId, fetchCustomerDashboard } from '../../store/customerDashboardSlice'
 import type { DashboardTab } from '../types'
 import { getBusinessTypeLabel, normalizeBusinessType } from '../../constants/businessTypes'
 import { FamilyManagementDialog } from './components/FamilyManagementDialog'
@@ -80,7 +80,8 @@ export function CustomerDashboard() {
   const [businessTypeFilter, setBusinessTypeFilter] = useState('ALL')
   const [nearbyOffersCount, setNearbyOffersCount] = useState(0)
   const [activityNow] = useState(Date.now)
-  const [selectedAppointment, setSelectedAppointment] = useState<DashboardData['appointments'][number] | null>(null)
+  const [explicitAppointment, setExplicitAppointment] = useState<AppointmentSummary | null>(null)
+  const setSelectedAppointment = setExplicitAppointment
   const [selectedInvoice, setSelectedInvoice] = useState<DashboardData['invoices'][number] | null>(null)
   const isMenuOpen = Boolean(menuAnchorEl)
   const filteredBusinesses = data.businesses.filter((business) =>
@@ -99,19 +100,9 @@ export function CustomerDashboard() {
     return () => { isCurrent = false }
   }, [customerLatitude, customerLongitude])
 
-  const handleChangeTab = useCallback((tab: DashboardTab, replace = false) => {
+  const handleChangeTab = (tab: DashboardTab) => {
     dispatch(setActiveTab(tab))
-    navigate(`/dashboard/${tab}`, { replace })
-  }, [dispatch, navigate])
-
-  useEffect(() => {
-    const matchingTab = customerDashboardTabs.find((tab) => tab === routeTab)
-    if (matchingTab) {
-      dispatch(setActiveTab(matchingTab))
-    } else {
-      handleChangeTab('overview', true)
-    }
-  }, [dispatch, handleChangeTab, routeTab])
+  }
 
   const upcomingAppointmentActivities = data.appointments
     .filter((appointment) => {
@@ -219,6 +210,7 @@ export function CustomerDashboard() {
               anchorEl={menuAnchorEl}
               isOpen={isMenuOpen}
               onClose={() => setMenuAnchorEl(null)}
+              onChangeTab={handleChangeTab}
               currentRole={authUser?.role ?? 'CUSTOMER'}
               availableAccounts={availableAccounts}
               missingProfileRoles={missingProfileRoles}
@@ -267,12 +259,6 @@ export function CustomerDashboard() {
                   window.location.reload()
                 }
               }}
-            />
-
-            <FamilyManagementDialog
-              open={familyDialogOpen}
-              onClose={() => setFamilyDialogOpen(false)}
-              currentUserId={Number(authUser?.id)}
             />
 
             {activeTab === 'overview' && (
@@ -440,64 +426,6 @@ export function CustomerDashboard() {
                     <EmptyState title="No recent activity" description="Upcoming appointments and invoices will appear here." />
                   )}
                 </Box>
-                <Dialog open={Boolean(selectedAppointment)} onClose={() => setSelectedAppointment(null)} fullWidth maxWidth="xs">
-                  <DialogTitle sx={{ color: 'text.primary', fontWeight: 800 }}>Appointment details</DialogTitle>
-                  {selectedAppointment && (
-                    <DialogContent dividers>
-                      <Stack spacing={1.5}>
-                        <Box>
-                          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Business</Typography>
-                          <Typography sx={{ color: 'text.primary', fontWeight: 700 }}>
-                            {data.businesses.find((business) => business.id === selectedAppointment.businessId)?.businessName
-                              ?? data.businesses.find((business) => business.id === selectedAppointment.businessId)?.name
-                              ?? 'Business'}
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Service</Typography>
-                          <Typography sx={{ color: 'text.primary', fontWeight: 700 }}>{selectedAppointment.serviceName ?? 'Appointment'}</Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
-                          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Status</Typography>
-                          <Chip label={selectedAppointment.status ?? 'BOOKED'} size="small" color={selectedAppointment.status?.toUpperCase() === 'CANCELLED' ? 'error' : 'success'} sx={{ fontWeight: 800 }} />
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Scheduled</Typography>
-                          <Typography sx={{ color: 'text.primary' }}>
-                            {selectedAppointment.scheduledAt
-                              ? new Date(selectedAppointment.scheduledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
-                              : 'Schedule pending'}
-                          </Typography>
-                        </Box>
-                        {(selectedAppointment.durationMinutes || selectedAppointment.servicePrice !== undefined) && (
-                          <Box>
-                            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Duration and price</Typography>
-                            <Typography sx={{ color: 'text.primary' }}>
-                              {[selectedAppointment.durationMinutes ? `${selectedAppointment.durationMinutes} min` : '', selectedAppointment.servicePrice !== undefined ? formatCurrency(selectedAppointment.servicePrice) : '']
-                                .filter(Boolean)
-                                .join(' · ')}
-                            </Typography>
-                          </Box>
-                        )}
-                        {selectedAppointment.notes && (
-                          <Box>
-                            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Note</Typography>
-                            <Typography sx={{ color: 'text.primary', overflowWrap: 'anywhere' }}>{selectedAppointment.notes}</Typography>
-                          </Box>
-                        )}
-                        {selectedAppointment.businessNote && (
-                          <Box>
-                            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Message from business</Typography>
-                            <Typography sx={{ color: 'primary.main', overflowWrap: 'anywhere' }}>{selectedAppointment.businessNote}</Typography>
-                          </Box>
-                        )}
-                      </Stack>
-                    </DialogContent>
-                  )}
-                  <DialogActions>
-                    <Button onClick={() => setSelectedAppointment(null)} sx={{ color: 'primary.main', fontWeight: 700, textTransform: 'none' }}>Close</Button>
-                  </DialogActions>
-                </Dialog>
                 <Dialog open={Boolean(selectedInvoice)} onClose={() => setSelectedInvoice(null)} fullWidth maxWidth="xs">
                   <DialogTitle sx={{ color: 'text.primary', fontWeight: 800 }}>Invoice details</DialogTitle>
                   {selectedInvoice && (
@@ -605,13 +533,7 @@ export function CustomerDashboard() {
             )}
 
             {activeTab === 'invoices' && <CustomerInvoicesList invoices={data.invoices} businesses={data.businesses} />}
-            {activeTab === 'appointments' && <CustomerAppointmentsPanel appointments={data.appointments} businesses={data.businesses} customerId={selectedCustomerId} />}
-            {activeTab === 'rewards' && (
-              <CustomerLoyaltyPanel
-                customerId={selectedCustomerId}
-                businesses={data.businesses}
-              />
-            )}
+            {activeTab === 'appointments' && <CustomerAppointmentsPanel appointments={data.appointments} businesses={data.businesses} />}
             {activeTab === 'memberships' && (
               <Stack spacing={1.2}>
                 <Box>
@@ -652,7 +574,6 @@ export function CustomerDashboard() {
                 onOpenManageDialog={() => setManagerOpen(true)}
                 onOpenBusinesses={() => dispatch(setActiveTab('businesses'))}
                 onOpenDocuments={() => dispatch(setActiveTab('invoices'))}
-                onOpenFamily={() => setFamilyDialogOpen(true)}
                 onOpenBusiness={(businessId) => {
                   dispatch(setSelectedBusinessId(businessId))
                   navigate(`/business/${businessId}`)

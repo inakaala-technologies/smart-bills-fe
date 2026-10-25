@@ -167,6 +167,11 @@ function BusinessDetailRoute({
   )
 }
 
+function AppointmentRouteRedirect() {
+  const { id } = useParams()
+  return <Navigate to={id ? `/dashboard?tab=appointments&appointmentId=${id}` : '/dashboard?tab=appointments'} replace />
+}
+
 export default function AppRoutes() {
   const dispatch = useAppDispatch()
   const location = useLocation()
@@ -270,7 +275,29 @@ export default function AppRoutes() {
 
         <Route
           path="/customer/:id"
-          element={<AuthenticatedRoute><DetailView /></AuthenticatedRoute>}
+          element={
+            <AuthenticatedRoute>
+              <DetailView />
+            </AuthenticatedRoute>
+          }
+        />
+
+        <Route
+          path="/appointments"
+          element={
+            <AuthenticatedRoute>
+              <Navigate to="/dashboard?tab=appointments" replace />
+            </AuthenticatedRoute>
+          }
+        />
+
+        <Route
+          path="/appointments/:id"
+          element={
+            <AuthenticatedRoute>
+              <AppointmentRouteRedirect />
+            </AuthenticatedRoute>
+          }
         />
 
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -124,6 +124,12 @@ export type AppointmentSummary = {
   status?: string
   notes?: string
   businessNote?: string
+  createdAt?: string
+  customerName?: string
+  customerPhone?: string
+  customerEmail?: string
+  businessName?: string
+  staffName?: string
 }
 
 export type AppointmentServiceSummary = {
@@ -221,6 +227,7 @@ export type AppNotificationSummary = {
   title: string
   message: string
   targetUrl?: string
+  appointmentId?: number
   createdAt: string
   readAt: string | null
 }

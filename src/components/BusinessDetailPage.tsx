@@ -73,7 +73,13 @@ export function BusinessDetailPage({
   const legalName = business.legalName ?? businessName
   const initials = getInitials(businessName)
 
-  const handleBack = () => navigate('/dashboard')
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1)
+    } else {
+      navigate('/dashboard')
+    }
+  }
   const handleNavigateTab = (tab: DashboardTab) => {
     if (role === 'ADMIN') {
       dispatch(setAdminTab(tab))

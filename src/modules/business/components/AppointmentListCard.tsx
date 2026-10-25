@@ -7,6 +7,8 @@ export type AppointmentListCardProps = {
   appointments: DashboardData['appointments']
   customers: DashboardData['customers']
   businessId: number
+  selectedAppointmentId?: number | null
+  onSelectAppointment?: (appointment: DashboardData['appointments'][number]) => void
   onUpdated: () => void
 }
 
@@ -17,7 +19,14 @@ function statusColor(status: string): 'success' | 'warning' | 'error' | 'default
   return 'default'
 }
 
-export function AppointmentListCard({ appointments, customers, businessId, onUpdated }: AppointmentListCardProps) {
+export function AppointmentListCard({
+  appointments,
+  customers,
+  businessId,
+  selectedAppointmentId,
+  onSelectAppointment,
+  onUpdated,
+}: AppointmentListCardProps) {
   const [message, setMessage] = useState('')
   const [view, setView] = useState<'UPCOMING' | 'ALL' | 'CANCELLED'>('UPCOMING')
   const [selectedDate, setSelectedDate] = useState('')
@@ -35,6 +44,7 @@ export function AppointmentListCard({ appointments, customers, businessId, onUpd
   }, [businessId])
 
   const visibleAppointments = appointments.filter((appointment) => {
+    if (selectedAppointmentId && appointment.id === selectedAppointmentId) return true
     const status = (appointment.status ?? 'BOOKED').toUpperCase()
     if (selectedDate && !appointment.scheduledAt?.startsWith(selectedDate)) return false
     if (view === 'CANCELLED') return status === 'CANCELLED'
@@ -111,20 +121,50 @@ export function AppointmentListCard({ appointments, customers, businessId, onUpd
                   ? [{ label: 'Complete', status: 'COMPLETED' }, { label: 'No-show', status: 'NO_SHOW' }, { label: 'Cancel', status: 'CANCELLED' }]
                   : []
 
+              const isSelected = selectedAppointmentId === appointment.id
               return (
-              <Box key={appointment.id} sx={(theme) => ({ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'minmax(0, 1fr) auto' }, alignItems: 'start', gap: 1.2, py: 1.2, borderBottom: `1px solid ${alpha(theme.palette.text.primary, 0.06)}` })}>
+              <Box
+                key={appointment.id}
+                onClick={() => onSelectAppointment?.(appointment)}
+                sx={(theme) => ({
+                  display: 'grid',
+                  gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'minmax(0, 1fr) auto' },
+                  alignItems: 'start',
+                  gap: 1.2,
+                  p: 1.2,
+                  borderRadius: 1.5,
+                  border: isSelected ? '1px solid var(--mui-palette-primary-main)' : `1px solid ${alpha(theme.palette.text.primary, 0.06)}`,
+                  bgcolor: isSelected ? 'action.selected' : 'transparent',
+                  cursor: onSelectAppointment ? 'pointer' : 'default',
+                  transition: 'all 0.2s ease',
+                  boxShadow: isSelected ? '0 0 0 1px var(--mui-palette-primary-main)' : 'none',
+                  '&:hover': onSelectAppointment ? {
+                    bgcolor: 'action.hover',
+                    borderColor: 'primary.main',
+                  } : undefined,
+                })}
+              >
                 <Box sx={{ minWidth: 0 }}>
                   <Typography sx={{ fontWeight: 750, overflowWrap: 'anywhere' }}>{appointment.serviceName ?? `Appointment ${appointment.id}`}</Typography>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                     {customer?.fullName ?? customer?.firstName ?? `Customer ${appointment.customerId ?? ''}`}
                   </Typography>
                   {(status === 'BOOKED' || status === 'CONFIRMED') && (
-                    <TextField select size="small" label="Staff or resource" value={appointment.staffUserId ? String(appointment.staffUserId) : ''} onChange={(event) => void assignStaff(appointment.id, event.target.value)} disabled={assigningId === appointment.id} sx={{ mt: 0.8, width: { xs: '100%', sm: 240 }, maxWidth: '100%' }}>
+                    <TextField
+                      select
+                      size="small"
+                      label="Staff or resource"
+                      value={appointment.staffUserId ? String(appointment.staffUserId) : ''}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(event) => void assignStaff(appointment.id, event.target.value)}
+                      disabled={assigningId === appointment.id}
+                      sx={{ mt: 0.8, width: { xs: '100%', sm: 240 }, maxWidth: '100%' }}
+                    >
                       <MenuItem value="">Unassigned</MenuItem>
                       {staff.map((option) => <MenuItem key={option.userId} value={String(option.userId)}>{option.label}</MenuItem>)}
                     </TextField>
                   )}
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                     {appointment.scheduledAt ? new Date(appointment.scheduledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Schedule pending'}
                     {appointment.durationMinutes ? ` · ${appointment.durationMinutes} min` : ''}
                     {appointment.servicePrice !== undefined ? ` · ₹${(appointment.servicePrice - (appointment.loyaltyDiscountAmount ?? 0)).toLocaleString('en-IN')}` : ''}
@@ -138,23 +178,37 @@ export function AppointmentListCard({ appointments, customers, businessId, onUpd
                 </Box>
                 <Stack direction={{ xs: 'row', sm: 'column' }} spacing={0.8} sx={{ alignItems: { xs: 'center', sm: 'flex-end' }, justifyContent: { xs: 'space-between', sm: 'flex-start' }, flexWrap: 'wrap', minWidth: 0 }}>
                   <Chip label={status.replace('_', ' ')} size="small" color={statusColor(status)} sx={{ fontWeight: 700 }} />
-                  {actions.length > 0 && (
-                    <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', justifyContent: { xs: 'flex-end', sm: 'flex-start' } }}>
-                      {actions.map((action) => (
-                        <Button
-                          key={action.status}
-                          size="small"
-                          variant={action.status === 'CONFIRMED' || action.status === 'COMPLETED' ? 'contained' : 'text'}
-                          color={action.status === 'CANCELLED' || action.status === 'NO_SHOW' ? 'error' : 'primary'}
-                          onClick={() => handleAction(appointment.id, action.status, action.label)}
-                          disabled={updatingId === appointment.id}
-                          sx={{ minWidth: 0, px: 0.8, textTransform: 'none', fontSize: '0.72rem' }}
-                        >
-                          {action.label}
-                        </Button>
-                      ))}
-                    </Stack>
-                  )}
+                  <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', justifyContent: { xs: 'flex-end', sm: 'flex-start' } }}>
+                    {onSelectAppointment && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onSelectAppointment(appointment)
+                        }}
+                        sx={{ minWidth: 0, px: 0.8, textTransform: 'none', fontSize: '0.72rem', fontWeight: 700 }}
+                      >
+                        Details
+                      </Button>
+                    )}
+                    {actions.map((action) => (
+                      <Button
+                        key={action.status}
+                        size="small"
+                        variant={action.status === 'CONFIRMED' || action.status === 'COMPLETED' ? 'contained' : 'text'}
+                        color={action.status === 'CANCELLED' || action.status === 'NO_SHOW' ? 'error' : 'primary'}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleAction(appointment.id, action.status, action.label)
+                        }}
+                        disabled={updatingId === appointment.id}
+                        sx={{ minWidth: 0, px: 0.8, textTransform: 'none', fontSize: '0.72rem' }}
+                      >
+                        {action.label}
+                      </Button>
+                    ))}
+                  </Stack>
                 </Stack>
               </Box>
               )
