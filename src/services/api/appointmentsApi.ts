@@ -67,3 +67,13 @@ export async function updateAppointmentStaff(id: number, staffUserId?: number): 
     return { ok: false, message: getErrorMessage(error, 'Could not update the assigned staff member.') }
   }
 }
+
+export async function fetchAppointmentById(id: number): Promise<AppointmentSummary | null> {
+  try {
+    const { data } = await apiClient.get<Record<string, unknown>>(`/api/v1/appointments/${id}`)
+    return normalizeAppointment(data)
+  } catch {
+    return null
+  }
+}
+

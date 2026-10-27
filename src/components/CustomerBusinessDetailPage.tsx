@@ -165,7 +165,17 @@ export function CustomerBusinessDetailPage({
           }}
         >
           <Box component="header" sx={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 1, px: 1.4, pt: 1.05, pb: 0.7 }}>
-            <IconButton aria-label="Back to dashboard" onClick={() => navigate('/dashboard')} sx={{ width: 29, height: 34, color: '#183541' }}>
+            <IconButton
+              aria-label="Back to dashboard"
+              onClick={() => {
+                if (window.history.length > 1) {
+                  navigate(-1)
+                } else {
+                  navigate('/dashboard')
+                }
+              }}
+              sx={{ width: 29, height: 34, color: '#183541' }}
+            >
               <ArrowLeft size={19} />
             </IconButton>
             <Typography sx={{ flex: 1, color: '#243e4a', fontSize: 13, fontWeight: 800 }}>Business Details</Typography>

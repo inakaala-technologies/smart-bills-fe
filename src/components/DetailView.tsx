@@ -206,7 +206,13 @@ export function DetailView() {
     }]),
   ]
 
-  const handleBack = () => navigate(`/dashboard/${dashboard.activeTab}`)
+const handleBack = () => {
+  if (window.history.length > 1) {
+    navigate(-1)
+  } else {
+    navigate('/dashboard')
+  }
+}
   const handleNavigateTab = (tab: DashboardTab) => {
     if (role === 'ADMIN') {
       dispatch(setAdminTab(tab))

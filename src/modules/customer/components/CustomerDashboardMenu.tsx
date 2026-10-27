@@ -14,6 +14,7 @@ type CustomerDashboardMenuProps = {
   anchorEl: null | HTMLElement
   isOpen: boolean
   onClose: () => void
+  onChangeTab?: (tab: DashboardTab) => void
   currentRole?: Role
   availableAccounts?: Array<{ role: Role }>
   missingProfileRoles?: Role[]
@@ -28,6 +29,7 @@ export function CustomerDashboardMenu({
   anchorEl,
   isOpen,
   onClose,
+  onChangeTab,
   currentRole = 'CUSTOMER',
   availableAccounts = [],
   missingProfileRoles = [],
@@ -65,7 +67,7 @@ export function CustomerDashboardMenu({
               key={tab.key}
               selected={activeTab === tab.key}
               onClick={() => {
-                onChangeTab(tab.key)
+                dispatch(setActiveTab(tab.key))
                 onClose()
               }}
               sx={{ gap: 1, py: 1.1, fontWeight: 600 }}

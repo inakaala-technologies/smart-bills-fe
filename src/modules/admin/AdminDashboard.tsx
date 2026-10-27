@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { alpha } from '@mui/material/styles'
 import {
   Box,
@@ -19,11 +19,12 @@ import {
   UserRound,
   type LucideIcon,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
+import { AppointmentDetailDialog } from '../../components/AppointmentDetailDialog'
 import { EmptyState } from '../../components/EmptyState'
 import { RecentActivityItem } from '../../components/RecentActivityItem'
-import { createInvoice } from '../../services/api'
+import { createInvoice, fetchAppointmentById, type AppointmentSummary } from '../../services/api'
 import { getCurrentUser, logoutUser } from '../../services/auth'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { fetchAdminDashboard, setActiveTab, setSelectedBusinessId } from '../../store/adminDashboardSlice'
@@ -44,9 +45,10 @@ type DashboardMenuProps = {
   anchorEl: null | HTMLElement
   isOpen: boolean
   onClose: () => void
+  onChangeTab?: (tab: DashboardTab) => void
 }
 
-function DashboardMenu({ activeTab, anchorEl, isOpen, onClose }: DashboardMenuProps) {
+function DashboardMenu({ activeTab, anchorEl, isOpen, onClose, onChangeTab }: DashboardMenuProps) {
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
 
@@ -75,7 +77,11 @@ function DashboardMenu({ activeTab, anchorEl, isOpen, onClose }: DashboardMenuPr
           key={tab.key}
           selected={activeTab === tab.key}
           onClick={() => {
-            dispatch(setActiveTab(tab.key))
+            if (onChangeTab) {
+              onChangeTab(tab.key)
+            } else {
+              dispatch(setActiveTab(tab.key))
+            }
             onClose()
           }}
           sx={{ gap: 1, py: 1.1, fontWeight: 600 }}
@@ -121,16 +127,83 @@ export function AdminDashboard() {
   const [invoiceMessage, setInvoiceMessage] = useState('')
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
   const isMenuOpen = Boolean(menuAnchorEl)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [explicitAppointment, setExplicitAppointment] = useState<AppointmentSummary | null>(null)
+  const setSelectedAppointment = setExplicitAppointment
+  const appointmentIdFromUrl = searchParams.get('appointmentId') ? Number(searchParams.get('appointmentId')) : null
+
+  const selectedAppointment = useMemo(() => {
+    if (appointmentIdFromUrl) {
+      const fromList = data.appointments.find((item) => item.id === appointmentIdFromUrl)
+      if (fromList) return fromList
+      if (explicitAppointment?.id === appointmentIdFromUrl) return explicitAppointment
+    }
+    return explicitAppointment
+  }, [appointmentIdFromUrl, data.appointments, explicitAppointment])
+
+  const handleChangeTab = useCallback((tab: DashboardTab) => {
+    dispatch(setActiveTab(tab))
+    if (searchParams.has('appointmentId') || searchParams.has('tab')) {
+      const nextParams = new URLSearchParams(searchParams)
+      nextParams.delete('appointmentId')
+      nextParams.delete('tab')
+      setSearchParams(nextParams, { replace: true })
+    }
+  }, [dispatch, searchParams, setSearchParams])
+
+  const clearAppointmentUrlParam = () => {
+    setExplicitAppointment(null)
+    if (searchParams.has('appointmentId') || searchParams.has('tab')) {
+      const nextParams = new URLSearchParams(searchParams)
+      nextParams.delete('appointmentId')
+      nextParams.delete('tab')
+      setSearchParams(nextParams, { replace: true })
+    }
+  }
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab')
+    if (tabParam === 'appointments') {
+      dispatch(setActiveTab('appointments'))
+    }
+
+    if (appointmentIdFromUrl && !data.appointments.some((item) => item.id === appointmentIdFromUrl) && explicitAppointment?.id !== appointmentIdFromUrl) {
+      let isCurrent = true
+      fetchAppointmentById(appointmentIdFromUrl)
+        .then((fetched) => {
+          if (isCurrent && fetched) setExplicitAppointment(fetched)
+        })
+        .catch(() => undefined)
+      return () => {
+        isCurrent = false
+      }
+    }
+  }, [searchParams, appointmentIdFromUrl, data.appointments, explicitAppointment, dispatch])
+
+  useEffect(() => {
+    const handleOpen = (e: Event) => {
+      const detail = (e as CustomEvent<{ appointmentId?: number }>).detail
+      if (detail?.appointmentId) {
+        const id = detail.appointmentId
+        const existing = data.appointments.find((item) => item.id === id)
+        if (existing) {
+          setExplicitAppointment(existing)
+        } else {
+          void fetchAppointmentById(id).then((fetched) => {
+            if (fetched) setExplicitAppointment(fetched)
+          }).catch(() => undefined)
+        }
+      }
+    }
+    window.addEventListener('bhive:open-appointment', handleOpen)
+    return () => window.removeEventListener('bhive:open-appointment', handleOpen)
+  }, [data.appointments])
 
   const recentActivity = data.invoices.slice(0, 3).map((invoice) => ({
     label: invoice.invoiceNumber ?? `INV-${invoice.id}`,
     detail: `${invoice.status ?? 'SENT'} • ${formatCurrency(invoice.totalAmount)}`,
     value: formatCurrency(invoice.totalAmount),
   }))
-
-  const handleChangeTab = (tab: DashboardTab) => {
-    dispatch(setActiveTab(tab))
-  }
 
   const handleSelectBusiness = (businessId: number) => {
     dispatch(setSelectedBusinessId(businessId))
@@ -197,6 +270,7 @@ export function AdminDashboard() {
     title: appointment.serviceName ?? `Appointment ${appointment.id}`,
     subtitle: appointment.scheduledAt ? new Date(appointment.scheduledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Schedule pending',
     status: appointment.status ?? 'BOOKED',
+    action: { label: 'View', onClick: () => setSelectedAppointment(appointment) },
   }))
 
   return (
@@ -241,6 +315,7 @@ export function AdminDashboard() {
             anchorEl={menuAnchorEl}
             isOpen={isMenuOpen}
             onClose={() => setMenuAnchorEl(null)}
+            onChangeTab={handleChangeTab}
           />
 
           <Box sx={{ p: { xs: 2, sm: 2.2 }, pb: 10 }}>
@@ -303,6 +378,18 @@ export function AdminDashboard() {
             {activeTab === 'profile' && <AdminProfileCard authUser={authUser} />}
           </Stack>
         </Box>
+
+        <AppointmentDetailDialog
+          open={Boolean(selectedAppointment)}
+          appointment={selectedAppointment}
+          businesses={data.businesses}
+          customers={data.customers}
+          role="ADMIN"
+          onClose={() => {
+            setSelectedAppointment(null)
+            clearAppointmentUrlParam()
+          }}
+        />
 
         <Box
           sx={{
