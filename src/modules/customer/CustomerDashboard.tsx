@@ -20,7 +20,8 @@ import {
   ChevronRight,
   FileText,
   Home,
-  LayoutGrid,
+    LayoutGrid,
+  ShieldCheck,
   ShoppingCart,
   UserRound,
   type LucideIcon,
@@ -371,12 +372,69 @@ export function CustomerDashboard() {
               <Box>
                 <HeroBanner />
 
-                <SummaryCards
+                                <SummaryCards
                   data={data}
                   loading={loading}
                   offersCount={nearbyOffersCount}
                   onSelectTab={handleChangeTab}
                 />
+
+                {/* Insurance entry */}
+                <Box
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Open insurance"
+                  onClick={() => navigate('/insurance')}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      navigate('/insurance')
+                    }
+                  }}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 1.6,
+                    mb: 2.4,
+                    backgroundColor: 'background.paper',
+                    borderRadius: '22px',
+                    p: '14px 16px',
+                    border: '1px solid var(--mui-palette-divider)',
+                    cursor: 'pointer',
+                    '&:focus-visible': {
+                      outline: '3px solid var(--mui-palette-primary-main)',
+                      outlineOffset: 2,
+                    },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.6, minWidth: 0 }}>
+                    <Box
+                      sx={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #065f46 0%, #0d9488 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#ffffff',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <ShieldCheck size={22} strokeWidth={2.2} />
+                    </Box>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography sx={{ fontWeight: 700, color: 'text.primary', fontSize: '15px', lineHeight: 1.25 }}>
+                        Insurance
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '13px', display: 'block', mt: 0.2 }}>
+                        Health, vehicle, life, travel and more
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <ChevronRight size={20} strokeWidth={2.2} color="var(--mui-palette-text-disabled)" />
+                </Box>
 
                 {/* Recent Activity */}
                 <Box sx={{ mt: 1 }}>

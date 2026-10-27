@@ -8,27 +8,26 @@ export async function fetchBusinessOffers(businessId: number): Promise<BusinessO
 
 export async function createBusinessOffer(
   businessId: number,
-  offer: Omit<BusinessOffer, 'id' | 'businessId' | 'active' | 'imageUrl'>,
+  offer: Omit<BusinessOffer, 'id' | 'businessId' | 'active' | 'imageUrl' | 'attachmentType'>,
   image?: File | null,
 ): Promise<BusinessOffer> {
   try {
-    const formData = new FormData()
+    const url = `/api/v1/businesses/${businessId}/offers`
 
+    // No file: same JSON request as before, so existing behavior is unchanged.
+    if (!image) {
+      return (await apiClient.post<BusinessOffer>(url, offer)).data
+    }
+
+    // With a file: send multipart (needs the backend change).
+    const formData = new FormData()
     formData.append(
       'offer',
       new Blob([JSON.stringify(offer)], { type: 'application/json' }),
     )
+    formData.append('image', image)
 
-    if (image) {
-      formData.append('image', image)
-    }
-
-    return (
-      await apiClient.post<BusinessOffer>(
-        `/api/v1/businesses/${businessId}/offers`,
-        formData,
-      )
-    ).data
+    return (await apiClient.post<BusinessOffer>(url, formData, { timeout: 60000 })).data
   } catch (error) {
     throw new Error(getErrorMessage(error, 'Could not publish this offer.'), { cause: error })
   }
