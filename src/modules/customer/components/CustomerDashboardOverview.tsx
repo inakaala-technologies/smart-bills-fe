@@ -1,5 +1,5 @@
 import { Box, ButtonBase, Typography } from '@mui/material'
-import { CalendarCheck2, ShieldCheck, Tag } from 'lucide-react'
+import { CalendarCheck2, ShieldCheck, Tag, ReceiptText } from 'lucide-react'
 import type { DashboardData } from '../../../services/api'
 import type { DashboardTab } from '../../types'
 
@@ -72,6 +72,12 @@ export function SummaryCards({ data, loading, offersCount, onSelectTab }: Summar
     { label: 'Offers', count: offersCount, tab: 'businesses' as const, icon: Tag },
     { label: 'Memberships', count: data.memberships.length, tab: 'memberships' as const, icon: ShieldCheck },
     { label: 'Appointments', count: data.appointments.length, tab: 'appointments' as const, icon: CalendarCheck2 },
+  {
+    label: 'Bills',
+    count: 0,
+    tab: 'bills' as const,
+    icon: ReceiptText,
+  },
   ]
 
   return (
