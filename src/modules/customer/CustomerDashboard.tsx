@@ -49,6 +49,7 @@ import { setActiveTab, setSelectedBusinessId } from '../../store/customerDashboa
 import type { DashboardTab } from '../types'
 import { getBusinessTypeLabel, normalizeBusinessType } from '../../constants/businessTypes'
 import { FamilyManagementDialog } from './components/FamilyManagementDialog'
+import { CustomerBillsPage } from './components/CustomerBillsPage'
 
 const roleNav: Array<{ key: DashboardTab; label: string; icon: LucideIcon }> = [
   { key: 'overview', label: 'Home', icon: Home },
@@ -59,7 +60,7 @@ const roleNav: Array<{ key: DashboardTab; label: string; icon: LucideIcon }> = [
   { key: 'profile', label: 'Profile', icon: UserRound },
 ]
 
-const customerDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'appointments', 'rewards', 'memberships', 'profile']
+const customerDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'appointments', 'rewards', 'memberships', 'bills', 'profile']
 
 function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
@@ -274,6 +275,10 @@ export function CustomerDashboard() {
               onClose={() => setFamilyDialogOpen(false)}
               currentUserId={Number(authUser?.id)}
             />
+            
+            {activeTab === 'bills' && (
+          <CustomerBillsPage />
+            )}
 
             {activeTab === 'overview' && (
               <Box>
