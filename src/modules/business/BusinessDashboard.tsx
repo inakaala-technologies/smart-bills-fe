@@ -28,6 +28,7 @@ import { InvoiceListPanel } from './components/InvoiceListPanel'
 import { MembershipWorkspace } from './components/MembershipWorkspace'
 import { CustomerRetentionWorkspace } from './components/CustomerRetentionWorkspace'
 import { BusinessInsightsWorkspace } from './components/BusinessInsightsWorkspace'
+import { GlobalSearchWorkspace } from './components/GlobalSearchWorkspace'
 import { LoyaltyWorkspace } from './components/LoyaltyWorkspace'
 import { AddCustomerDialog } from './components/AddCustomerDialog'
 import { SendMembershipNotificationDialog } from './components/SendMembershipNotificationDialog'
@@ -37,7 +38,7 @@ import type { DashboardTab } from '../types'
 import { normalizeBusinessType } from '../../constants/businessTypes'
 import { v4 as uuidv4 } from 'uuid';
 
-const businessDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'customers', 'appointments', 'memberships', 'loyalty', 'offers', 'retention', 'insights', 'profile']
+const businessDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'customers', 'appointments', 'memberships', 'loyalty', 'offers', 'retention', 'insights', 'search', 'profile']
 
 function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
@@ -46,17 +47,6 @@ function formatCurrency(value?: number) {
 
 function getLocalDate() {
   const date = new Date()
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-
-  return `${year}-${month}-${day}`
-}
-
-function defaultDueDate() {
-  const date = new Date()
-  date.setDate(date.getDate() + 7)
-
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
@@ -107,7 +97,7 @@ export function BusinessDashboard() {
   })
   const [invoiceForm, setInvoiceForm] = useState<BusinessInvoiceForm>(() => ({
     customerId: data.customers[0]?.id ?? '',
-    dueDate: defaultDueDate(),
+    dueDate: '',
     loyaltyPointsToRedeem: '0',
     items: [createInvoiceItem()],
   }))
@@ -118,6 +108,7 @@ export function BusinessDashboard() {
   const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false)
   const [isProductsViewOpen, setIsProductsViewOpen] = useState(false)
   const [activeProductCount, setActiveProductCount] = useState(0)
+  const [previewInvoiceId, setPreviewInvoiceId] = useState<number | null>(null)
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false)
   const [isNotificationDialogOpen, setIsNotificationDialogOpen] = useState(false)
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
@@ -365,8 +356,7 @@ export function BusinessDashboard() {
     changeTab('overview')
   }
 
-  const handleCreateInvoice = async (status: 'DRAFT' | 'SENT',
-  invoiceMode: 'products' | 'membership',) => {
+  const handleCreateInvoice = async (status: 'DRAFT' | 'SENT' | 'PAID') => {
     const businessId = selectedBusinessId ?? selectedBusiness?.id ?? data.businesses[0]?.id
     const customerId = Number(invoiceForm.customerId)
     const items = invoiceForm.items.map((item) => ({
@@ -392,7 +382,7 @@ export function BusinessDashboard() {
     const gstAmount = Number(items.reduce((total, item) => total + item.quantity * item.unitPrice * (item.gstRate / 100), 0).toFixed(2))
     const totalAmount = Number((subtotal + gstAmount).toFixed(2))
     const issueDate = getLocalDate()
-
+    // const issueDate = new Date().toISOString().slice(0, 10)
     setIsInvoiceSubmitting(true)
     try {
       const result = await createInvoice({
@@ -400,9 +390,7 @@ export function BusinessDashboard() {
   customerId,
   invoiceNumber: `INV-${Date.now()}`,
   issueDate,
-  ...(invoiceMode === 'membership'
-    ? { dueDate: invoiceForm.dueDate }
-    : {}),
+  ...(invoiceForm.dueDate ? { dueDate: invoiceForm.dueDate } : {}),
   subtotal,
   gstAmount,
   totalAmount,
@@ -472,9 +460,15 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
       id: invoice.id,
       customerName,
       customerEmail: customer?.email,
+      customerPhone: customer?.phoneNumber,
+      customerAddress: customer?.locationAddress,
       invoiceNumber: invoice.invoiceNumber ?? `INV-${invoice.id}`,
       status: invoice.status ?? 'SENT',
+      issueDate: invoice.issueDate,
       dueDate: invoice.dueDate,
+      subtotal: invoice.subtotal,
+      gstAmount: invoice.gstAmount,
+      totalAmount: invoice.totalAmount,
       amount: formatCurrency(invoice.totalAmount),
       loyaltyDetails: (invoice.loyaltyPointsRedeemed ?? 0) > 0
         ? `${invoice.loyaltyPointsRedeemed} points redeemed · ${formatCurrency(invoice.loyaltyDiscountAmount)} discount`
@@ -582,7 +576,19 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
             </Stack>
           ) : (
             <>
-              {activeTab === 'overview' && <BusinessDashboardOverview onQuickAction={handleQuickAction} onOpenInsights={() => changeTab('insights')} hasBusiness={Boolean(selectedBusiness)} appointmentsEnabled={appointmentsEnabled} membershipsEnabled={membershipsEnabled} />}
+              {activeTab === 'overview' && (
+                <BusinessDashboardOverview
+                  onQuickAction={handleQuickAction}
+                  onOpenInsights={() => changeTab('insights')}
+                  onOpenInvoice={(invoiceId) => {
+                    setPreviewInvoiceId(invoiceId)
+                    changeTab('invoices')
+                  }}
+                  hasBusiness={Boolean(selectedBusiness)}
+                  appointmentsEnabled={appointmentsEnabled}
+                  membershipsEnabled={membershipsEnabled}
+                />
+              )}
 
             {activeTab === 'businesses' && (
               <BusinessOverview
@@ -610,12 +616,21 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
               <Stack spacing={1.6}>
                 <InvoiceListPanel
                   invoiceRows={invoiceRows}
+                  businessDetails={{
+                    name: selectedBusiness?.businessName ?? selectedBusiness?.name ?? 'Business',
+                    address: selectedBusiness?.address,
+                    email: selectedBusiness?.email,
+                    phone: selectedBusiness?.phone,
+                    gstin: selectedBusiness?.gstin,
+                  }}
                   onBack={() => changeTab('overview')}
                   onCreateInvoice={() => {
                     setInvoiceMessage('')
                     setIsInvoiceFormOpen(true)
                   }}
                   onUpdateStatus={handleInvoiceStatusChange}
+                  previewInvoiceId={previewInvoiceId}
+                  onPreviewClosed={() => setPreviewInvoiceId(null)}
                 />
 
                 <InvoiceGeneratorCard
@@ -643,12 +658,19 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
                   onInvoiceItemChange={handleInvoiceItemChange}
                   onAddItem={handleAddInvoiceItem}
                   onRemoveItem={handleRemoveInvoiceItem}
-                  onCreateInvoice={(status, invoiceMode) => void handleCreateInvoice(status, invoiceMode)}
+                  onCreateInvoice={(status) => void handleCreateInvoice(status)}
                 />
               </Stack>
             )}
 
-            {activeTab === 'customers' && selectedBusiness && <CustomerListCard businessId={selectedBusiness.id} customers={data.customers} onOpenCustomer={handleOpenCustomer} />}
+            {activeTab === 'customers' && selectedBusiness && (
+              <CustomerListCard
+                businessId={selectedBusiness.id}
+                customers={data.customers}
+                onOpenCustomer={handleOpenCustomer}
+                onAddCustomer={() => setIsAddCustomerOpen(true)}
+              />
+            )}
 
             {activeTab === 'retention' && selectedBusiness && (
               <CustomerRetentionWorkspace
@@ -670,6 +692,16 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
             )}
 
             {activeTab === 'insights' && selectedBusiness && <BusinessInsightsWorkspace key={selectedBusiness.id} businessId={selectedBusiness.id} appointmentsEnabled={appointmentsEnabled} membershipsEnabled={membershipsEnabled} />}
+
+            {activeTab === 'search' && (
+              <GlobalSearchWorkspace
+                data={data}
+                appointmentsEnabled={appointmentsEnabled}
+                membershipsEnabled={membershipsEnabled}
+                onOpenCustomer={handleOpenCustomer}
+                onChangeTab={changeTab}
+              />
+            )}
 
             {activeTab === 'memberships' && membershipsEnabled && selectedBusiness && (
               <MembershipWorkspace

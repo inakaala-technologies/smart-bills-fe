@@ -1,5 +1,5 @@
 import { Box, Typography } from '@mui/material'
-import { BadgeCheck, Ellipsis, Home, ReceiptText, Users, type LucideIcon } from 'lucide-react'
+import { BadgeCheck, Home, ReceiptText, Search, Users, type LucideIcon } from 'lucide-react'
 import type { DashboardTab } from '../../types'
 
 const roleNav: Array<{ key: DashboardTab; label: string; icon: LucideIcon }> = [
@@ -7,7 +7,7 @@ const roleNav: Array<{ key: DashboardTab; label: string; icon: LucideIcon }> = [
   { key: 'customers', label: 'Customers', icon: Users },
   { key: 'memberships', label: 'Memberships', icon: BadgeCheck },
   { key: 'invoices', label: 'Billing', icon: ReceiptText },
-  { key: 'profile', label: 'More', icon: Ellipsis },
+  { key: 'search', label: 'Search', icon: Search },
 ]
 
 export type BottomNavBarProps = {
@@ -35,7 +35,7 @@ export function BottomNavBar({ activeTab, membershipsEnabled, onChangeTab }: Bot
       }}
     >
       {visibleRoleNav.map((tab) => {
-        const isActive = activeTab === tab.key || (tab.key === 'profile' && !['overview', 'customers', 'memberships', 'invoices', 'appointments'].includes(activeTab))
+        const isActive = activeTab === tab.key
         const Icon = tab.icon
 
         return (

@@ -30,8 +30,13 @@ export function AdminInvoiceGeneratorCard({ invoiceForm, invoiceMessage, onInvoi
           <TextField size="small" label="Quantity" type="number" value={invoiceForm.quantity} onChange={(event) => onInvoiceFieldChange('quantity', event.target.value)} sx={{ '& .MuiInputBase-root': { borderRadius: 2.4, backgroundColor: 'background.paper' } }} />
           <TextField size="small" label="Unit price" type="number" value={invoiceForm.unitPrice} onChange={(event) => onInvoiceFieldChange('unitPrice', event.target.value)} sx={{ '& .MuiInputBase-root': { borderRadius: 2.4, backgroundColor: 'background.paper' } }} />
           <TextField size="small" label="GST %" type="number" value={invoiceForm.gstRate} onChange={(event) => onInvoiceFieldChange('gstRate', event.target.value)} sx={{ '& .MuiInputBase-root': { borderRadius: 2.4, backgroundColor: 'background.paper' } }} />
-          <TextField size="small" label="Due date" type="date" value={invoiceForm.dueDate} onChange={(event) => onInvoiceFieldChange('dueDate', event.target.value)} sx={{ '& .MuiInputBase-root': { borderRadius: 2.4, backgroundColor: 'background.paper' } }} />
-          <Button variant="contained" onClick={onCreateInvoice} endIcon={<ArrowRight size={15} />} sx={(theme) => ({ borderRadius: 2.8, background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.success.main} 100%)`, textTransform: 'none', fontWeight: 800, boxShadow: `0 12px 22px ${alpha(theme.palette.primary.main, 0.18)}` })}>Generate &amp; send</Button>
+          <TextField size="small" label="Due date (optional)" type="date" value={invoiceForm.dueDate} onChange={(event) => onInvoiceFieldChange('dueDate', event.target.value)} helperText="Leave blank to record as paid; add a due date to send as pending." sx={{ '& .MuiInputBase-root': { borderRadius: 2.4, backgroundColor: 'background.paper' } }} />
+          <Typography variant="caption" color={invoiceForm.dueDate ? 'warning.main' : 'success.main'} sx={{ fontWeight: 700 }}>
+            {invoiceForm.dueDate ? 'This invoice will be pending until its due date.' : 'No due date set. This invoice will be recorded as paid.'}
+          </Typography>
+          <Button variant="contained" onClick={onCreateInvoice} endIcon={<ArrowRight size={15} />} sx={(theme) => ({ borderRadius: 2.8, background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.success.main} 100%)`, textTransform: 'none', fontWeight: 800, boxShadow: `0 12px 22px ${alpha(theme.palette.primary.main, 0.18)}` })}>
+            {invoiceForm.dueDate ? 'Create pending invoice' : 'Create paid invoice'}
+          </Button>
           {invoiceMessage ? <Typography variant="caption" color={invoiceMessage.includes('failed') || invoiceMessage.includes('Select') ? 'error.main' : 'success.main'}>{invoiceMessage}</Typography> : null}
         </Stack>
       </CardContent>
