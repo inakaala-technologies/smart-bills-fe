@@ -10,7 +10,7 @@ export function HeroBanner() {
         position: 'relative',
         overflow: 'hidden',
         borderRadius: '28px',
-        background: 'linear-gradient(135deg, color-mix(in srgb, var(--mui-palette-primary-main) 20%, var(--mui-palette-background-paper)) 0%, color-mix(in srgb, var(--mui-palette-primary-main) 38%, var(--mui-palette-background-paper)) 100%)',
+        background: 'linear-gradient(135deg, #0F032D 0%, #4E2BCC 62%, #905BF4 100%)',
         p: { xs: 2.5, sm: 2.8 },
         minHeight: 168,
         display: 'flex',
@@ -23,10 +23,10 @@ export function HeroBanner() {
       <Box sx={{ position: 'absolute', bottom: -20, left: 40, width: 100, height: 100, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 70%)', pointerEvents: 'none' }} />
 
       <Box sx={{ zIndex: 1, pr: 1, maxWidth: '62%' }}>
-        <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.15, color: 'text.primary', fontSize: { xs: '1.25rem', sm: '1.4rem' } }}>
+        <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.15, color: '#ffffff', fontSize: { xs: '1.25rem', sm: '1.4rem' } }}>
           Your digital life,<br />organized
         </Typography>
-        <Typography variant="body2" sx={{ mt: 1.2, color: 'text.secondary', fontWeight: 500, fontSize: '0.8rem', lineHeight: 1.35 }}>
+        <Typography variant="body2" sx={{ mt: 1.2, color: 'rgba(255,255,255,0.82)', fontWeight: 500, fontSize: '0.8rem', lineHeight: 1.35 }}>
           Bills, receipts, memberships and more — all in one place.
         </Typography>
       </Box>
@@ -35,13 +35,13 @@ export function HeroBanner() {
         <Box sx={{ position: 'absolute', width: 80, height: 80, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.6)', filter: 'blur(12px)' }} />
         <Box sx={{ position: 'absolute', bottom: 12, left: 2, width: 12, height: 12, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.8)', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }} />
 
-        <Box sx={{ width: 78, height: 126, borderRadius: '16px', background: '#ffffff', border: '3.5px solid #0f172a', boxShadow: '0 12px 24px rgba(15, 23, 42, 0.22)', transform: 'rotate(12deg)', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', overflow: 'hidden' }}>
-          <Box sx={{ width: 22, height: 3, borderRadius: 2, background: '#0f172a', mt: 0.6, mb: 0.8 }} />
+        <Box sx={{ width: 78, height: 126, borderRadius: '16px', background: '#ffffff', border: '3.5px solid #0F032D', boxShadow: '0 12px 24px rgba(15, 3, 45, 0.22)', transform: 'rotate(12deg)', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', overflow: 'hidden' }}>
+          <Box sx={{ width: 22, height: 3, borderRadius: 2, background: '#0F032D', mt: 0.6, mb: 0.8 }} />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, mt: 0.2 }}>
-            <Box sx={{ width: 12, height: 12, borderRadius: '50%', background: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Box sx={{ width: 12, height: 12, borderRadius: '50%', background: '#4E2BCC', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Box sx={{ width: 4, height: 4, borderRadius: '50%', background: '#fff' }} />
             </Box>
-            <Typography sx={{ fontSize: '9px', fontWeight: 900, color: '#064e3b', letterSpacing: '-0.02em' }}>BHive</Typography>
+            <Typography sx={{ fontSize: '9px', fontWeight: 900, color: '#0F032D', letterSpacing: '-0.02em' }}>BHive</Typography>
           </Box>
           <Box sx={{ position: 'absolute', bottom: 4, width: 58, height: 70, background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.12)', p: 0.6, display: 'flex', flexDirection: 'column', gap: 0.4, transform: 'translateY(6px)' }}>
             <Box sx={{ width: '70%', height: 3, borderRadius: 1, background: '#cbd5e1', mx: 'auto', mb: 0.4 }} />
@@ -51,7 +51,7 @@ export function HeroBanner() {
             <Box sx={{ width: '75%', height: 2.5, borderRadius: 1, background: '#e2e8f0' }} />
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.4 }}>
               <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: '#dcfce7' }} />
-              <Box sx={{ width: 22, height: 3, borderRadius: 1, background: '#10b981' }} />
+              <Box sx={{ width: 22, height: 3, borderRadius: 1, background: '#4E2BCC' }} />
             </Box>
           </Box>
         </Box>

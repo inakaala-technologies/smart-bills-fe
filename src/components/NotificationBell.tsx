@@ -96,7 +96,7 @@ function resolveAppointmentId(
   return null
 }
 
-export function NotificationBell() {
+export function NotificationBell({ contrast = false, prominent = false }: { contrast?: boolean; prominent?: boolean }) {
   const navigate = useNavigate()
   const dispatch = useAppDispatch()
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
@@ -227,7 +227,13 @@ export function NotificationBell() {
           setActionError('')
           setReloadToken((current) => current + 1)
         }}
-        sx={{ width: 38, height: 38, color: 'text.secondary' }}
+        sx={{
+          width: prominent ? 58 : 38,
+          height: prominent ? 58 : 38,
+          color: prominent ? '#0F032D' : contrast ? '#ffffff' : 'primary.main',
+          backgroundColor: prominent ? '#ffffff' : contrast ? 'rgba(255,255,255,0.14)' : 'transparent',
+          '&:hover': { backgroundColor: prominent ? '#f5efff' : contrast ? 'rgba(255,255,255,0.24)' : 'action.hover' },
+        }}
       >
         <Badge color="error" badgeContent={feed.unreadCount} max={99}>
           <Bell size={19} strokeWidth={2.2} />

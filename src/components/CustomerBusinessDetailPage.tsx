@@ -204,7 +204,7 @@ export function CustomerBusinessDetailPage({
 
             <Box sx={{ mt: 0.35, p: 1.1, border: '1px solid #edf1f2', borderRadius: 1.9, background: '#ffffff', boxShadow: '0 4px 12px rgba(24,56,63,0.035)' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.9 }}>
-                <Box sx={{ width: 31, height: 31, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 1.1, color: '#087b65', background: '#e9f6f0' }}>
+                <Box sx={{ width: 31, height: 31, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 1.1, color: 'primary.main', background: 'primary.light' }}>
                   <CalendarDays size={17} strokeWidth={2.2} />
                 </Box>
                 <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -261,7 +261,7 @@ export function CustomerBusinessDetailPage({
             <DialogTitle sx={{ color: '#263f4c', fontWeight: 800 }}>Membership check-in</DialogTitle>
             <DialogContent>
               <Box sx={{ display: 'grid', justifyItems: 'center', gap: 1, py: 1 }}>
-                <Box sx={{ width: 92, height: 92, display: 'grid', placeItems: 'center', border: '1px solid #e2eeea', borderRadius: 2, color: '#087b65', background: '#f2faf6' }}>
+                <Box sx={{ width: 92, height: 92, display: 'grid', placeItems: 'center', border: '1px solid var(--mui-palette-divider)', borderRadius: 2, color: 'primary.main', background: 'primary.light' }}>
                   <QrCode size={54} strokeWidth={1.7} />
                 </Box>
                 <Typography sx={{ color: '#536b74', fontSize: 12, textAlign: 'center' }}>Show your membership details at the business.</Typography>
@@ -269,7 +269,7 @@ export function CustomerBusinessDetailPage({
               </Box>
             </DialogContent>
             <DialogActions>
-              <Button onClick={() => setCheckInOpen(false)} sx={{ color: '#078b68', fontWeight: 700, textTransform: 'none' }}>Close</Button>
+              <Button onClick={() => setCheckInOpen(false)} sx={{ color: 'primary.main', fontWeight: 700, textTransform: 'none' }}>Close</Button>
             </DialogActions>
           </Dialog>
 
@@ -277,14 +277,14 @@ export function CustomerBusinessDetailPage({
             <DialogTitle sx={{ color: '#263f4c', fontWeight: 800 }}>Contact {businessName}</DialogTitle>
             <DialogContent>
               <Stack spacing={1}>
-                {business.phone && <ButtonBase component="a" href={`tel:${business.phone}`} sx={{ justifyContent: 'flex-start', gap: 1, py: 1, color: '#087b65' }}><Phone size={16} /><Typography sx={{ fontSize: 12 }}>{business.phone}</Typography></ButtonBase>}
-                {business.email && <ButtonBase component="a" href={`mailto:${business.email}`} sx={{ justifyContent: 'flex-start', gap: 1, py: 1, color: '#087b65' }}><Mail size={16} /><Typography sx={{ fontSize: 12 }}>{business.email}</Typography></ButtonBase>}
-                {business.address && <ButtonBase component="a" href={`https://maps.google.com/?q=${encodeURIComponent(business.address)}`} target="_blank" rel="noreferrer" sx={{ justifyContent: 'flex-start', gap: 1, py: 1, color: '#087b65' }}><MapPin size={16} /><Typography sx={{ fontSize: 12 }}>{business.address}</Typography></ButtonBase>}
+                {business.phone && <ButtonBase component="a" href={`tel:${business.phone}`} sx={{ justifyContent: 'flex-start', gap: 1, py: 1, color: 'primary.main' }}><Phone size={16} /><Typography sx={{ fontSize: 12 }}>{business.phone}</Typography></ButtonBase>}
+                {business.email && <ButtonBase component="a" href={`mailto:${business.email}`} sx={{ justifyContent: 'flex-start', gap: 1, py: 1, color: 'primary.main' }}><Mail size={16} /><Typography sx={{ fontSize: 12 }}>{business.email}</Typography></ButtonBase>}
+                {business.address && <ButtonBase component="a" href={`https://maps.google.com/?q=${encodeURIComponent(business.address)}`} target="_blank" rel="noreferrer" sx={{ justifyContent: 'flex-start', gap: 1, py: 1, color: 'primary.main' }}><MapPin size={16} /><Typography sx={{ fontSize: 12 }}>{business.address}</Typography></ButtonBase>}
                 {!business.phone && !business.email && !business.address && <Typography sx={{ color: '#70858d', fontSize: 12 }}>Contact details are not available yet.</Typography>}
               </Stack>
             </DialogContent>
             <DialogActions>
-              <Button onClick={() => setContactOpen(false)} sx={{ color: '#078b68', fontWeight: 700, textTransform: 'none' }}>Close</Button>
+              <Button onClick={() => setContactOpen(false)} sx={{ color: 'primary.main', fontWeight: 700, textTransform: 'none' }}>Close</Button>
             </DialogActions>
           </Dialog>
         </Paper>

@@ -22,8 +22,8 @@ export function BusinessTypeIcon({ businessType, size = 17 }: BusinessTypeIconPr
         alignItems: 'center',
         justifyContent: 'center',
         borderRadius: 1,
-        color: '#087b65',
-        backgroundColor: '#eaf5f0',
+        color: 'primary.main',
+        backgroundColor: 'primary.light',
       }}
     >
       {icon}

@@ -20,6 +20,9 @@ import { fetchLoyaltyBalance, fetchLoyaltySettings, type LoyaltyProgramSettings 
 type CustomerAppointmentsPanelProps = {
   appointments: DashboardData['appointments']
   businesses: DashboardData['businesses']
+  customerId: number
+  selectedAppointmentId?: number
+  onSelectAppointment?: (appointment: AppointmentSummary) => void
 }
 
 function getDefaultAppointmentDateTime() {
@@ -28,7 +31,13 @@ function getDefaultAppointmentDateTime() {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 }
 
-export function CustomerAppointmentsPanel({ appointments, businesses }: CustomerAppointmentsPanelProps) {
+export function CustomerAppointmentsPanel({
+  appointments,
+  businesses,
+  customerId,
+  selectedAppointmentId,
+  onSelectAppointment,
+}: CustomerAppointmentsPanelProps) {
   const dispatch = useAppDispatch()
   const [now] = useState(Date.now)
   const [businessId, setBusinessId] = useState('')
@@ -52,13 +61,22 @@ export function CustomerAppointmentsPanel({ appointments, businesses }: Customer
   const [updatingId, setUpdatingId] = useState<number | null>(null)
   const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState('0')
   const [loyaltyInfo, setLoyaltyInfo] = useState<{ customerId: number; businessId: number; balance: number; settings: LoyaltyProgramSettings } | null>(null)
-  const [loyaltyError, setLoyaltyError] = useState('')
+  const [loyaltyError, setLoyaltyError] = useState<{ customerId: number; businessId: number; message: string } | null>(null)
 
   const appointmentBusinesses = businesses.filter((business) => business.appointmentsEnabled)
   const selectedBusinessId = Number(businessId) || appointmentBusinesses[0]?.id || 0
   const services = servicesState.businessId === selectedBusinessId ? servicesState.services : []
   const selectedService = services.find((service) => service.id === Number(serviceId))
-  const currentLoyaltyInfo = loyaltyInfo?.customerId === customerId && loyaltyInfo.businessId === selectedBusinessId ? loyaltyInfo : null
+  const currentLoyaltyInfo = loyaltyInfo
+    && loyaltyInfo.customerId === customerId
+    && loyaltyInfo.businessId === selectedBusinessId
+    ? loyaltyInfo
+    : null
+  const currentLoyaltyError = loyaltyError
+    && loyaltyError.customerId === customerId
+    && loyaltyError.businessId === selectedBusinessId
+    ? loyaltyError.message
+    : ''
   const requestedPoints = Math.max(0, Math.floor(Number(loyaltyPointsToRedeem) || 0))
   const loyaltyDiscount = currentLoyaltyInfo?.settings.configured && currentLoyaltyInfo.settings.pointsPerCurrencyUnit && selectedService
     ? Math.min(
@@ -94,22 +112,24 @@ export function CustomerAppointmentsPanel({ appointments, businesses }: Customer
   }, [selectedBusinessId])
 
   useEffect(() => {
-    if (!customerId || !selectedBusinessId) {
-      setLoyaltyInfo(null)
-      setLoyaltyError('')
-      setLoyaltyPointsToRedeem('0')
-      return
-    }
+    if (!customerId || !selectedBusinessId) return
     let isCurrent = true
-    setLoyaltyError('')
-    setLoyaltyPointsToRedeem('0')
     Promise.all([
       fetchLoyaltyBalance(selectedBusinessId, customerId),
       fetchLoyaltySettings(selectedBusinessId),
     ]).then(([balance, settings]) => {
-      if (isCurrent) setLoyaltyInfo({ customerId, businessId: selectedBusinessId, balance: balance.balance, settings })
+      if (isCurrent) {
+        setLoyaltyInfo({ customerId, businessId: selectedBusinessId, balance: balance.balance, settings })
+        setLoyaltyError(null)
+      }
     }).catch((error) => {
-      if (isCurrent) setLoyaltyError(error instanceof Error ? error.message : 'Could not load loyalty points.')
+      if (isCurrent) {
+        setLoyaltyError({
+          customerId,
+          businessId: selectedBusinessId,
+          message: error instanceof Error ? error.message : 'Could not load loyalty points.',
+        })
+      }
     })
     return () => { isCurrent = false }
   }, [customerId, selectedBusinessId])
@@ -232,7 +252,7 @@ export function CustomerAppointmentsPanel({ appointments, businesses }: Customer
             {availability?.availableSlots.length ? <Chip size="small" color="success" variant="outlined" label={`${availability.availableSlots.length} times`} /> : null}
           </Stack>
           {appointmentBusinesses.length === 0 && <Alert severity="info" sx={{ borderRadius: 2 }}>None of your businesses are currently accepting appointment requests.</Alert>}
-          <TextField select label="Business" value={selectedBusinessId ? String(selectedBusinessId) : ''} onChange={(event) => { setBusinessId(event.target.value); setServiceId('') }} disabled={appointmentBusinesses.length === 0} size="small" fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}>
+          <TextField select label="Business" value={selectedBusinessId ? String(selectedBusinessId) : ''} onChange={(event) => { setBusinessId(event.target.value); setServiceId(''); setLoyaltyPointsToRedeem('0') }} disabled={appointmentBusinesses.length === 0} size="small" fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}>
             {appointmentBusinesses.map((business) => <MenuItem key={business.id} value={String(business.id)}>{business.businessName ?? business.name ?? `Business ${business.id}`}</MenuItem>)}
           </TextField>
           <TextField select label="Service" value={serviceId} onChange={(event) => setServiceId(event.target.value)} disabled={!services.length} size="small" required fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}>
@@ -273,7 +293,7 @@ export function CustomerAppointmentsPanel({ appointments, businesses }: Customer
               )}
             </Stack>
           )}
-          {loyaltyError && <Alert severity="error">{loyaltyError}</Alert>}
+          {currentLoyaltyError && <Alert severity="error">{currentLoyaltyError}</Alert>}
           {selectedBusinessId > 0 && services.length === 0 && appointmentBusinesses.length > 0 && <Alert severity="info" sx={{ borderRadius: 2 }}>This business has not added any bookable services yet.</Alert>}
           <TextField label="Date" type="date" value={appointmentDate} onChange={(event) => { setAppointmentDate(event.target.value); setSelectedSlot('') }} size="small" required fullWidth slotProps={{ inputLabel: { shrink: true } }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }} />
           {availability && availability.staff.length > 0 && (

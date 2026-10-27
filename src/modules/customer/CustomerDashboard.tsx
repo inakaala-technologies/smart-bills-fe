@@ -26,7 +26,7 @@ import {
   UserRound,
   type LucideIcon,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { AppointmentDetailDialog } from '../../components/AppointmentDetailDialog'
 import { DashboardListRow } from '../../components/DashboardListRow'
@@ -40,12 +40,12 @@ import { CustomerDashboardMenu } from './components/CustomerDashboardMenu'
 import { CustomerInvoicesList } from './components/CustomerInvoicesList'
 import { CustomerProfilePanel } from './components/CustomerProfilePanel'
 import { CustomerAppointmentsPanel } from './components/CustomerAppointmentsPanel'
-import { fetchNearbyOffers, type DashboardData } from '../../services/api'
+import { fetchNearbyOffers, type AppointmentSummary, type DashboardData } from '../../services/api'
 import { addProfile, logoutUser, switchAccount, type Role } from '../../services/auth'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import type { RootState } from '../../store/store'
 import { setAuthUser } from '../../store/authSlice'
-import { setActiveTab, setSelectedBusinessId, fetchCustomerDashboard } from '../../store/customerDashboardSlice'
+import { setActiveTab, setSelectedBusinessId } from '../../store/customerDashboardSlice'
 import type { DashboardTab } from '../types'
 import { getBusinessTypeLabel, normalizeBusinessType } from '../../constants/businessTypes'
 import { FamilyManagementDialog } from './components/FamilyManagementDialog'
@@ -75,7 +75,7 @@ export function CustomerDashboard() {
   const accountRoles = new Set((authUser?.accounts ?? []).map((account) => account.role).concat(authUser?.role ?? 'CUSTOMER'))
   const availableAccounts = (authUser?.accounts ?? []).filter((account) => account.role !== authUser?.role)
   const missingProfileRoles = (['BUSINESS', 'CUSTOMER'] as Role[]).filter((role) => role !== authUser?.role && !accountRoles.has(role))
-  const { data, loading, activeTab, selectedCustomerId } = useAppSelector((state: RootState) => state.customerDashboard)
+  const { data, loading, activeTab } = useAppSelector((state: RootState) => state.customerDashboard)
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
   const [managerOpen, setManagerOpen] = useState(false)
   const [businessTypeFilter, setBusinessTypeFilter] = useState('ALL')
@@ -93,6 +93,15 @@ export function CustomerDashboard() {
   const [familyDialogOpen, setFamilyDialogOpen] = useState(false)
 
   useEffect(() => {
+    const matchingTab = customerDashboardTabs.find((tab) => tab === routeTab)
+    if (matchingTab) {
+      dispatch(setActiveTab(matchingTab))
+    } else {
+      navigate('/dashboard/overview', { replace: true })
+    }
+  }, [dispatch, navigate, routeTab])
+
+  useEffect(() => {
     if (customerLatitude === undefined || customerLongitude === undefined) return
     let isCurrent = true
     void fetchNearbyOffers(customerLatitude, customerLongitude)
@@ -103,6 +112,7 @@ export function CustomerDashboard() {
 
   const handleChangeTab = (tab: DashboardTab) => {
     dispatch(setActiveTab(tab))
+    navigate(`/dashboard/${tab}`)
   }
 
   const upcomingAppointmentActivities = data.appointments
@@ -211,7 +221,6 @@ export function CustomerDashboard() {
               anchorEl={menuAnchorEl}
               isOpen={isMenuOpen}
               onClose={() => setMenuAnchorEl(null)}
-              onChangeTab={handleChangeTab}
               currentRole={authUser?.role ?? 'CUSTOMER'}
               availableAccounts={availableAccounts}
               missingProfileRoles={missingProfileRoles}
@@ -544,7 +553,15 @@ export function CustomerDashboard() {
             )}
 
             {activeTab === 'invoices' && <CustomerInvoicesList invoices={data.invoices} businesses={data.businesses} />}
-            {activeTab === 'appointments' && <CustomerAppointmentsPanel appointments={data.appointments} businesses={data.businesses} />}
+            {activeTab === 'appointments' && (
+              <CustomerAppointmentsPanel
+                appointments={data.appointments}
+                businesses={data.businesses}
+                customerId={Number(authUser?.id ?? 0)}
+                selectedAppointmentId={explicitAppointment?.id}
+                onSelectAppointment={setSelectedAppointment}
+              />
+            )}
             {activeTab === 'memberships' && (
               <Stack spacing={1.2}>
                 <Box>
@@ -583,8 +600,9 @@ export function CustomerDashboard() {
                 data={data}
                 onProfileUpdated={(user) => dispatch(setAuthUser(user))}
                 onOpenManageDialog={() => setManagerOpen(true)}
-                onOpenBusinesses={() => dispatch(setActiveTab('businesses'))}
-                onOpenDocuments={() => dispatch(setActiveTab('invoices'))}
+                onOpenBusinesses={() => handleChangeTab('businesses')}
+                onOpenDocuments={() => handleChangeTab('invoices')}
+                onOpenFamily={() => setFamilyDialogOpen(true)}
                 onOpenBusiness={(businessId) => {
                   dispatch(setSelectedBusinessId(businessId))
                   navigate(`/business/${businessId}`)
@@ -597,19 +615,30 @@ export function CustomerDashboard() {
             )}
           </Box>
 
+          <AppointmentDetailDialog
+            open={Boolean(explicitAppointment)}
+            appointment={explicitAppointment}
+            businesses={data.businesses}
+            customers={data.customers}
+            role="CUSTOMER"
+            onClose={() => setSelectedAppointment(null)}
+          />
+
           {/* Bottom Navigation Bar matching the reference */}
           <Box
             sx={{
               position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
+              bottom: 'calc(10px + env(safe-area-inset-bottom))',
+              left: 12,
+              right: 12,
               backgroundColor: 'background.paper',
-              borderTop: '1px solid var(--mui-palette-divider)',
+              border: '1px solid var(--mui-palette-divider)',
+              borderRadius: 999,
+              boxShadow: '0 8px 24px rgba(15, 3, 45, 0.14)',
               display: 'grid',
               gridTemplateColumns: `repeat(${roleNav.length}, minmax(0, 1fr))`,
-              py: 1.2,
-              px: 1,
+              py: 0.7,
+              px: 0.6,
               zIndex: 10,
             }}
           >
@@ -628,21 +657,24 @@ export function CustomerDashboard() {
                     justifyContent: 'center',
                     gap: 0.6,
                     cursor: 'pointer',
-                    color: isActive ? 'primary.main' : 'text.secondary',
-                    transition: 'color 0.18s ease',
-                    py: 0.5,
+                    backgroundColor: isActive ? 'primary.main' : 'transparent',
+                    borderRadius: 999,
+                    transition: 'background-color 0.18s ease, color 0.18s ease',
+                    py: 0.7,
+                    px: 0.4,
+                    color: isActive ? 'primary.contrastText' : 'text.secondary',
                   }}
                 >
                   <Icon
-                    size={22}
+                    size={19}
                     strokeWidth={isActive ? 2.6 : 2}
-                    color={isActive ? 'var(--mui-palette-primary-main)' : 'var(--mui-palette-text-secondary)'}
+                    color={isActive ? 'var(--mui-palette-primary-contrastText)' : 'var(--mui-palette-text-secondary)'}
                   />
                   <Typography
                     variant="caption"
                     sx={{
                       fontWeight: isActive ? 800 : 600,
-                      fontSize: '11px',
+                      fontSize: '10px',
                       lineHeight: 1,
                       letterSpacing: '-0.01em',
                     }}

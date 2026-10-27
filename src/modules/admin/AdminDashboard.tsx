@@ -394,15 +394,17 @@ export function AdminDashboard() {
         <Box
           sx={{
             position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
+            bottom: 'calc(10px + env(safe-area-inset-bottom))',
+            left: 12,
+            right: 12,
             backgroundColor: 'background.paper',
-            borderTop: '1px solid var(--mui-palette-divider)',
+            border: '1px solid var(--mui-palette-divider)',
+            borderRadius: 999,
+            boxShadow: '0 8px 24px rgba(15, 3, 45, 0.14)',
             display: 'grid',
             gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-            py: 1.2,
-            px: 1,
+            py: 0.7,
+            px: 0.6,
             zIndex: 10,
           }}
         >
@@ -421,21 +423,24 @@ export function AdminDashboard() {
                   justifyContent: 'center',
                   gap: 0.6,
                   cursor: 'pointer',
-                  color: isActive ? '#10b981' : '#64748b',
-                  transition: 'color 0.18s ease',
-                  py: 0.5,
+                  backgroundColor: isActive ? 'primary.main' : 'transparent',
+                  borderRadius: 999,
+                  transition: 'background-color 0.18s ease, color 0.18s ease',
+                  py: 0.7,
+                  px: 0.4,
+                  color: isActive ? 'primary.contrastText' : 'text.secondary',
                 }}
               >
                 <Icon
-                  size={22}
+                  size={19}
                   strokeWidth={isActive ? 2.6 : 2}
-                  color={isActive ? '#10b981' : '#64748b'}
+                  color={isActive ? 'var(--mui-palette-primary-contrastText)' : 'var(--mui-palette-text-secondary)'}
                 />
                 <Typography
                   variant="caption"
                   sx={{
                     fontWeight: isActive ? 800 : 600,
-                    fontSize: '11px',
+                    fontSize: '10px',
                     lineHeight: 1,
                     letterSpacing: '-0.01em',
                   }}

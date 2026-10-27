@@ -19,7 +19,7 @@ export const appStyles = {
     alignItems: 'center',
     justifyContent: 'center',
     p: { xs: 1.25, sm: 2, md: 3 },
-    background: 'linear-gradient(135deg, var(--mui-palette-background-default) 0%, var(--mui-palette-background-paper) 100%)',
+    background: 'radial-gradient(circle at top, color-mix(in srgb, var(--mui-palette-secondary-main) 8%, transparent), transparent 36%), var(--mui-palette-background-default)',
   } satisfies SxProps<Theme>,
 
   panel: {

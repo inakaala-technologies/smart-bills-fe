@@ -290,10 +290,10 @@ export function DashboardPage({
       <Paper elevation={0} sx={{ width: '100%', maxWidth: 390, mx: 'auto', borderRadius: 5, background: 'rgba(255,255,255,0.95)', border: '1px solid rgba(15,23,42,0.06)', overflow: 'hidden' }}>
         {dashboardRole !== 'CUSTOMER' && data.businesses.length === 0 && (
           <Box sx={{ px: 2.1, pt: 2.1 }}>
-            <Card variant="outlined" sx={{ borderRadius: 4, border: '1px solid rgba(15,23,42,0.06)', background: 'linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%)' }}>
+            <Card variant="outlined" sx={{ borderRadius: 4, border: '1px solid var(--mui-palette-divider)', background: 'linear-gradient(180deg, var(--mui-palette-primary-light) 0%, var(--mui-palette-background-paper) 100%)' }}>
               <CardContent sx={{ p: 2.1 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, mb: 1.5 }}>
-                  <Box sx={{ width: 42, height: 42, borderRadius: 2.5, background: '#dff7e8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Box sx={{ width: 42, height: 42, borderRadius: 2.5, background: 'var(--mui-palette-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Building2 size={20} color="#14532d" />
                   </Box>
                   <Box>

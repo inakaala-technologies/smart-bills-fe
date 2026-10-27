@@ -1,10 +1,25 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Box, Container, Paper, Stack, Typography } from '@mui/material'
-import { useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Box, Button, Container, Paper, Stack, Typography } from '@mui/material'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { AppointmentDetailDialog } from '../../components/AppointmentDetailDialog'
 import type { LocationValue } from '../../components/LocationPicker'
-import { createBusiness, createInvoice, searchCustomers, updateInvoiceStatus, type DashboardData } from '../../services/api'
+import {
+  createBusiness,
+  createInvoice,
+  fetchAppointmentById,
+  fetchAppointmentStaff,
+  searchCustomers,
+  setBusinessAppointmentsEnabled,
+  setBusinessMembershipsEnabled,
+  updateAppointmentStaff,
+  updateAppointmentStatus,
+  updateInvoiceStatus,
+  type AppointmentStaffOption,
+  type AppointmentStatus,
+  type AppointmentSummary,
+  type DashboardData,
+} from '../../services/api'
 import { addProfile, getCurrentUser, logoutUser, switchAccount, type Role } from '../../services/auth'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import type { RootState } from '../../store/store'
@@ -13,13 +28,12 @@ import { BusinessProductsSection } from './components/BusinessProductsSection'
 import { getBusinessProducts } from '../../services/api/billingApi'
 import { fetchBusinessDashboard, fetchBusinessSummary, setActiveTab,setBusinessFeatures, setSelectedBusinessId } from '../../store/businessDashboardSlice'
 import { setAuthUser } from '../../store/authSlice'
-import type { DashboardTab } from '../types'
 import { AppointmentListCard } from './components/AppointmentListCard'
 import { AppointmentServiceManager } from './components/AppointmentServiceManager'
 import { BottomNavBar } from './components/BottomNavBar'
-import { BusinessMenu } from './components/BusinessMenu'
 import { BusinessOverview } from './components/BusinessOverview'
 import { BusinessDashboardOverview } from './components/BusinessDashboardOverview'
+import { BusinessProfileMenuPage } from './components/BusinessProfileMenuPage'
 import { BusinessProfileCard } from './components/BusinessProfileCard'
 import { BusinessOffersWorkspace } from './components/BusinessOffersWorkspace'
 import { CustomerListCard } from './components/CustomerListCard'
@@ -36,7 +50,7 @@ import type { BusinessFeature } from './components/BusinessProfileCard'
 import type { QuickActionId } from './components/QuickActionGrid'
 import type { DashboardTab } from '../types'
 import { normalizeBusinessType } from '../../constants/businessTypes'
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from 'uuid'
 
 const businessDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'customers', 'appointments', 'memberships', 'loyalty', 'offers', 'retention', 'insights', 'search', 'profile']
 
@@ -103,7 +117,6 @@ export function BusinessDashboard() {
   }))
   const [invoiceMessage, setInvoiceMessage] = useState('')
   const [invoiceMessageSeverity, setInvoiceMessageSeverity] = useState<'error' | 'success'>('success')
-  const [isInvoiceSuccessToastOpen, setIsInvoiceSuccessToastOpen] = useState(false)
   const [isInvoiceSubmitting, setIsInvoiceSubmitting] = useState(false)
   const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false)
   const [isProductsViewOpen, setIsProductsViewOpen] = useState(false)
@@ -111,8 +124,7 @@ export function BusinessDashboard() {
   const [previewInvoiceId, setPreviewInvoiceId] = useState<number | null>(null)
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false)
   const [isNotificationDialogOpen, setIsNotificationDialogOpen] = useState(false)
-  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
-  const isMenuOpen = Boolean(menuAnchorEl)
+  const [isProfilePageOpen, setIsProfilePageOpen] = useState(false)
   const [businessForm, setBusinessForm] = useState({
     name: selectedBusiness?.businessName ?? selectedBusiness?.name ?? '',
     legalName: selectedBusiness?.name ?? '',
@@ -144,16 +156,6 @@ export function BusinessDashboard() {
   }, [appointmentIdFromUrl, data.appointments, explicitAppointment])
 
   const [staffOptions, setStaffOptions] = useState<AppointmentStaffOption[]>([])
-
-  const handleChangeTab = useCallback((tab: DashboardTab) => {
-    dispatch(setActiveTab(tab))
-    if (searchParams.has('appointmentId') || searchParams.has('tab')) {
-      const nextParams = new URLSearchParams(searchParams)
-      nextParams.delete('appointmentId')
-      nextParams.delete('tab')
-      setSearchParams(nextParams, { replace: true })
-    }
-  }, [dispatch, searchParams, setSearchParams])
 
   const clearAppointmentUrlParam = () => {
     setExplicitAppointment(null)
@@ -217,15 +219,25 @@ export function BusinessDashboard() {
   }, [data.appointments])
 
   const handleStatusChangeFromDialog = async (appointmentId: number, status: AppointmentStatus, note?: string) => {
-    await updateAppointmentStatus(appointmentId, status, note)
+    const result = await updateAppointmentStatus(appointmentId, status, note)
+    if (!result.ok) {
+      throw new Error(result.message ?? 'Could not update appointment status.')
+    }
+
     dispatch(fetchBusinessDashboard(selectedBusinessId ?? undefined))
     setSelectedAppointmentForDetails((current) =>
-      current && current.id === appointmentId ? { ...current, status, businessNote: note ?? current.businessNote } : current,
+      current && current.id === appointmentId
+        ? result.appointment ?? { ...current, status, businessNote: note ?? current.businessNote }
+        : current,
     )
   }
 
   const handleStaffAssignFromDialog = async (appointmentId: number, staffUserId?: number) => {
-    await updateAppointmentStaff(appointmentId, staffUserId)
+    const result = await updateAppointmentStaff(appointmentId, staffUserId)
+    if (!result.ok) {
+      throw new Error(result.message ?? 'Could not update the assigned staff member.')
+    }
+
     dispatch(fetchBusinessDashboard(selectedBusinessId ?? undefined))
     setSelectedAppointmentForDetails((current) =>
       current && current.id === appointmentId ? { ...current, staffUserId } : current,
@@ -509,7 +521,6 @@ export function BusinessDashboard() {
       if (status === 'SENT') {
         setInvoiceMessage('')
         setIsInvoiceFormOpen(false)
-        setIsInvoiceSuccessToastOpen(true)
       } else {
         setInvoiceMessageSeverity('success')
         setInvoiceMessage(
@@ -582,6 +593,44 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
     }
   })
 
+  if (isProfilePageOpen) {
+    return (
+      <BusinessProfileMenuPage
+        authUser={authUser}
+        currentRole={authUser?.role ?? 'BUSINESS'}
+        availableAccounts={availableAccounts}
+        missingProfileRoles={missingProfileRoles}
+        appointmentsEnabled={appointmentsEnabled}
+        membershipsEnabled={membershipsEnabled}
+        onBack={() => setIsProfilePageOpen(false)}
+        onNavigateTab={(tab) => {
+          setIsProfilePageOpen(false)
+          changeTab(tab)
+        }}
+        onSwitchAccount={(role) => {
+          const updated = switchAccount(role)
+          if (updated) {
+            dispatch(setAuthUser(updated))
+            navigate('/dashboard')
+            window.location.reload()
+          }
+        }}
+        onAddProfile={(role) => {
+          const updated = addProfile(role)
+          if (updated) {
+            dispatch(setAuthUser(updated))
+            navigate('/dashboard')
+            window.location.reload()
+          }
+        }}
+        onLogout={() => {
+          logoutUser()
+          navigate('/')
+        }}
+      />
+    )
+  }
+
   return (
     <Box
       sx={{
@@ -619,47 +668,22 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
             authUser={authUser}
             contextLabel={selectedBusiness?.businessName ?? selectedBusiness?.name ?? 'Business workspace'}
             roleLabel="Business Owner"
-            menuId="business-menu"
-            isMenuOpen={isMenuOpen}
-            onOpenMenu={(event) => setMenuAnchorEl(event.currentTarget)}
+            menuId="profile-menu-page"
+            isMenuOpen={isProfilePageOpen}
+            compact={activeTab === 'overview'}
+            onOpenMenu={() => setIsProfilePageOpen(true)}
           />
 
-          <Box sx={{ px: { xs: 2, sm: 2.2 }, pt: { xs: 2, sm: 2.2 }, pb: 'calc(96px + env(safe-area-inset-bottom))', flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehaviorY: 'contain' }}>
+          <Box sx={{
+            px: activeTab === 'overview' ? 0 : { xs: 2, sm: 2.2 },
+            pt: activeTab === 'overview' ? 0 : { xs: 2, sm: 2.2 },
+            pb: 'calc(96px + env(safe-area-inset-bottom))',
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            overscrollBehaviorY: 'contain',
+          }}>
             <Stack spacing={1.6}>
-              <BusinessMenu
-                activeTab={activeTab}
-                appointmentsEnabled={appointmentsEnabled}
-                membershipsEnabled={membershipsEnabled}
-                anchorEl={menuAnchorEl}
-                isOpen={isMenuOpen}
-                onClose={() => setMenuAnchorEl(null)}
-                onChangeTab={(tab) => dispatch(setActiveTab(tab))}
-                currentRole={authUser?.role ?? 'BUSINESS'}
-                availableAccounts={availableAccounts}
-                missingProfileRoles={missingProfileRoles}
-                onSwitchAccount={(role: Role) => {
-                  const updated = switchAccount(role)
-                  if (updated) {
-                    dispatch(setAuthUser(updated))
-                    setMenuAnchorEl(null)
-                    navigate('/dashboard')
-                    window.location.reload()
-                  }
-                }}
-                onAddProfile={(role: Role) => {
-                  const updated = addProfile(role)
-                  if (updated) {
-                    dispatch(setAuthUser(updated))
-                    setMenuAnchorEl(null)
-                    navigate('/dashboard')
-                    window.location.reload()
-                  }
-                }}
-                onLogout={() => {
-                  logoutUser()
-                  navigate('/')
-                }}
-              />
               {isProductsViewOpen ? (
             <Stack spacing={2}>
               <Button
@@ -728,33 +752,35 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
                   onPreviewClosed={() => setPreviewInvoiceId(null)}
                 />
 
-                <InvoiceGeneratorCard
-                  open={isInvoiceFormOpen}
-                  businessId={selectedBusinessId ?? selectedBusiness?.id ?? data.businesses[0]?.id ?? 0}
-                  data={data}
-                  selectedCustomer={selectedCustomer}
-                  customerSearchText={customerSearchText}
-                  customerSearchResults={customerSearchText.trim() ? customerSearchResults : data.customers}
-                  isCustomerSearching={isCustomerSearching}
-                  invoiceForm={invoiceForm}
-                  invoiceMessage={invoiceMessage}
-                  invoiceMessageSeverity={invoiceMessageSeverity}
-                  isSubmitting={isInvoiceSubmitting}
-                  onClose={() => setIsInvoiceFormOpen(false)}
-                  onCustomerSearchChange={setCustomerSearchText}
-                  onCustomerSelection={(customer) => {
-                    setSelectedCustomer(customer)
-                    if (customer) {
-                      handleInvoiceInput('customerId', String(customer.id))
-                      handleInvoiceInput('loyaltyPointsToRedeem', '0')
-                    }
-                  }}
-                  onInvoiceFieldChange={handleInvoiceInput}
-                  onInvoiceItemChange={handleInvoiceItemChange}
-                  onAddItem={handleAddInvoiceItem}
-                  onRemoveItem={handleRemoveInvoiceItem}
-                  onCreateInvoice={(status) => void handleCreateInvoice(status)}
-                />
+                {isInvoiceFormOpen && (
+                  <InvoiceGeneratorCard
+                    open
+                    businessId={selectedBusinessId ?? selectedBusiness?.id ?? data.businesses[0]?.id ?? 0}
+                    data={data}
+                    selectedCustomer={selectedCustomer}
+                    customerSearchText={customerSearchText}
+                    customerSearchResults={customerSearchText.trim() ? customerSearchResults : data.customers}
+                    isCustomerSearching={isCustomerSearching}
+                    invoiceForm={invoiceForm}
+                    invoiceMessage={invoiceMessage}
+                    invoiceMessageSeverity={invoiceMessageSeverity}
+                    isSubmitting={isInvoiceSubmitting}
+                    onClose={() => setIsInvoiceFormOpen(false)}
+                    onCustomerSearchChange={setCustomerSearchText}
+                    onCustomerSelection={(customer) => {
+                      setSelectedCustomer(customer)
+                      if (customer) {
+                        handleInvoiceInput('customerId', String(customer.id))
+                        handleInvoiceInput('loyaltyPointsToRedeem', '0')
+                      }
+                    }}
+                    onInvoiceFieldChange={handleInvoiceInput}
+                    onInvoiceItemChange={handleInvoiceItemChange}
+                    onAddItem={handleAddInvoiceItem}
+                    onRemoveItem={handleRemoveInvoiceItem}
+                    onCreateInvoice={(status) => void handleCreateInvoice(status)}
+                  />
+                )}
               </Stack>
             )}
 
@@ -870,7 +896,23 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
           </>
         )}
 
-        <BottomNavBar activeTab={activeTab} onChangeTab={(tab) => dispatch(setActiveTab(tab))} />
+        <AppointmentDetailDialog
+          open={Boolean(selectedAppointmentForDetails)}
+          appointment={selectedAppointmentForDetails}
+          businesses={data.businesses}
+          customers={data.customers}
+          role={authUser?.role ?? 'BUSINESS'}
+          staffOptions={staffOptions}
+          onClose={clearAppointmentUrlParam}
+          onStatusChange={handleStatusChangeFromDialog}
+          onStaffAssign={handleStaffAssignFromDialog}
+        />
+
+        <BottomNavBar
+          activeTab={activeTab}
+          membershipsEnabled={membershipsEnabled}
+          onChangeTab={changeTab}
+        />
       </Paper>
     </Container>
   </Box>

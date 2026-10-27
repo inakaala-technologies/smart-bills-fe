@@ -249,7 +249,7 @@ export function LocationPicker({ value, onChange, required = true, footer }: Loc
         sx={{ minHeight: 62, '& .MuiAccordionSummary-content': { my: 1.1, minWidth: 0 } }}
       >
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
-          <MapPin size={17} color="#087b65" />
+          <MapPin size={17} color="var(--mui-palette-primary-main)" />
           <Stack spacing={0.15} sx={{ minWidth: 0 }}>
             <Typography variant="subtitle2" sx={{ color: '#24433b', fontWeight: 800 }}>
               Location{required ? ' *' : ''}

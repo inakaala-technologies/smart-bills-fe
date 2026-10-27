@@ -1,0 +1,38 @@
+:root {
+  --bhive-ink: #0F032D;
+  --bhive-primary: #4E2BCC;
+  --bhive-accent: #905BF4;
+  --bhive-canvas: #EFEFEF;
+  --bhive-surface: #FFFFFF;
+}
+
+html {
+  min-height: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--bhive-canvas);
+  color: var(--bhive-ink);
+  font-family: Inter, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: var(--bhive-primary);
+  color: #FFFFFF;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}

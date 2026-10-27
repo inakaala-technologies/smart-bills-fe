@@ -145,6 +145,8 @@ export type AppointmentServiceSummary = {
 export type AppointmentStaffOption = { userId: number; label: string }
 export type AppointmentAvailability = { date: string; availableSlots: string[]; staff: AppointmentStaffOption[] }
 
+export type BusinessInsightsInterval = 'DAILY' | 'WEEKLY' | 'MONTHLY'
+
 export type BusinessInsights = {
   revenueTrend: Array<{ label: string; amount: number }>
   paymentAging: Array<{ label: string; amount: number; invoiceCount: number }>
@@ -262,8 +264,11 @@ export type DashboardData = {
 
 export type BusinessDashboardSummary = {
   totalRevenue: number
+  billableRevenue?: number
+  completedRevenue?: number
   activeMembers: number
   pendingPayments: number
+  pendingPaymentCount?: number
   newCustomers: number
   invoiceCount: number
   appointmentCount: number
