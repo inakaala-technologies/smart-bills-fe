@@ -41,11 +41,6 @@ function formatCurrency(value?: number) {
   return `₹${value.toLocaleString('en-IN')}`
 }
 
-function defaultDueDate() {
-  const dueDate = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7)
-  return dueDate.toISOString().slice(0, 10)
-}
-
 export function DashboardPage({
   authUser,
   data,
@@ -91,7 +86,7 @@ const greeting =
     quantity: '1',
     unitPrice: '0',
     gstRate: '18',
-    dueDate: defaultDueDate(),
+    dueDate: '',
     notes: '',
   }))
   const [invoiceMessage, setInvoiceMessage] = useState('')
@@ -185,11 +180,11 @@ const greeting =
       customerId,
       invoiceNumber: `INV-${Date.now()}`,
       issueDate,
-      dueDate: invoiceForm.dueDate || new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString().slice(0, 10),
+      dueDate: invoiceForm.dueDate || undefined,
       subtotal,
       gstAmount,
       totalAmount,
-      status: 'SENT',
+      status: invoiceForm.dueDate ? 'SENT' : 'PAID',
     })
 
     if (!result.ok) {
@@ -197,7 +192,9 @@ const greeting =
       return
     }
 
-    setInvoiceMessage(`Invoice ${result.invoice?.invoiceNumber ?? 'generated'} sent to the selected customer.`)
+    setInvoiceMessage(invoiceForm.dueDate
+      ? `Invoice ${result.invoice?.invoiceNumber ?? 'generated'} sent as pending to the selected customer.`
+      : `Invoice ${result.invoice?.invoiceNumber ?? 'generated'} created and marked as paid.`)
     setInvoiceForm((current) => ({
       ...current,
       productName: '',
@@ -205,6 +202,7 @@ const greeting =
       quantity: '1',
       unitPrice: '0',
       gstRate: '18',
+      dueDate: '',
       notes: '',
     }))
   }
@@ -514,9 +512,9 @@ const greeting =
                     <TextField size="small" label="Quantity" type="number" value={invoiceForm.quantity} onChange={(event) => handleInvoiceInput('quantity', event.target.value)} />
                     <TextField size="small" label="Unit price" type="number" value={invoiceForm.unitPrice} onChange={(event) => handleInvoiceInput('unitPrice', event.target.value)} />
                     <TextField size="small" label="GST %" type="number" value={invoiceForm.gstRate} onChange={(event) => handleInvoiceInput('gstRate', event.target.value)} />
-                    <TextField size="small" label="Due date" type="date" value={invoiceForm.dueDate} onChange={(event) => handleInvoiceInput('dueDate', event.target.value)} />
+                    <TextField size="small" label="Due date (optional)" type="date" value={invoiceForm.dueDate} onChange={(event) => handleInvoiceInput('dueDate', event.target.value)} helperText="Leave blank to record as paid; add a due date to send as pending." />
                     <Button variant="contained" onClick={handleCreateInvoice} endIcon={<ArrowRight size={15} />} sx={(theme) => ({ borderRadius: 2.5, background: theme.palette.primary.main, textTransform: 'none', fontWeight: 700 })}>
-                      Generate & send
+                      {invoiceForm.dueDate ? 'Create pending invoice' : 'Create paid invoice'}
                     </Button>
                     {invoiceMessage ? <Typography variant="caption" color={invoiceMessage.includes('failed') || invoiceMessage.includes('Select') ? 'error.main' : 'success.main'}>{invoiceMessage}</Typography> : null}
                   </Stack>

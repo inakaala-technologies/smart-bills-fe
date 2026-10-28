@@ -1,11 +1,13 @@
 import axios, { AxiosHeaders, type AxiosAdapter, type AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
+import { v4 as uuidv4 } from 'uuid';
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://13.233.126.174:8084'
 const parsedApiBaseUrl = new URL(API_BASE_URL)
 const isLoopbackApi = ['localhost', '127.0.0.1', '::1'].includes(parsedApiBaseUrl.hostname)
+const isHttpPage = typeof window !== 'undefined' && window.location.protocol === 'http:'
 
-if (import.meta.env.PROD && parsedApiBaseUrl.protocol !== 'https:' && !isLoopbackApi) {
-  throw new Error('Production API requests must use HTTPS.')
+if (import.meta.env.PROD && parsedApiBaseUrl.protocol !== 'https:' && !isLoopbackApi && !isHttpPage) {
+  throw new Error('HTTPS pages must use an HTTPS API.')
 }
 
 export class ApiClientError extends Error {
@@ -93,10 +95,7 @@ function stableSerialize(value: unknown): string {
 }
 
 function createIdempotencyKey(): string {
-  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
-  const bytes = new Uint8Array(16)
-  globalThis.crypto?.getRandomValues(bytes)
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return uuidv4();
 }
 
 function getMutationKey(config: Parameters<AxiosAdapter>[0]): string | null {

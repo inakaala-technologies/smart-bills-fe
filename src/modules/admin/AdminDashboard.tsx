@@ -103,11 +103,6 @@ function formatCurrency(value?: number) {
   return `₹${value.toLocaleString('en-IN')}`
 }
 
-function defaultDueDate() {
-  const dueDate = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7)
-  return dueDate.toISOString().slice(0, 10)
-}
-
 export function AdminDashboard() {
   const navigate = useNavigate()
   const dispatch = useAppDispatch()
@@ -121,7 +116,7 @@ export function AdminDashboard() {
     quantity: '1',
     unitPrice: '0',
     gstRate: '18',
-    dueDate: defaultDueDate(),
+    dueDate: '',
   }))
   const [invoiceMessage, setInvoiceMessage] = useState('')
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
@@ -171,11 +166,11 @@ export function AdminDashboard() {
       customerId,
       invoiceNumber: `INV-${Date.now()}`,
       issueDate: new Date().toISOString().slice(0, 10),
-      dueDate: invoiceForm.dueDate || new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString().slice(0, 10),
+      dueDate: invoiceForm.dueDate || undefined,
       subtotal,
       gstAmount,
       totalAmount,
-      status: 'SENT',
+      status: invoiceForm.dueDate ? 'SENT' : 'PAID',
     })
 
     if (!result.ok) {
@@ -183,8 +178,10 @@ export function AdminDashboard() {
       return
     }
 
-    setInvoiceMessage(`Invoice ${result.invoice?.invoiceNumber ?? 'generated'} sent to the selected customer.`)
-    setInvoiceForm((current) => ({ ...current, productName: '', quantity: '1', unitPrice: '0', gstRate: '18' }))
+    setInvoiceMessage(invoiceForm.dueDate
+      ? `Invoice ${result.invoice?.invoiceNumber ?? 'generated'} sent as pending to the selected customer.`
+      : `Invoice ${result.invoice?.invoiceNumber ?? 'generated'} created and marked as paid.`)
+    setInvoiceForm((current) => ({ ...current, productName: '', quantity: '1', unitPrice: '0', gstRate: '18', dueDate: '' }))
     dispatch(fetchAdminDashboard())
   }
 

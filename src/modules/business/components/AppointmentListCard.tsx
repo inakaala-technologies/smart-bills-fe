@@ -127,8 +127,13 @@ export function AppointmentListCard({ appointments, customers, businessId, onUpd
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                     {appointment.scheduledAt ? new Date(appointment.scheduledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Schedule pending'}
                     {appointment.durationMinutes ? ` · ${appointment.durationMinutes} min` : ''}
-                    {appointment.servicePrice !== undefined ? ` · ₹${appointment.servicePrice.toLocaleString('en-IN')}` : ''}
+                    {appointment.servicePrice !== undefined ? ` · ₹${(appointment.servicePrice - (appointment.loyaltyDiscountAmount ?? 0)).toLocaleString('en-IN')}` : ''}
                   </Typography>
+                  {(appointment.loyaltyPointsRedeemed ?? 0) > 0 && (
+                    <Typography variant="caption" color="success.main" sx={{ display: 'block', fontWeight: 700 }}>
+                      {appointment.loyaltyPointsRedeemed} points redeemed · ₹{Number(appointment.loyaltyDiscountAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} off
+                    </Typography>
+                  )}
                   {appointment.notes && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{appointment.notes}</Typography>}
                 </Box>
                 <Stack direction={{ xs: 'row', sm: 'column' }} spacing={0.8} sx={{ alignItems: { xs: 'center', sm: 'flex-end' }, justifyContent: { xs: 'space-between', sm: 'flex-start' }, flexWrap: 'wrap', minWidth: 0 }}>

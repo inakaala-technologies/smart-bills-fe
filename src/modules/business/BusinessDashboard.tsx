@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Box, Container, Paper, Stack, Typography } from '@mui/material'
-import { useNavigate } from 'react-router-dom'
+import { Alert, Box, Button, Container, Paper, Snackbar, Stack, Typography } from '@mui/material'
+import { useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import type { LocationValue } from '../../components/LocationPicker'
 import { createBusiness, createInvoice, searchCustomers, updateInvoiceStatus, type DashboardData } from '../../services/api'
+import { setBusinessMembershipsEnabled } from '../../services/api/businessApi'
+import { setBusinessAppointmentsEnabled } from '../../services/api/appointmentsApi'
 import { addProfile, getCurrentUser, logoutUser, switchAccount, type Role } from '../../services/auth'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import type { RootState } from '../../store/store'
-import { fetchBusinessDashboard, fetchBusinessSummary, setActiveTab, setSelectedBusinessId } from '../../store/businessDashboardSlice'
+import { ArrowLeft } from 'lucide-react'
+import { BusinessProductsSection } from './components/BusinessProductsSection'
+import { getBusinessProducts } from '../../services/api/billingApi'
+import { fetchBusinessDashboard, fetchBusinessSummary, setActiveTab,setBusinessFeatures, setSelectedBusinessId } from '../../store/businessDashboardSlice'
 import { setAuthUser } from '../../store/authSlice'
 import { AppointmentListCard } from './components/AppointmentListCard'
 import { AppointmentServiceManager } from './components/AppointmentServiceManager'
@@ -23,34 +28,68 @@ import { InvoiceListPanel } from './components/InvoiceListPanel'
 import { MembershipWorkspace } from './components/MembershipWorkspace'
 import { CustomerRetentionWorkspace } from './components/CustomerRetentionWorkspace'
 import { BusinessInsightsWorkspace } from './components/BusinessInsightsWorkspace'
+import { GlobalSearchWorkspace } from './components/GlobalSearchWorkspace'
+import { LoyaltyWorkspace } from './components/LoyaltyWorkspace'
 import { AddCustomerDialog } from './components/AddCustomerDialog'
 import { SendMembershipNotificationDialog } from './components/SendMembershipNotificationDialog'
+import type { BusinessFeature } from './components/BusinessProfileCard'
 import type { QuickActionId } from './components/QuickActionGrid'
+import type { DashboardTab } from '../types'
 import { normalizeBusinessType } from '../../constants/businessTypes'
+import { v4 as uuidv4 } from 'uuid';
+
+const businessDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'customers', 'appointments', 'memberships', 'loyalty', 'offers', 'retention', 'insights', 'search', 'profile']
 
 function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
   return `₹${value.toLocaleString('en-IN')}`
 }
 
-function defaultDueDate() {
-  const dueDate = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7)
-  return dueDate.toISOString().slice(0, 10)
+function getLocalDate() {
+  const date = new Date()
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
 }
 
 export function BusinessDashboard() {
   const navigate = useNavigate()
+  const { tab: routeTab } = useParams()
   const dispatch = useAppDispatch()
   const authUser = getCurrentUser()
   const accountRoles = new Set((authUser?.accounts ?? []).map((account) => account.role).concat(authUser?.role ?? 'BUSINESS'))
   const availableAccounts = (authUser?.accounts ?? []).filter((account) => account.role !== authUser?.role)
   const missingProfileRoles = (['BUSINESS', 'CUSTOMER'] as Role[]).filter((role) => role !== authUser?.role && !accountRoles.has(role))
   const { data, activeTab, selectedBusinessId } = useAppSelector((state: RootState) => state.businessDashboard)
+  const changeTab = useCallback((tab: DashboardTab, replace = false) => {
+    dispatch(setActiveTab(tab))
+    navigate(`/dashboard/${tab}`, { replace })
+  }, [dispatch, navigate])
+
+  useEffect(() => {
+    const matchingTab = businessDashboardTabs.find((tab) => tab === routeTab)
+    if (matchingTab) {
+      dispatch(setActiveTab(matchingTab))
+    } else {
+      changeTab('overview', true)
+    }
+  }, [changeTab, dispatch, routeTab])
 
   const selectedBusiness = data.businesses.find((business) => business.id === selectedBusinessId) ?? data.businesses[0] ?? null
+  const appointmentsEnabled = selectedBusiness?.appointmentsEnabled ?? false
+  const membershipsEnabled = selectedBusiness?.membershipsEnabled ?? true
+
+  useEffect(() => {
+    if (!selectedBusiness) return
+    if ((activeTab === 'appointments' && !appointmentsEnabled) || (activeTab === 'memberships' && !membershipsEnabled)) {
+      changeTab('overview', true)
+    }
+  }, [activeTab, appointmentsEnabled, changeTab, membershipsEnabled, selectedBusiness])
 
   const createInvoiceItem = (): InvoiceLineItemForm => ({
-    id: crypto.randomUUID(),
+    id: uuidv4(),
     productName: '',
     quantity: '1',
     unitPrice: '0',
@@ -58,12 +97,18 @@ export function BusinessDashboard() {
   })
   const [invoiceForm, setInvoiceForm] = useState<BusinessInvoiceForm>(() => ({
     customerId: data.customers[0]?.id ?? '',
-    dueDate: defaultDueDate(),
+    dueDate: '',
+    loyaltyPointsToRedeem: '0',
     items: [createInvoiceItem()],
   }))
   const [invoiceMessage, setInvoiceMessage] = useState('')
+  const [invoiceMessageSeverity, setInvoiceMessageSeverity] = useState<'error' | 'success'>('success')
+  const [isInvoiceSuccessToastOpen, setIsInvoiceSuccessToastOpen] = useState(false)
   const [isInvoiceSubmitting, setIsInvoiceSubmitting] = useState(false)
   const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false)
+  const [isProductsViewOpen, setIsProductsViewOpen] = useState(false)
+  const [activeProductCount, setActiveProductCount] = useState(0)
+  const [previewInvoiceId, setPreviewInvoiceId] = useState<number | null>(null)
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false)
   const [isNotificationDialogOpen, setIsNotificationDialogOpen] = useState(false)
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
@@ -110,20 +155,71 @@ export function BusinessDashboard() {
   const handleQuickAction = (action: QuickActionId) => {
     if (action === 'invoice') {
       setInvoiceMessage('')
-      dispatch(setActiveTab('invoices'))
+      changeTab('invoices')
       setIsInvoiceFormOpen(true)
     } else if (action === 'customer') {
       setIsAddCustomerOpen(true)
+    } else if (action === 'appointment') {
+      changeTab('appointments')
     } else if (action === 'membership') {
-      dispatch(setActiveTab('memberships'))
+      changeTab('memberships')
     } else {
       setIsNotificationDialogOpen(true)
     }
   }
 
+  const handleFeatureToggle = async (feature: BusinessFeature, enabled: boolean) => {
+    if (!selectedBusiness) return { ok: false, message: 'Select a business profile first.' }
+    const result = feature === 'appointments'
+      ? await setBusinessAppointmentsEnabled(selectedBusiness.id, enabled)
+      : await setBusinessMembershipsEnabled(selectedBusiness.id, enabled)
+    if (!result.ok || !result.business) {
+      return { ok: false, message: result.message ?? 'Could not update this feature.' }
+    }
+    dispatch(setBusinessFeatures({
+      businessId: selectedBusiness.id,
+      appointmentsEnabled: result.business.appointmentsEnabled ?? false,
+      membershipsEnabled: result.business.membershipsEnabled ?? true,
+    }))
+    return { ok: true }
+  }
+
   useEffect(() => {
     if (selectedBusiness) dispatch(fetchBusinessSummary(selectedBusiness.id))
   }, [dispatch, selectedBusiness])
+
+  useEffect(() => {
+  let cancelled = false
+
+  const loadActiveProductCount = async () => {
+    if (!selectedBusiness?.id) {
+      setActiveProductCount(0)
+      return
+    }
+
+    try {
+      const result = await getBusinessProducts(selectedBusiness.id)
+
+      if (cancelled) return
+
+      if (result.ok) {
+        const count = result.products.filter(
+          (product) => product.status === 'ACTIVE',
+        ).length
+
+        setActiveProductCount(count)
+      }
+    } catch (error) {
+      console.error('Failed to load active product count:', error)
+    }
+  }
+
+  void loadActiveProductCount()
+
+  return () => {
+    cancelled = true
+  }
+}, [selectedBusiness?.id])
 
   useEffect(() => {
     if (!data.businesses.length || selectedBusinessId !== null) return
@@ -165,7 +261,7 @@ export function BusinessDashboard() {
     }
   }, [customerSearchText, data.customers])
 
-  const handleInvoiceInput = (field: 'customerId' | 'dueDate', value: string) => {
+  const handleInvoiceInput = (field: 'customerId' | 'dueDate' | 'loyaltyPointsToRedeem', value: string) => {
     setInvoiceForm((current) => ({ ...current, [field]: value }))
   }
 
@@ -257,10 +353,10 @@ export function BusinessDashboard() {
     setBusinessMessage('Business profile saved successfully.')
     setIsCreatingBusiness(false)
     dispatch(fetchBusinessDashboard(savedBusiness.id ?? undefined))
-    dispatch(setActiveTab('overview'))
+    changeTab('overview')
   }
 
-  const handleCreateInvoice = async (status: 'DRAFT' | 'SENT') => {
+  const handleCreateInvoice = async (status: 'DRAFT' | 'SENT' | 'PAID') => {
     const businessId = selectedBusinessId ?? selectedBusiness?.id ?? data.businesses[0]?.id
     const customerId = Number(invoiceForm.customerId)
     const items = invoiceForm.items.map((item) => ({
@@ -271,11 +367,13 @@ export function BusinessDashboard() {
     }))
 
     if (!businessId || !customerId) {
+      setInvoiceMessageSeverity('error')
       setInvoiceMessage('Select a customer before generating an invoice.')
-      return
+      return 
     }
 
     if (items.some((item) => !item.productName.trim() || !Number.isFinite(item.quantity) || item.quantity <= 0 || !Number.isFinite(item.unitPrice) || item.unitPrice <= 0 || !Number.isFinite(item.gstRate) || item.gstRate < 0)) {
+      setInvoiceMessageSeverity('error')
       setInvoiceMessage('Enter a product name, positive quantity and price, and a valid GST rate for every product.')
       return
     }
@@ -283,36 +381,53 @@ export function BusinessDashboard() {
     const subtotal = Number(items.reduce((total, item) => total + item.quantity * item.unitPrice, 0).toFixed(2))
     const gstAmount = Number(items.reduce((total, item) => total + item.quantity * item.unitPrice * (item.gstRate / 100), 0).toFixed(2))
     const totalAmount = Number((subtotal + gstAmount).toFixed(2))
-    const issueDate = new Date().toISOString().slice(0, 10)
-
+    const issueDate = getLocalDate()
+    // const issueDate = new Date().toISOString().slice(0, 10)
     setIsInvoiceSubmitting(true)
     try {
       const result = await createInvoice({
-        businessId,
-        customerId,
-        invoiceNumber: `INV-${Date.now()}`,
-        issueDate,
-        dueDate: invoiceForm.dueDate || new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString().slice(0, 10),
-        subtotal,
-        gstAmount,
-        totalAmount,
-        status,
-      })
+  businessId,
+  customerId,
+  invoiceNumber: `INV-${Date.now()}`,
+  issueDate,
+  ...(invoiceForm.dueDate ? { dueDate: invoiceForm.dueDate } : {}),
+  subtotal,
+  gstAmount,
+  totalAmount,
+  status,
+  loyaltyPointsToRedeem: Math.max(0, Math.floor(Number(invoiceForm.loyaltyPointsToRedeem) || 0)),
+})
 
       if (!result.ok) {
-        setInvoiceMessage(result.message ?? 'Invoice generation failed.')
-        return
+  setInvoiceMessageSeverity('error')
+  setInvoiceMessage(result.message ?? 'Invoice generation failed.')
+  return
+}
+
+      if (status === 'SENT') {
+        setInvoiceMessage('')
+        setIsInvoiceFormOpen(false)
+        setIsInvoiceSuccessToastOpen(true)
+      } else {
+        setInvoiceMessageSeverity('success')
+        setInvoiceMessage(
+          `Invoice ${result.invoice?.invoiceNumber ?? 'draft'} saved as a draft.`
+        )
       }
 
-      setInvoiceMessage(status === 'DRAFT'
-        ? `Invoice ${result.invoice?.invoiceNumber ?? 'draft'} saved as a draft.`
-        : `Invoice ${result.invoice?.invoiceNumber ?? 'generated'} sent to the selected customer.`)
-      setInvoiceForm((current) => ({ ...current, customerId: '', items: [createInvoiceItem()] }))
+      setInvoiceForm((current) => ({
+        ...current,
+        customerId: '',
+        loyaltyPointsToRedeem: '0',
+        items: [createInvoiceItem()],
+      }))
+
       setSelectedCustomer(null)
       setCustomerSearchText('')
       dispatch(fetchBusinessDashboard(businessId))
     } catch (error) {
-      setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation failed.')
+setInvoiceMessageSeverity('error')
+setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation failed.')
     } finally {
       setIsInvoiceSubmitting(false)
     }
@@ -345,10 +460,19 @@ export function BusinessDashboard() {
       id: invoice.id,
       customerName,
       customerEmail: customer?.email,
+      customerPhone: customer?.phoneNumber,
+      customerAddress: customer?.locationAddress,
       invoiceNumber: invoice.invoiceNumber ?? `INV-${invoice.id}`,
       status: invoice.status ?? 'SENT',
+      issueDate: invoice.issueDate,
       dueDate: invoice.dueDate,
+      subtotal: invoice.subtotal,
+      gstAmount: invoice.gstAmount,
+      totalAmount: invoice.totalAmount,
       amount: formatCurrency(invoice.totalAmount),
+      loyaltyDetails: (invoice.loyaltyPointsRedeemed ?? 0) > 0
+        ? `${invoice.loyaltyPointsRedeemed} points redeemed · ${formatCurrency(invoice.loyaltyDiscountAmount)} discount`
+        : undefined,
       date: invoiceDate && !Number.isNaN(invoiceDate.getTime())
         ? invoiceDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
         : '—',
@@ -402,10 +526,12 @@ export function BusinessDashboard() {
             <Stack spacing={1.6}>
               <BusinessMenu
                 activeTab={activeTab}
+                appointmentsEnabled={appointmentsEnabled}
+                membershipsEnabled={membershipsEnabled}
                 anchorEl={menuAnchorEl}
                 isOpen={isMenuOpen}
                 onClose={() => setMenuAnchorEl(null)}
-                onChangeTab={(tab) => dispatch(setActiveTab(tab))}
+                onChangeTab={changeTab}
                 currentRole={authUser?.role ?? 'BUSINESS'}
                 availableAccounts={availableAccounts}
                 missingProfileRoles={missingProfileRoles}
@@ -432,8 +558,37 @@ export function BusinessDashboard() {
                   navigate('/')
                 }}
               />
+              {isProductsViewOpen ? (
+            <Stack spacing={2}>
+              <Button
+                variant="text"
+                startIcon={<ArrowLeft size={18} />}
+                onClick={() => setIsProductsViewOpen(false)}
+                sx={{ alignSelf: 'flex-start', textTransform: 'none' }}
+              >
+                Back to Business Profile
+              </Button>
 
-            {activeTab === 'overview' && <BusinessDashboardOverview onQuickAction={handleQuickAction} hasBusiness={Boolean(selectedBusiness)} />}
+              <BusinessProductsSection
+                businessId={selectedBusiness?.id ?? null}
+                onProductCountChange={setActiveProductCount}
+              />
+            </Stack>
+          ) : (
+            <>
+              {activeTab === 'overview' && (
+                <BusinessDashboardOverview
+                  onQuickAction={handleQuickAction}
+                  onOpenInsights={() => changeTab('insights')}
+                  onOpenInvoice={(invoiceId) => {
+                    setPreviewInvoiceId(invoiceId)
+                    changeTab('invoices')
+                  }}
+                  hasBusiness={Boolean(selectedBusiness)}
+                  appointmentsEnabled={appointmentsEnabled}
+                  membershipsEnabled={membershipsEnabled}
+                />
+              )}
 
             {activeTab === 'businesses' && (
               <BusinessOverview
@@ -479,12 +634,21 @@ export function BusinessDashboard() {
               <Stack spacing={1.6}>
                 <InvoiceListPanel
                   invoiceRows={invoiceRows}
-                  onBack={() => dispatch(setActiveTab('overview'))}
+                  businessDetails={{
+                    name: selectedBusiness?.businessName ?? selectedBusiness?.name ?? 'Business',
+                    address: selectedBusiness?.address,
+                    email: selectedBusiness?.email,
+                    phone: selectedBusiness?.phone,
+                    gstin: selectedBusiness?.gstin,
+                  }}
+                  onBack={() => changeTab('overview')}
                   onCreateInvoice={() => {
                     setInvoiceMessage('')
                     setIsInvoiceFormOpen(true)
                   }}
                   onUpdateStatus={handleInvoiceStatusChange}
+                  previewInvoiceId={previewInvoiceId}
+                  onPreviewClosed={() => setPreviewInvoiceId(null)}
                 />
 
                 <InvoiceGeneratorCard
@@ -497,6 +661,7 @@ export function BusinessDashboard() {
                   isCustomerSearching={isCustomerSearching}
                   invoiceForm={invoiceForm}
                   invoiceMessage={invoiceMessage}
+                  invoiceMessageSeverity={invoiceMessageSeverity}
                   isSubmitting={isInvoiceSubmitting}
                   onClose={() => setIsInvoiceFormOpen(false)}
                   onCustomerSearchChange={setCustomerSearchText}
@@ -504,6 +669,7 @@ export function BusinessDashboard() {
                     setSelectedCustomer(customer)
                     if (customer) {
                       handleInvoiceInput('customerId', String(customer.id))
+                      handleInvoiceInput('loyaltyPointsToRedeem', '0')
                     }
                   }}
                   onInvoiceFieldChange={handleInvoiceInput}
@@ -515,7 +681,14 @@ export function BusinessDashboard() {
               </Stack>
             )}
 
-            {activeTab === 'customers' && <CustomerListCard customers={data.customers} onOpenCustomer={handleOpenCustomer} />}
+            {activeTab === 'customers' && selectedBusiness && (
+              <CustomerListCard
+                businessId={selectedBusiness.id}
+                customers={data.customers}
+                onOpenCustomer={handleOpenCustomer}
+                onAddCustomer={() => setIsAddCustomerOpen(true)}
+              />
+            )}
 
             {activeTab === 'retention' && selectedBusiness && (
               <CustomerRetentionWorkspace
@@ -528,9 +701,27 @@ export function BusinessDashboard() {
               />
             )}
 
-            {activeTab === 'insights' && selectedBusiness && <BusinessInsightsWorkspace key={selectedBusiness.id} businessId={selectedBusiness.id} />}
+            {activeTab === 'loyalty' && selectedBusiness && (
+              <LoyaltyWorkspace
+                key={selectedBusiness.id}
+                businessId={selectedBusiness.id}
+                products={data.products}
+              />
+            )}
 
-            {activeTab === 'memberships' && selectedBusiness && (
+            {activeTab === 'insights' && selectedBusiness && <BusinessInsightsWorkspace key={selectedBusiness.id} businessId={selectedBusiness.id} appointmentsEnabled={appointmentsEnabled} membershipsEnabled={membershipsEnabled} />}
+
+            {activeTab === 'search' && (
+              <GlobalSearchWorkspace
+                data={data}
+                appointmentsEnabled={appointmentsEnabled}
+                membershipsEnabled={membershipsEnabled}
+                onOpenCustomer={handleOpenCustomer}
+                onChangeTab={changeTab}
+              />
+            )}
+
+            {activeTab === 'memberships' && membershipsEnabled && selectedBusiness && (
               <MembershipWorkspace
                 key={selectedBusiness.id}
                 businessId={selectedBusiness.id}
@@ -540,7 +731,7 @@ export function BusinessDashboard() {
               />
             )}
 
-            {activeTab === 'appointments' && (
+            {activeTab === 'appointments' && appointmentsEnabled && (
               <Stack spacing={1.6}>
                 {selectedBusiness && (
                   <AppointmentServiceManager
@@ -563,14 +754,21 @@ export function BusinessDashboard() {
               <BusinessProfileCard
                 authUser={authUser}
                 businessForm={businessForm}
-                  location={businessLocation}
+                location={businessLocation}
                 profileId={selectedBusiness?.profileId}
                 isCreatingBusiness={isCreatingBusiness}
                 businessMessage={businessMessage}
-                onBusinessFieldChange={handleBusinessFieldChange}
+                  appointmentsEnabled={appointmentsEnabled}
+                  membershipsEnabled={membershipsEnabled}
+                  onBusinessFieldChange={handleBusinessFieldChange}
                   onLocationChange={handleBusinessLocationChange}
                 onSave={handleSaveBusinessProfile}
+                onManageProducts={() => setIsProductsViewOpen(true)}
+                activeProductCount={activeProductCount}
+                onFeatureToggle={handleFeatureToggle}
               />
+            )}
+            </>
             )}
           </Stack>
         </Box>
@@ -593,7 +791,22 @@ export function BusinessDashboard() {
           </>
         )}
 
-        <BottomNavBar activeTab={activeTab} onChangeTab={(tab) => dispatch(setActiveTab(tab))} />
+        <Snackbar
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+          open={isInvoiceSuccessToastOpen}
+          autoHideDuration={2500}
+          onClose={() => setIsInvoiceSuccessToastOpen(false)}
+        >
+          <Alert
+            severity="success"
+            variant="filled"
+            sx={{ width: '100%', py: 0.25 }}
+          >
+            Invoice sent successfully!
+          </Alert>
+        </Snackbar>
+
+        <BottomNavBar activeTab={activeTab} membershipsEnabled={membershipsEnabled} onChangeTab={(tab) => dispatch(setActiveTab(tab))} />
       </Paper>
     </Container>
   </Box>

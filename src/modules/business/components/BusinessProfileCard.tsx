@@ -1,8 +1,11 @@
-import { Button, Card, CardContent, MenuItem, TextField, Typography, Box, Stack } from '@mui/material'
-import { Plus } from 'lucide-react'
+import { Plus, Package, ChevronRight } from 'lucide-react'
+import { useState } from 'react'
+import { Alert, Button, Card, CardContent, FormControlLabel, MenuItem, Switch, TextField, Typography, Box, Stack } from '@mui/material'
 import type { Role } from '../../../services/auth'
 import { LocationPicker, type LocationValue } from '../../../components/LocationPicker'
 import { BUSINESS_TYPES } from '../../../constants/businessTypes'
+
+export type BusinessFeature = 'appointments' | 'memberships'
 
 export type BusinessProfileCardProps = {
   authUser: { id: string; name: string; email: string; phone?: string; role: Role } | null
@@ -11,12 +14,30 @@ export type BusinessProfileCardProps = {
   profileId?: string
   isCreatingBusiness: boolean
   businessMessage: string
+  appointmentsEnabled: boolean
+  membershipsEnabled: boolean
   onBusinessFieldChange: (field: 'name' | 'legalName' | 'phone' | 'address' | 'businessType', value: string) => void
   onLocationChange: (value: LocationValue) => void
+  onFeatureToggle: (feature: BusinessFeature, enabled: boolean) => Promise<{ ok: boolean; message?: string }>
   onSave: () => void
+  onManageProducts: () => void
+  activeProductCount?: number
 }
 
-export function BusinessProfileCard({ authUser, businessForm, location, profileId, isCreatingBusiness, businessMessage, onBusinessFieldChange, onLocationChange, onSave }: BusinessProfileCardProps) {
+export function BusinessProfileCard({ authUser, businessForm, location, profileId, isCreatingBusiness, businessMessage, appointmentsEnabled, membershipsEnabled, onBusinessFieldChange, onLocationChange, onFeatureToggle, onSave ,onManageProducts, activeProductCount = 0 }: BusinessProfileCardProps) {
+  const [savingFeature, setSavingFeature] = useState<BusinessFeature | null>(null)
+  const [featureMessage, setFeatureMessage] = useState('')
+
+  const handleFeatureToggle = async (feature: BusinessFeature, enabled: boolean) => {
+    setSavingFeature(feature)
+    setFeatureMessage('')
+    const result = await onFeatureToggle(feature, enabled)
+    setSavingFeature(null)
+    if (!result.ok) {
+      setFeatureMessage(result.message ?? 'Could not update this feature.')
+    }
+  }
+
   return (
     <Card variant="outlined" sx={{ borderRadius: 3.2, border: '1px solid var(--mui-palette-divider)', backgroundColor: 'background.paper', boxShadow: '0 12px 22px rgba(0,0,0,0.14)' }}>
       <CardContent sx={{ p: 1.7 }}>
@@ -48,6 +69,43 @@ export function BusinessProfileCard({ authUser, businessForm, location, profileI
             )}
             {BUSINESS_TYPES.map((type) => <MenuItem key={type.value} value={type.value}>{type.label}</MenuItem>)}
           </TextField>
+
+          {/* Products management row */}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 2,
+              p: 1.5,
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 2.5,
+              backgroundColor: 'action.hover',
+            }}
+          >
+            <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+              <Package size={22} />
+              <Box>
+                <Typography sx={{ fontWeight: 800 }}>
+                  Products
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {activeProductCount} saved products
+                </Typography>
+              </Box>
+            </Stack>
+
+            <Button
+              variant="outlined"
+              size="small"
+              endIcon={<ChevronRight size={16} />}
+              onClick={onManageProducts}
+              sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
+            >
+              Manage
+            </Button>
+          </Box>
           <TextField
             size="small"
             label="Email"
@@ -61,6 +119,26 @@ export function BusinessProfileCard({ authUser, businessForm, location, profileI
           </Box>
           <TextField size="small" label="Phone" value={businessForm.phone} onChange={(event) => onBusinessFieldChange('phone', event.target.value)} sx={{ '& .MuiInputBase-root': { borderRadius: 2.4, backgroundColor: 'background.paper' } }} />
           <LocationPicker value={location} onChange={onLocationChange} />
+
+          <Box sx={{ p: 1.3, borderRadius: 2.4, border: '1px solid var(--mui-palette-divider)' }}>
+            <Typography sx={{ fontWeight: 850 }}>Business features</Typography>
+            <Typography variant="caption" color="text.secondary">Choose which features appear in your workspace.</Typography>
+            <Stack spacing={0.5} sx={{ mt: 0.8 }}>
+              <FormControlLabel
+                label={<Box><Typography variant="body2" sx={{ fontWeight: 750 }}>Appointments</Typography><Typography variant="caption" color="text.secondary">Show booking tools and appointment options.</Typography></Box>}
+                control={<Switch checked={appointmentsEnabled} disabled={savingFeature !== null} onChange={(event) => void handleFeatureToggle('appointments', event.target.checked)} slotProps={{ input: { 'aria-label': 'Enable appointments feature' } }} />}
+                labelPlacement="start"
+                sx={{ m: 0, justifyContent: 'space-between', '& .MuiFormControlLabel-label': { flex: 1 } }}
+              />
+              <FormControlLabel
+                label={<Box><Typography variant="body2" sx={{ fontWeight: 750 }}>Membership</Typography><Typography variant="caption" color="text.secondary">Show membership tools and options.</Typography></Box>}
+                control={<Switch checked={membershipsEnabled} disabled={savingFeature !== null} onChange={(event) => void handleFeatureToggle('memberships', event.target.checked)} slotProps={{ input: { 'aria-label': 'Enable membership feature' } }} />}
+                labelPlacement="start"
+                sx={{ m: 0, justifyContent: 'space-between', '& .MuiFormControlLabel-label': { flex: 1 } }}
+              />
+            </Stack>
+            {featureMessage && <Alert severity="error" sx={{ mt: 1 }}>{featureMessage}</Alert>}
+          </Box>
 
           <Button variant="contained" disabled={isCreatingBusiness} onClick={onSave} startIcon={<Plus size={15} />} sx={{ borderRadius: 2.8, textTransform: 'none', fontWeight: 800 }}>
             {isCreatingBusiness ? 'Saving...' : 'Save business profile'}

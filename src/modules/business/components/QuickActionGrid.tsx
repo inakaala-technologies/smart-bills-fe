@@ -1,7 +1,7 @@
-import { Box, ButtonBase, Typography } from '@mui/material'
+import { Badge, Box, ButtonBase, Typography } from '@mui/material'
 import type { LucideIcon } from 'lucide-react'
 
-export type QuickActionId = 'invoice' | 'customer' | 'membership' | 'notification'
+export type QuickActionId = 'invoice' | 'customer' | 'membership' | 'appointment' | 'notification'
 
 export type QuickActionCardProps = {
   id: QuickActionId
@@ -9,16 +9,17 @@ export type QuickActionCardProps = {
   icon: LucideIcon
   onClick: () => void
   disabled?: boolean
+  badge?: number
 }
 
 export function QuickActionGrid({ actions }: { actions: QuickActionCardProps[] }) {
   return (
     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 0.8 }}>
-      {actions.map(({ id, label, icon: Icon, onClick, disabled }) => (
+      {actions.map(({ id, label, icon: Icon, onClick, disabled, badge }) => (
         <ButtonBase
           key={id}
           type="button"
-          aria-label={label}
+          aria-label={badge ? `${label}, ${badge} new ${badge === 1 ? 'appointment' : 'appointments'}` : label}
           onClick={onClick}
           disabled={disabled}
           sx={{
@@ -44,7 +45,15 @@ export function QuickActionGrid({ actions }: { actions: QuickActionCardProps[] }
           }}
         >
           <Box sx={{ mx: 'auto', width: 31, height: 31, borderRadius: '50%', backgroundColor: 'color-mix(in srgb, var(--mui-palette-primary-main) 14%, var(--mui-palette-background-paper))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--mui-palette-primary-main)', mb: 0.55 }}>
-            <Icon size={16} />
+            <Badge
+              badgeContent={badge}
+              color="error"
+              max={99}
+              invisible={!badge}
+              sx={{ '& .MuiBadge-badge': { fontSize: 9, fontWeight: 800, minWidth: 16, height: 16, px: 0.4 } }}
+            >
+              <Icon size={16} />
+            </Badge>
           </Box>
           <Typography sx={{ fontWeight: 700, color: 'var(--mui-palette-text-primary)', fontSize: 10, lineHeight: 1.2 }}>{label}</Typography>
         </ButtonBase>

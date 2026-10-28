@@ -296,19 +296,23 @@ export async function updateCurrentUserProfile(input: {
   return { ok: true, user: updatedUser }
 }
 
-export async function loginUser(input: { email: string; password: string; role?: Role }) {
-  const email = input.email.trim().toLowerCase()
+export async function loginUser(input: { identifier: string; password: string; role?: Role }) {
+  const identifier = input.identifier.trim()
   const password = input.password
+  const isEmail = identifier.includes('@')
 
-  if (!email || !password || email.length > 254 || new TextEncoder().encode(password).length > 72) {
-    return { ok: false, message: 'Email and password are required.' }
+  if (!identifier || !password || new TextEncoder().encode(password).length > 72) {
+    return { ok: false, message: 'Email or phone number and password are required.' }
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (isEmail && (identifier.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier))) {
     return { ok: false, message: 'Please enter a valid email address.' }
+  }
+  if (!isEmail && identifier.length > 30) {
+    return { ok: false, message: 'Phone number must be 30 characters or fewer.' }
   }
 
   const apiResult = await callApi<{ id?: number | string; name?: string; email?: string; phone?: string; role?: Role; activeRole?: Role; tenantId?: number; businessId?: number; accessToken?: string; accounts?: Array<{ role?: Role; tenantId?: number; businessId?: number; status?: string }>; message?: string }>('/api/v1/auth/login', {
-    email,
+    ...(isEmail ? { email: identifier } : { phone: identifier }),
     password,
   })
 
@@ -328,9 +332,9 @@ export async function loginUser(input: { email: string; password: string; role?:
   const fallbackAccounts = [{ role: responseData.role ?? input.role ?? 'BUSINESS', tenantId: Number(responseData.tenantId ?? 1), businessId: Number(responseData.businessId ?? 0) || undefined, status: 'ACTIVE' }]
   const user: AuthUser = {
     id: String(responseData.id ?? '1'),
-    name: responseData.name ?? email,
-    email: responseData.email ?? email,
-    phone: responseData.phone ?? undefined,
+    name: responseData.name ?? responseData.email ?? responseData.phone ?? identifier,
+    email: responseData.email ?? (isEmail ? identifier : ''),
+    phone: responseData.phone ?? (!isEmail ? identifier : undefined),
     accessToken: responseData.accessToken,
     role: responseData.role ?? input.role ?? 'BUSINESS',
     activeRole: responseData.activeRole ?? (responseData.role ?? input.role ?? 'BUSINESS'),

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { alpha } from '@mui/material/styles'
-import { Box, Button, Card, CardContent, Chip, CircularProgress, Container, Divider, Paper, Stack, Typography } from '@mui/material'
-import { CalendarDays, CreditCard, Plus, ReceiptText, ShieldCheck } from 'lucide-react'
+import { Avatar, Box, Button, Card, CardContent, Chip, CircularProgress, Container, Divider, Paper, Stack, Typography } from '@mui/material'
+import { ArrowLeft, CalendarDays, CreditCard, Mail, Phone, Plus, ReceiptText, ShieldCheck } from 'lucide-react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from './AppHeader'
 import { BottomNavBar } from '../modules/business/components/BottomNavBar'
@@ -18,13 +18,10 @@ import { setAuthUser } from '../store/authSlice'
 import { fetchBusinessDashboard, setActiveTab as setBusinessTab } from '../store/businessDashboardSlice'
 import { setActiveTab as setCustomerTab, setSelectedCustomerId } from '../store/customerDashboardSlice'
 import type { DashboardTab } from '../modules/types'
+import { v4 as uuidv4 } from 'uuid';
 
 function createInvoiceItem(): InvoiceLineItemForm {
-  return { id: crypto.randomUUID(), productName: '', quantity: '1', unitPrice: '0', gstRate: '18' }
-}
-
-function getDefaultDueDate() {
-  return new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString().slice(0, 10)
+  return { id: uuidv4(), productName: '', quantity: '1', unitPrice: '0', gstRate: '18' }
 }
 
 export function DetailView() {
@@ -52,8 +49,10 @@ export function DetailView() {
   const [invoiceCustomer, setInvoiceCustomer] = useState<DashboardData['customers'][number] | null>(null)
   const [invoiceSearchText, setInvoiceSearchText] = useState('')
   const [invoiceMessage, setInvoiceMessage] = useState('')
+  const [invoiceMessageSeverity] =
+  useState<'success' | 'error'>('success')
   const [isInvoiceSubmitting, setIsInvoiceSubmitting] = useState(false)
-  const [invoiceForm, setInvoiceForm] = useState<BusinessInvoiceForm>(() => ({ customerId: '', dueDate: getDefaultDueDate(), items: [createInvoiceItem()] }))
+  const [invoiceForm, setInvoiceForm] = useState<BusinessInvoiceForm>(() => ({ customerId: '', dueDate: '', loyaltyPointsToRedeem: '0', items: [createInvoiceItem()] }))
   const memberships = dashboard.data.memberships
     .filter((membership) => membership.customerId === customerDetail)
     .sort((first, second) => new Date(second.updatedAt ?? second.startDate ?? 0).getTime() - new Date(first.updatedAt ?? first.startDate ?? 0).getTime())
@@ -83,26 +82,22 @@ export function DetailView() {
 
   const title = detail.fullName ?? 'Customer'
   const subtitle = 'Customer profile'
-  const fields: Array<[string, string]> = [
-    ['Customer ID', String(detail.id)],
-    ['Email', detail.email ?? 'Not provided'],
-    ['Phone', detail.phoneNumber ?? 'Not provided'],
-    ['Name', detail.fullName ?? 'Not provided'],
-  ]
+  const initials = title.trim().split(/\s+/).slice(0, 2).map((part) => part.charAt(0)).join('').toUpperCase()
+  const totalInvoiced = invoices.reduce((total, invoice) => total + (typeof invoice.totalAmount === 'number' && Number.isFinite(invoice.totalAmount) ? invoice.totalAmount : 0), 0)
   const formatDate = (value?: string) => value
     ? new Date(value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
     : 'Date not available'
   const formatCurrency = (value?: number) => typeof value === 'number' ? `₹${value.toLocaleString('en-IN')}` : '—'
 
   const openInvoiceDialog = () => {
-    setInvoiceForm({ customerId: detail.id, dueDate: getDefaultDueDate(), items: [createInvoiceItem()] })
+    setInvoiceForm({ customerId: detail.id, dueDate: '', loyaltyPointsToRedeem: '0', items: [createInvoiceItem()] })
     setInvoiceCustomer(detail)
     setInvoiceSearchText('')
     setInvoiceMessage('')
     setInvoiceDialogOpen(true)
   }
 
-  const handleInvoiceFieldChange = (field: 'customerId' | 'dueDate', value: string) => {
+  const handleInvoiceFieldChange = (field: 'customerId' | 'dueDate' | 'loyaltyPointsToRedeem', value: string) => {
     setInvoiceForm((current) => ({ ...current, [field]: value }))
   }
 
@@ -110,7 +105,7 @@ export function DetailView() {
     setInvoiceForm((current) => ({ ...current, items: current.items.map((item) => item.id === itemId ? { ...item, [field]: value } : item) }))
   }
 
-  const handleCreateInvoice = async (status: 'DRAFT' | 'SENT') => {
+  const handleCreateInvoice = async (status: 'DRAFT' | 'SENT' | 'PAID') => {
     const customerId = Number(invoiceForm.customerId)
     const items = invoiceForm.items.map((item) => ({
       ...item,
@@ -130,6 +125,7 @@ export function DetailView() {
 
     const subtotal = Number(items.reduce((total, item) => total + item.quantity * item.unitPrice, 0).toFixed(2))
     const gstAmount = Number(items.reduce((total, item) => total + item.quantity * item.unitPrice * (item.gstRate / 100), 0).toFixed(2))
+    const invoiceStatus = status === 'DRAFT' ? 'DRAFT' : invoiceForm.dueDate ? 'SENT' : 'PAID'
     setIsInvoiceSubmitting(true)
     try {
       const result = await createInvoice({
@@ -137,21 +133,24 @@ export function DetailView() {
         customerId,
         invoiceNumber: `INV-${Date.now()}`,
         issueDate: new Date().toISOString().slice(0, 10),
-        dueDate: invoiceForm.dueDate || getDefaultDueDate(),
+        dueDate: invoiceForm.dueDate || undefined,
         subtotal,
         gstAmount,
         totalAmount: Number((subtotal + gstAmount).toFixed(2)),
-        status,
+        status: invoiceStatus,
+        loyaltyPointsToRedeem: Math.max(0, Math.floor(Number(invoiceForm.loyaltyPointsToRedeem) || 0)),
       })
       if (!result.ok) {
         setInvoiceMessage(result.message ?? 'Invoice generation failed.')
         return
       }
 
-      setInvoiceMessage(status === 'DRAFT'
+      setInvoiceMessage(invoiceStatus === 'DRAFT'
         ? `Invoice ${result.invoice?.invoiceNumber ?? 'draft'} saved as a draft.`
-        : `Invoice ${result.invoice?.invoiceNumber ?? 'generated'} sent to the selected customer.`)
-      setInvoiceForm((current) => ({ ...current, customerId: '', items: [createInvoiceItem()] }))
+        : invoiceStatus === 'PAID'
+          ? `Invoice ${result.invoice?.invoiceNumber ?? 'generated'} created and marked as paid.`
+          : `Invoice ${result.invoice?.invoiceNumber ?? 'generated'} sent as pending to the selected customer.`)
+      setInvoiceForm((current) => ({ ...current, customerId: '', dueDate: '', loyaltyPointsToRedeem: '0', items: [createInvoiceItem()] }))
       setInvoiceCustomer(null)
       setInvoiceSearchText('')
       dispatch(fetchBusinessDashboard(businessId))
@@ -169,7 +168,7 @@ export function DetailView() {
       records: memberships.map((membership) => ({
         id: membership.id,
         title: membership.planName ?? `Membership ${membership.id}`,
-        detail: `${formatDate(membership.startDate)}${membership.endDate ? ` - ${formatDate(membership.endDate)}` : ''} · ${formatCurrency(membership.price)}`,
+        detail: `${formatDate(membership.startDate)}${membership.endDate ? ` - ${formatDate(membership.endDate)}` : ''} · ${formatCurrency(membership.price)}${(membership.loyaltyPointsRedeemed ?? 0) > 0 ? ` · ${membership.loyaltyPointsRedeemed} points redeemed (${formatCurrency(membership.loyaltyDiscountAmount)} off)` : ''}`,
         status: membership.status ?? membership.paymentStatus ?? 'Recorded',
       })),
     },
@@ -179,7 +178,7 @@ export function DetailView() {
       records: invoices.map((invoice) => ({
         id: invoice.id,
         title: invoice.invoiceNumber ?? `Invoice ${invoice.id}`,
-        detail: `${formatDate(invoice.issueDate)} · ${formatCurrency(invoice.totalAmount)}`,
+        detail: `${formatDate(invoice.issueDate)} · ${formatCurrency(invoice.totalAmount)}${(invoice.loyaltyPointsRedeemed ?? 0) > 0 ? ` · ${invoice.loyaltyPointsRedeemed} points redeemed (${formatCurrency(invoice.loyaltyDiscountAmount)} off)` : ''}`,
         status: invoice.status ?? 'Recorded',
       })),
     },
@@ -200,14 +199,14 @@ export function DetailView() {
         id: appointment.id,
         title: appointment.serviceName ?? `Appointment ${appointment.id}`,
         detail: appointment.scheduledAt
-          ? new Date(appointment.scheduledAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+          ? `${new Date(appointment.scheduledAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}${(appointment.loyaltyPointsRedeemed ?? 0) > 0 ? ` · ${appointment.loyaltyPointsRedeemed} points redeemed (${formatCurrency(appointment.loyaltyDiscountAmount)} off)` : ''}`
           : 'Schedule not available',
         status: appointment.status ?? 'Booked',
       })),
     }]),
   ]
 
-  const handleBack = () => navigate('/dashboard')
+  const handleBack = () => navigate(`/dashboard/${dashboard.activeTab}`)
   const handleNavigateTab = (tab: DashboardTab) => {
     if (role === 'ADMIN') {
       dispatch(setAdminTab(tab))
@@ -282,6 +281,8 @@ export function DetailView() {
               />
               <BusinessMenu
                 activeTab={businessState.activeTab}
+                appointmentsEnabled={business?.appointmentsEnabled ?? false}
+                membershipsEnabled={business?.membershipsEnabled ?? true}
                 anchorEl={menuAnchorEl}
                 isOpen={isMenuOpen}
                 onClose={() => setMenuAnchorEl(null)}
@@ -299,72 +300,183 @@ export function DetailView() {
             </>
           )}
           <Box sx={{ px: { xs: 2, sm: 2.2 }, pt: { xs: 2, sm: 2.2 }, pb: 'calc(96px + env(safe-area-inset-bottom))', flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehaviorY: 'contain' }}>
-        <Paper elevation={0} sx={{ borderRadius: 2.5, backgroundColor: 'background.paper', border: '1px solid var(--mui-palette-divider)', overflow: 'hidden' }}>
-        <Box sx={{ px: 2.1, py: 2.1 }}>
-          <Stack spacing={2}>
-            <Button variant="text" onClick={handleBack} sx={(theme) => ({ alignSelf: 'flex-start', px: 0, fontWeight: 700, color: theme.palette.text.primary, textTransform: 'none' })}>
-              ← Back
-            </Button>
+        <Paper elevation={0} sx={{ borderRadius: 3, backgroundColor: 'background.paper', border: '1px solid var(--mui-palette-divider)', overflow: 'hidden' }}>
+          <Box sx={{ px: 2.1, py: 2 }}>
+            <Stack spacing={1.8}>
+              <Button
+                variant="text"
+                startIcon={<ArrowLeft size={17} />}
+                onClick={handleBack}
+                sx={{ alignSelf: 'flex-start', px: 0.5, fontWeight: 700, color: 'text.primary', textTransform: 'none' }}
+              >
+                Back
+              </Button>
 
-            <Box sx={(theme) => ({ background: theme.palette.primary.light, borderRadius: 1.25, p: 1.5, border: `1px solid ${alpha(theme.palette.text.primary, 0.08)}` })}>
-              <Typography variant="caption" sx={(theme) => ({ color: theme.palette.primary.main, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 800 })}>
-                {subtitle}
-              </Typography>
-              <Typography variant="h4" sx={(theme) => ({ mt: 0.8, fontWeight: 900, letterSpacing: '-0.07em', color: theme.palette.text.primary })}>{title}</Typography>
-            </Box>
-
-            <Box sx={(theme) => ({ background: theme.palette.common.white, borderRadius: 1.25, border: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`, p: 1.2 })}>
-              <Stack spacing={1}>
-                {fields.map(([label, value]) => (
-                  <Box key={label} sx={(theme) => ({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.2, px: 0.8, py: 0.8, borderRadius: 1, background: theme.palette.background.default, border: `1px solid ${alpha(theme.palette.text.primary, 0.06)}` })}>
-                    <Typography variant="caption" sx={(theme) => ({ color: theme.palette.text.secondary, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 800 })}>
-                      {label}
+              <Box sx={(theme) => ({
+                overflow: 'hidden',
+                borderRadius: 2.5,
+                p: 1.35,
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.16)}`,
+                background: `linear-gradient(145deg, ${alpha(theme.palette.primary.main, 0.12)} 0%, ${theme.palette.background.paper} 78%)`,
+              })}>
+                <Stack direction="row" spacing={1.2} sx={{ alignItems: 'center' }}>
+                  <Avatar sx={(theme) => ({
+                    width: 44,
+                    height: 44,
+                    bgcolor: theme.palette.primary.main,
+                    color: theme.palette.primary.contrastText,
+                    fontSize: '0.95rem',
+                    fontWeight: 800,
+                    boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.2)}`,
+                  })}>
+                    {initials || 'C'}
+                  </Avatar>
+                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                    <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 750, letterSpacing: '0.06em', lineHeight: 1.3 }}>
+                      {subtitle}
                     </Typography>
-                    <Typography sx={(theme) => ({ fontWeight: 800, color: theme.palette.text.primary, textAlign: 'right', wordBreak: 'break-word' })}>
-                      {value}
+                    <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.2, overflowWrap: 'anywhere' }}>
+                      {title}
                     </Typography>
                   </Box>
+                </Stack>
+
+                {(detail.email || detail.phoneNumber) && (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.7, mt: 1.1, ml: { xs: 0, sm: '3.75rem' } }}>
+                    {detail.email && (
+                      <Box
+                        component="a"
+                        href={`mailto:${detail.email}`}
+                        aria-label={`Email ${title}`}
+                        sx={(theme) => ({
+                          minWidth: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 0.65,
+                          px: 0.85,
+                          py: 0.55,
+                          borderRadius: 1.5,
+                          color: 'text.secondary',
+                          textDecoration: 'none',
+                          bgcolor: alpha(theme.palette.background.paper, 0.72),
+                          '&:hover': { color: 'primary.main', bgcolor: theme.palette.background.paper },
+                        })}
+                      >
+                        <Mail size={14} />
+                        <Typography variant="caption" sx={{ maxWidth: 175, fontWeight: 650 }} noWrap>{detail.email}</Typography>
+                      </Box>
+                    )}
+                    {detail.phoneNumber && (
+                      <Box
+                        component="a"
+                        href={`tel:${detail.phoneNumber}`}
+                        aria-label={`Call ${title}`}
+                        sx={(theme) => ({
+                          minWidth: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 0.65,
+                          px: 0.85,
+                          py: 0.55,
+                          borderRadius: 1.5,
+                          color: 'text.secondary',
+                          textDecoration: 'none',
+                          bgcolor: alpha(theme.palette.background.paper, 0.72),
+                          '&:hover': { color: 'primary.main', bgcolor: theme.palette.background.paper },
+                        })}
+                      >
+                        <Phone size={14} />
+                        <Typography variant="caption" sx={{ fontWeight: 650 }} noWrap>{detail.phoneNumber}</Typography>
+                      </Box>
+                    )}
+                  </Box>
+                )}
+              </Box>
+
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1 }}>
+                {[
+                  { label: 'Invoices', value: invoices.length, icon: ReceiptText },
+                  { label: 'Appointments', value: appointments.length, icon: CalendarDays },
+                  { label: 'Memberships', value: memberships.length, icon: ShieldCheck },
+                  { label: 'Total billed', value: formatCurrency(totalInvoiced), icon: CreditCard },
+                ].map(({ label, value, icon: Icon }) => (
+                  <Box
+                    key={label}
+                    sx={(theme) => ({
+                      minWidth: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      p: 1.1,
+                      borderRadius: 2,
+                      border: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
+                      bgcolor: theme.palette.background.default,
+                    })}
+                  >
+                    <Box sx={(theme) => ({
+                      width: 32,
+                      height: 32,
+                      flexShrink: 0,
+                      display: 'grid',
+                      placeItems: 'center',
+                      borderRadius: 1.5,
+                      color: theme.palette.primary.main,
+                      bgcolor: alpha(theme.palette.primary.main, 0.1),
+                    })}>
+                      <Icon size={16} />
+                    </Box>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }} noWrap>{label}</Typography>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.2 }} noWrap>{value}</Typography>
+                    </Box>
+                  </Box>
                 ))}
-              </Stack>
-            </Box>
-          </Stack>
-        </Box>
-      </Paper>
+              </Box>
+            </Stack>
+          </Box>
+        </Paper>
 
       <Stack spacing={1.5} sx={{ mt: 1.5, mb: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
-          <Typography variant="h6" sx={{ fontWeight: 800 }}>Customer interactions</Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, px: 0.2 }}>
+          <Box>
+            <Typography variant="h6" component="h2" sx={{ fontWeight: 850, letterSpacing: '-0.03em' }}>Customer activity</Typography>
+            <Typography variant="body2" color="text.secondary">Invoices, memberships and payment history</Typography>
+          </Box>
           {role === 'BUSINESS' && businessId != null && (
-            <Button size="small" variant="contained" startIcon={<Plus size={15} />} onClick={openInvoiceDialog} sx={{ flexShrink: 0, textTransform: 'none', fontWeight: 800 }}>
-              New invoice
+            <Button size="small" variant="contained" startIcon={<Plus size={15} />} onClick={openInvoiceDialog} sx={{ flexShrink: 0, textTransform: 'none', fontWeight: 800, borderRadius: 2 }}>
+              Invoice
             </Button>
           )}
         </Box>
         {historySections.map(({ title: sectionTitle, icon: Icon, records }) => (
-          <Card key={sectionTitle} variant="outlined" sx={{ borderRadius: 2, borderColor: (theme) => alpha(theme.palette.text.primary, 0.1) }}>
-            <CardContent sx={{ '&:last-child': { pb: 1.5 } }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: records.length ? 1 : 0 }}>
-                <Icon size={18} />
-                <Typography variant="subtitle1" sx={{ flex: 1, fontWeight: 800 }}>{sectionTitle}</Typography>
+          <Card key={sectionTitle} variant="outlined" sx={{ borderRadius: 2.5, borderColor: (theme) => alpha(theme.palette.text.primary, 0.09), boxShadow: '0 4px 16px rgba(20, 40, 40, 0.035)' }}>
+            <CardContent sx={{ p: 1.6, '&:last-child': { pb: 1.6 } }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.1 }}>
+                <Box sx={(theme) => ({ width: 34, height: 34, display: 'grid', placeItems: 'center', borderRadius: 1.5, color: theme.palette.primary.main, bgcolor: alpha(theme.palette.primary.main, 0.09) })}>
+                  <Icon size={17} />
+                </Box>
+                <Typography variant="subtitle1" component="h3" sx={{ flex: 1, fontWeight: 800 }}>{sectionTitle}</Typography>
                 {sectionTitle === 'Memberships' && role === 'BUSINESS' && businessId != null && (
-                  <Button size="small" onClick={() => setMembershipManagerOpen(true)} sx={{ minWidth: 0, px: 0.8, textTransform: 'none' }}>Manage</Button>
+                  <Button size="small" onClick={() => setMembershipManagerOpen(true)} sx={{ minWidth: 0, px: 0.8, textTransform: 'none', fontWeight: 700 }}>Manage</Button>
                 )}
-                <Chip size="small" label={records.length} />
+                <Chip size="small" variant="outlined" label={records.length} sx={{ fontWeight: 700, borderColor: (theme) => alpha(theme.palette.text.primary, 0.12) }} />
               </Box>
               {records.length ? (
                 <Stack divider={<Divider flexItem />}>
                   {records.map((record) => (
-                    <Box key={record.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, py: 1 }}>
+                    <Box key={record.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, py: 1.1 }}>
                       <Box sx={{ minWidth: 0 }}>
-                        <Typography sx={{ fontWeight: 700, overflowWrap: 'anywhere' }}>{record.title}</Typography>
-                        <Typography variant="body2" color="text.secondary">{record.detail}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 750, overflowWrap: 'anywhere' }}>{record.title}</Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>{record.detail}</Typography>
                       </Box>
-                      <Chip size="small" variant="outlined" label={record.status} sx={{ flexShrink: 0 }} />
+                      <Chip size="small" variant="outlined" label={record.status} sx={{ flexShrink: 0, maxWidth: '42%', fontWeight: 650, '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }} />
                     </Box>
                   ))}
                 </Stack>
               ) : (
-                <Typography variant="body2" color="text.secondary">No {sectionTitle.toLowerCase()} recorded.</Typography>
+                <Box sx={{ py: 1.1, px: 1.2, borderRadius: 1.5, bgcolor: 'background.default' }}>
+                  <Typography variant="body2" color="text.secondary">No {sectionTitle.toLowerCase()} recorded yet.</Typography>
+                </Box>
               )}
             </CardContent>
           </Card>
@@ -403,11 +515,15 @@ export function DetailView() {
             invoiceForm={invoiceForm}
             invoiceMessage={invoiceMessage}
             isSubmitting={isInvoiceSubmitting}
+            invoiceMessageSeverity={invoiceMessageSeverity}
             onClose={() => setInvoiceDialogOpen(false)}
             onCustomerSearchChange={setInvoiceSearchText}
             onCustomerSelection={(customer) => {
               setInvoiceCustomer(customer)
-              if (customer) handleInvoiceFieldChange('customerId', String(customer.id))
+              if (customer) {
+                handleInvoiceFieldChange('customerId', String(customer.id))
+                handleInvoiceFieldChange('loyaltyPointsToRedeem', '0')
+              }
             }}
             onInvoiceFieldChange={handleInvoiceFieldChange}
             onInvoiceItemChange={handleInvoiceItemChange}
@@ -419,7 +535,7 @@ export function DetailView() {
       )}
           </Box>
 
-          <BottomNavBar activeTab="customers" onChangeTab={handleNavigateTab} />
+          <BottomNavBar activeTab="customers" membershipsEnabled={business?.membershipsEnabled ?? true} onChangeTab={handleNavigateTab} />
         </Paper>
       </Container>
     </Box>

@@ -55,6 +55,15 @@ export async function fetchBusinessById(businessId: number): Promise<BusinessSum
   }
 }
 
+export async function setBusinessMembershipsEnabled(businessId: number, enabled: boolean): Promise<{ ok: boolean; business?: BusinessSummary; message?: string }> {
+  try {
+    const { data } = await apiClient.put<Record<string, unknown>>(`/api/v1/businesses/${businessId}/memberships-enabled`, undefined, { params: { enabled } })
+    return { ok: true, business: normalizeBusiness(data) }
+  } catch (error) {
+    return { ok: false, message: getErrorMessage(error, 'Could not update membership availability.') }
+  }
+}
+
 export async function createBusiness(payload: BusinessCreateRequest): Promise<{ ok: boolean; business?: BusinessSummary; message?: string }> {
   try {
     const { data } = await apiClient.post<Record<string, unknown>>('/api/v1/businesses', payload)

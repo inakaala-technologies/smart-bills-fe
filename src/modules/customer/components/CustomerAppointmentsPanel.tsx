@@ -5,10 +5,12 @@ import { EmptyState } from '../../../components/EmptyState'
 import { createAppointment, fetchAppointmentAvailability, fetchAppointmentServices, updateAppointmentStatus, type AppointmentAvailability, type AppointmentServiceSummary, type DashboardData } from '../../../services/api'
 import { useAppDispatch } from '../../../store/hooks'
 import { fetchCustomerDashboard } from '../../../store/customerDashboardSlice'
+import { fetchLoyaltyBalance, fetchLoyaltySettings, type LoyaltyProgramSettings } from '../../../services/api'
 
 type CustomerAppointmentsPanelProps = {
   appointments: DashboardData['appointments']
   businesses: DashboardData['businesses']
+  customerId: number | null
 }
 
 function getDefaultAppointmentDateTime() {
@@ -17,7 +19,7 @@ function getDefaultAppointmentDateTime() {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 }
 
-export function CustomerAppointmentsPanel({ appointments, businesses }: CustomerAppointmentsPanelProps) {
+export function CustomerAppointmentsPanel({ appointments, businesses, customerId }: CustomerAppointmentsPanelProps) {
   const dispatch = useAppDispatch()
   const [now] = useState(Date.now)
   const [businessId, setBusinessId] = useState('')
@@ -39,11 +41,22 @@ export function CustomerAppointmentsPanel({ appointments, businesses }: Customer
   const [messageSeverity, setMessageSeverity] = useState<'success' | 'error'>('success')
   const [isSaving, setIsSaving] = useState(false)
   const [updatingId, setUpdatingId] = useState<number | null>(null)
+  const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState('0')
+  const [loyaltyInfo, setLoyaltyInfo] = useState<{ customerId: number; businessId: number; balance: number; settings: LoyaltyProgramSettings } | null>(null)
+  const [loyaltyError, setLoyaltyError] = useState('')
 
   const appointmentBusinesses = businesses.filter((business) => business.appointmentsEnabled)
   const selectedBusinessId = Number(businessId) || appointmentBusinesses[0]?.id || 0
   const services = servicesState.businessId === selectedBusinessId ? servicesState.services : []
   const selectedService = services.find((service) => service.id === Number(serviceId))
+  const currentLoyaltyInfo = loyaltyInfo?.customerId === customerId && loyaltyInfo.businessId === selectedBusinessId ? loyaltyInfo : null
+  const requestedPoints = Math.max(0, Math.floor(Number(loyaltyPointsToRedeem) || 0))
+  const loyaltyDiscount = currentLoyaltyInfo?.settings.configured && currentLoyaltyInfo.settings.pointsPerCurrencyUnit && selectedService
+    ? Math.min(
+      requestedPoints / currentLoyaltyInfo.settings.pointsPerCurrencyUnit,
+      selectedService.price * Number(currentLoyaltyInfo.settings.maxRedemptionPercent) / 100,
+    )
+    : 0
   const availabilityRequestMatches = availabilityState?.businessId === selectedBusinessId
     && availabilityState.serviceId === selectedService?.id
     && availabilityState.date === appointmentDate
@@ -70,6 +83,27 @@ export function CustomerAppointmentsPanel({ appointments, businesses }: Customer
       isActive = false
     }
   }, [selectedBusinessId])
+
+  useEffect(() => {
+    if (!customerId || !selectedBusinessId) {
+      setLoyaltyInfo(null)
+      setLoyaltyError('')
+      setLoyaltyPointsToRedeem('0')
+      return
+    }
+    let isCurrent = true
+    setLoyaltyError('')
+    setLoyaltyPointsToRedeem('0')
+    Promise.all([
+      fetchLoyaltyBalance(selectedBusinessId, customerId),
+      fetchLoyaltySettings(selectedBusinessId),
+    ]).then(([balance, settings]) => {
+      if (isCurrent) setLoyaltyInfo({ customerId, businessId: selectedBusinessId, balance: balance.balance, settings })
+    }).catch((error) => {
+      if (isCurrent) setLoyaltyError(error instanceof Error ? error.message : 'Could not load loyalty points.')
+    })
+    return () => { isCurrent = false }
+  }, [customerId, selectedBusinessId])
 
   useEffect(() => {
     if (!selectedBusinessId || !selectedService) return
@@ -101,6 +135,7 @@ export function CustomerAppointmentsPanel({ appointments, businesses }: Customer
       scheduledAt: selectedSlot,
       staffUserId: Number(staffUserId) || undefined,
       notes: notes.trim() || undefined,
+      loyaltyPointsToRedeem: requestedPoints,
     })
     setIsSaving(false)
 
@@ -111,6 +146,7 @@ export function CustomerAppointmentsPanel({ appointments, businesses }: Customer
     }
 
     setNotes('')
+    setLoyaltyPointsToRedeem('0')
     setMessage('Appointment request sent.')
     setMessageSeverity('success')
     dispatch(fetchCustomerDashboard())
@@ -191,6 +227,29 @@ export function CustomerAppointmentsPanel({ appointments, businesses }: Customer
               <Typography sx={{ color: 'primary.main', fontWeight: 900, fontSize: 17, whiteSpace: 'nowrap' }}>₹{selectedService.price.toLocaleString('en-IN')}</Typography>
             </Box>
           )}
+          {selectedService && currentLoyaltyInfo?.settings.configured && (
+            <Stack spacing={0.8}>
+              <Alert severity="info">
+                You have {currentLoyaltyInfo.balance.toLocaleString('en-IN')} points with this business.
+                {' '}Rate: {currentLoyaltyInfo.settings.pointsPerCurrencyUnit} points = ₹1; maximum discount {currentLoyaltyInfo.settings.maxRedemptionPercent}%.
+              </Alert>
+              <TextField
+                label="Loyalty points to use"
+                type="number"
+                value={loyaltyPointsToRedeem}
+                onChange={(event) => setLoyaltyPointsToRedeem(event.target.value)}
+                slotProps={{ htmlInput: { min: 0, max: currentLoyaltyInfo.balance, step: 1 } }}
+                helperText={`Available: ${currentLoyaltyInfo.balance.toLocaleString('en-IN')} points`}
+                size="small"
+              />
+              {loyaltyDiscount > 0 && (
+                <Typography variant="body2" sx={{ textAlign: 'right', fontWeight: 750 }}>
+                  {requestedPoints} points discount: −₹{loyaltyDiscount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · Pay ₹{Math.max(0, selectedService.price - loyaltyDiscount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Typography>
+              )}
+            </Stack>
+          )}
+          {loyaltyError && <Alert severity="error">{loyaltyError}</Alert>}
           {selectedBusinessId > 0 && services.length === 0 && appointmentBusinesses.length > 0 && <Alert severity="info" sx={{ borderRadius: 2 }}>This business has not added any bookable services yet.</Alert>}
           <TextField label="Date" type="date" value={appointmentDate} onChange={(event) => { setAppointmentDate(event.target.value); setSelectedSlot('') }} size="small" required fullWidth slotProps={{ inputLabel: { shrink: true } }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }} />
           {availability && availability.staff.length > 0 && (
@@ -252,10 +311,15 @@ export function CustomerAppointmentsPanel({ appointments, businesses }: Customer
                   </Stack>
                   <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mt: 0.65, gap: 1 }}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-                      {[appointment.durationMinutes ? `${appointment.durationMinutes} min` : '', appointment.servicePrice !== undefined ? `₹${appointment.servicePrice.toLocaleString('en-IN')}` : ''].filter(Boolean).join(' · ')}
+                      {[appointment.durationMinutes ? `${appointment.durationMinutes} min` : '', appointment.servicePrice !== undefined ? `₹${(appointment.servicePrice - (appointment.loyaltyDiscountAmount ?? 0)).toLocaleString('en-IN')}` : ''].filter(Boolean).join(' · ')}
                     </Typography>
                     {canCancel && <Button size="small" color="error" startIcon={<X size={13} />} onClick={() => handleCancelAppointment(appointment.id)} disabled={updatingId === appointment.id} sx={{ minWidth: 0, minHeight: 30, px: 0.8, textTransform: 'none', fontSize: 11, fontWeight: 700 }}>{updatingId === appointment.id ? 'Cancelling' : 'Cancel'}</Button>}
                   </Stack>
+                  {(appointment.loyaltyPointsRedeemed ?? 0) > 0 && (
+                    <Typography variant="caption" sx={{ display: 'block', mt: 0.35, color: 'success.main', fontWeight: 700 }}>
+                      {appointment.loyaltyPointsRedeemed} points redeemed · ₹{Number(appointment.loyaltyDiscountAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} discount
+                    </Typography>
+                  )}
                   {appointment.notes && <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary', overflowWrap: 'anywhere' }}>Note: {appointment.notes}</Typography>}
                   {appointment.businessNote && <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'primary.main', fontWeight: 700, overflowWrap: 'anywhere' }}>Message from business: {appointment.businessNote}</Typography>}
                 </Box>
