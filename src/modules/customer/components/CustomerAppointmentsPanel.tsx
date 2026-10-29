@@ -2,7 +2,17 @@ import { useEffect, useState } from 'react'
 import { Alert, Box, Button, Chip, MenuItem, Skeleton, Stack, TextField, Typography } from '@mui/material'
 import { CalendarCheck2, CalendarDays, CalendarPlus, Clock3, X } from 'lucide-react'
 import { EmptyState } from '../../../components/EmptyState'
-import { createAppointment, fetchAppointmentAvailability, fetchAppointmentServices, updateAppointmentStatus, type AppointmentAvailability, type AppointmentServiceSummary, type DashboardData } from '../../../services/api'
+import {
+  createAppointment,
+  fetchAppointmentAvailability,
+  fetchAppointmentServices,
+  notifyAppointmentBooked,
+  updateAppointmentStatus,
+  type AppointmentAvailability,
+  type AppointmentServiceSummary,
+  type AppointmentSummary,
+  type DashboardData,
+} from '../../../services/api'
 import { useAppDispatch } from '../../../store/hooks'
 import { fetchCustomerDashboard } from '../../../store/customerDashboardSlice'
 import { fetchLoyaltyBalance, fetchLoyaltySettings, type LoyaltyProgramSettings } from '../../../services/api'
@@ -10,7 +20,9 @@ import { fetchLoyaltyBalance, fetchLoyaltySettings, type LoyaltyProgramSettings 
 type CustomerAppointmentsPanelProps = {
   appointments: DashboardData['appointments']
   businesses: DashboardData['businesses']
-  customerId: number | null
+  customerId: number
+  selectedAppointmentId?: number
+  onSelectAppointment?: (appointment: AppointmentSummary) => void
 }
 
 function getDefaultAppointmentDateTime() {
@@ -19,7 +31,13 @@ function getDefaultAppointmentDateTime() {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 }
 
-export function CustomerAppointmentsPanel({ appointments, businesses, customerId }: CustomerAppointmentsPanelProps) {
+export function CustomerAppointmentsPanel({
+  appointments,
+  businesses,
+  customerId,
+  selectedAppointmentId,
+  onSelectAppointment,
+}: CustomerAppointmentsPanelProps) {
   const dispatch = useAppDispatch()
   const [now] = useState(Date.now)
   const [businessId, setBusinessId] = useState('')
@@ -43,13 +61,22 @@ export function CustomerAppointmentsPanel({ appointments, businesses, customerId
   const [updatingId, setUpdatingId] = useState<number | null>(null)
   const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState('0')
   const [loyaltyInfo, setLoyaltyInfo] = useState<{ customerId: number; businessId: number; balance: number; settings: LoyaltyProgramSettings } | null>(null)
-  const [loyaltyError, setLoyaltyError] = useState('')
+  const [loyaltyError, setLoyaltyError] = useState<{ customerId: number; businessId: number; message: string } | null>(null)
 
   const appointmentBusinesses = businesses.filter((business) => business.appointmentsEnabled)
   const selectedBusinessId = Number(businessId) || appointmentBusinesses[0]?.id || 0
   const services = servicesState.businessId === selectedBusinessId ? servicesState.services : []
   const selectedService = services.find((service) => service.id === Number(serviceId))
-  const currentLoyaltyInfo = loyaltyInfo?.customerId === customerId && loyaltyInfo.businessId === selectedBusinessId ? loyaltyInfo : null
+  const currentLoyaltyInfo = loyaltyInfo
+    && loyaltyInfo.customerId === customerId
+    && loyaltyInfo.businessId === selectedBusinessId
+    ? loyaltyInfo
+    : null
+  const currentLoyaltyError = loyaltyError
+    && loyaltyError.customerId === customerId
+    && loyaltyError.businessId === selectedBusinessId
+    ? loyaltyError.message
+    : ''
   const requestedPoints = Math.max(0, Math.floor(Number(loyaltyPointsToRedeem) || 0))
   const loyaltyDiscount = currentLoyaltyInfo?.settings.configured && currentLoyaltyInfo.settings.pointsPerCurrencyUnit && selectedService
     ? Math.min(
@@ -85,22 +112,24 @@ export function CustomerAppointmentsPanel({ appointments, businesses, customerId
   }, [selectedBusinessId])
 
   useEffect(() => {
-    if (!customerId || !selectedBusinessId) {
-      setLoyaltyInfo(null)
-      setLoyaltyError('')
-      setLoyaltyPointsToRedeem('0')
-      return
-    }
+    if (!customerId || !selectedBusinessId) return
     let isCurrent = true
-    setLoyaltyError('')
-    setLoyaltyPointsToRedeem('0')
     Promise.all([
       fetchLoyaltyBalance(selectedBusinessId, customerId),
       fetchLoyaltySettings(selectedBusinessId),
     ]).then(([balance, settings]) => {
-      if (isCurrent) setLoyaltyInfo({ customerId, businessId: selectedBusinessId, balance: balance.balance, settings })
+      if (isCurrent) {
+        setLoyaltyInfo({ customerId, businessId: selectedBusinessId, balance: balance.balance, settings })
+        setLoyaltyError(null)
+      }
     }).catch((error) => {
-      if (isCurrent) setLoyaltyError(error instanceof Error ? error.message : 'Could not load loyalty points.')
+      if (isCurrent) {
+        setLoyaltyError({
+          customerId,
+          businessId: selectedBusinessId,
+          message: error instanceof Error ? error.message : 'Could not load loyalty points.',
+        })
+      }
     })
     return () => { isCurrent = false }
   }, [customerId, selectedBusinessId])
@@ -144,6 +173,21 @@ export function CustomerAppointmentsPanel({ appointments, businesses, customerId
       setMessageSeverity('error')
       return
     }
+
+    const business = businesses.find((b) => b.id === selectedBusinessId)
+    const bookedAppointment: AppointmentSummary = result.appointment ?? {
+      id: Date.now(),
+      businessId: selectedBusinessId,
+      appointmentServiceId: selectedService.id,
+      serviceName: selectedService.name,
+      servicePrice: selectedService.price,
+      durationMinutes: selectedService.durationMinutes,
+      scheduledAt: selectedSlot,
+      status: 'BOOKED',
+      notes: notes.trim() || undefined,
+      createdAt: new Date().toISOString(),
+    }
+    notifyAppointmentBooked(bookedAppointment, business?.businessName ?? business?.name)
 
     setNotes('')
     setLoyaltyPointsToRedeem('0')
@@ -208,7 +252,7 @@ export function CustomerAppointmentsPanel({ appointments, businesses, customerId
             {availability?.availableSlots.length ? <Chip size="small" color="success" variant="outlined" label={`${availability.availableSlots.length} times`} /> : null}
           </Stack>
           {appointmentBusinesses.length === 0 && <Alert severity="info" sx={{ borderRadius: 2 }}>None of your businesses are currently accepting appointment requests.</Alert>}
-          <TextField select label="Business" value={selectedBusinessId ? String(selectedBusinessId) : ''} onChange={(event) => { setBusinessId(event.target.value); setServiceId('') }} disabled={appointmentBusinesses.length === 0} size="small" fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}>
+          <TextField select label="Business" value={selectedBusinessId ? String(selectedBusinessId) : ''} onChange={(event) => { setBusinessId(event.target.value); setServiceId(''); setLoyaltyPointsToRedeem('0') }} disabled={appointmentBusinesses.length === 0} size="small" fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}>
             {appointmentBusinesses.map((business) => <MenuItem key={business.id} value={String(business.id)}>{business.businessName ?? business.name ?? `Business ${business.id}`}</MenuItem>)}
           </TextField>
           <TextField select label="Service" value={serviceId} onChange={(event) => setServiceId(event.target.value)} disabled={!services.length} size="small" required fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}>
@@ -249,7 +293,7 @@ export function CustomerAppointmentsPanel({ appointments, businesses, customerId
               )}
             </Stack>
           )}
-          {loyaltyError && <Alert severity="error">{loyaltyError}</Alert>}
+          {currentLoyaltyError && <Alert severity="error">{currentLoyaltyError}</Alert>}
           {selectedBusinessId > 0 && services.length === 0 && appointmentBusinesses.length > 0 && <Alert severity="info" sx={{ borderRadius: 2 }}>This business has not added any bookable services yet.</Alert>}
           <TextField label="Date" type="date" value={appointmentDate} onChange={(event) => { setAppointmentDate(event.target.value); setSelectedSlot('') }} size="small" required fullWidth slotProps={{ inputLabel: { shrink: true } }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }} />
           {availability && availability.staff.length > 0 && (
@@ -296,8 +340,26 @@ export function CustomerAppointmentsPanel({ appointments, businesses, customerId
               const business = businesses.find((item) => item.id === appointment.businessId)
               const status = appointment.status?.toUpperCase() ?? 'BOOKED'
               const canCancel = ['BOOKED', 'CONFIRMED'].includes(status) && Boolean(appointment.scheduledAt) && new Date(appointment.scheduledAt ?? '').getTime() > now
+              const isSelected = selectedAppointmentId === appointment.id
               return (
-                <Box key={appointment.id} sx={{ p: 1.25, border: '1px solid var(--mui-palette-divider)', borderRadius: 1.5, bgcolor: 'background.paper' }}>
+                <Box
+                  key={appointment.id}
+                  onClick={() => onSelectAppointment?.(appointment)}
+                  sx={{
+                    p: 1.25,
+                    border: '1px solid',
+                    borderColor: isSelected ? 'primary.main' : 'var(--mui-palette-divider)',
+                    borderRadius: 1.5,
+                    bgcolor: isSelected ? 'action.selected' : 'background.paper',
+                    cursor: onSelectAppointment ? 'pointer' : 'default',
+                    transition: 'all 0.2s ease',
+                    boxShadow: isSelected ? '0 0 0 1px var(--mui-palette-primary-main)' : 'none',
+                    '&:hover': onSelectAppointment ? {
+                      borderColor: 'primary.main',
+                      bgcolor: 'action.hover',
+                    } : undefined,
+                  }}
+                >
                   <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }}>
                     <Box sx={{ minWidth: 0, flex: 1 }}>
                       <Typography sx={{ color: 'text.primary', fontSize: 13, fontWeight: 800, lineHeight: 1.3, overflowWrap: 'anywhere' }}>{appointment.serviceName ?? `Appointment ${appointment.id}`}</Typography>
@@ -313,7 +375,36 @@ export function CustomerAppointmentsPanel({ appointments, businesses, customerId
                     <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
                       {[appointment.durationMinutes ? `${appointment.durationMinutes} min` : '', appointment.servicePrice !== undefined ? `₹${(appointment.servicePrice - (appointment.loyaltyDiscountAmount ?? 0)).toLocaleString('en-IN')}` : ''].filter(Boolean).join(' · ')}
                     </Typography>
-                    {canCancel && <Button size="small" color="error" startIcon={<X size={13} />} onClick={() => handleCancelAppointment(appointment.id)} disabled={updatingId === appointment.id} sx={{ minWidth: 0, minHeight: 30, px: 0.8, textTransform: 'none', fontSize: 11, fontWeight: 700 }}>{updatingId === appointment.id ? 'Cancelling' : 'Cancel'}</Button>}
+                    <Stack direction="row" spacing={1}>
+                      {onSelectAppointment && (
+                        <Button
+                          size="small"
+                          variant="text"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onSelectAppointment(appointment)
+                          }}
+                          sx={{ minWidth: 0, minHeight: 30, px: 0.8, textTransform: 'none', fontSize: 11, fontWeight: 700 }}
+                        >
+                          View info
+                        </Button>
+                      )}
+                      {canCancel && (
+                        <Button
+                          size="small"
+                          color="error"
+                          startIcon={<X size={13} />}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void handleCancelAppointment(appointment.id)
+                          }}
+                          disabled={updatingId === appointment.id}
+                          sx={{ minWidth: 0, minHeight: 30, px: 0.8, textTransform: 'none', fontSize: 11, fontWeight: 700 }}
+                        >
+                          {updatingId === appointment.id ? 'Cancelling' : 'Cancel'}
+                        </Button>
+                      )}
+                    </Stack>
                   </Stack>
                   {(appointment.loyaltyPointsRedeemed ?? 0) > 0 && (
                     <Typography variant="caption" sx={{ display: 'block', mt: 0.35, color: 'success.main', fontWeight: 700 }}>

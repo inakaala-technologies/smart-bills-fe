@@ -142,7 +142,7 @@ export function CustomerListCard({ customers, businessId, onOpenCustomer, onAddC
                       }}
                     >
                       <Stack direction="row" spacing={1} sx={{ width: '100%', alignItems: 'center', minWidth: 0 }}>
-                        <Avatar sx={{ width: 40, height: 40, flexShrink: 0, bgcolor: alpha('#087b65', 0.12), color: 'primary.main', fontSize: 13, fontWeight: 850 }}>
+                        <Avatar sx={{ width: 40, height: 40, flexShrink: 0, bgcolor: alpha('#4E2BCC', 0.12), color: 'primary.main', fontSize: 13, fontWeight: 850 }}>
                           {customerInitials(name) || <UserRound size={17} />}
                         </Avatar>
                         <Box sx={{ flex: 1, minWidth: 0 }}>

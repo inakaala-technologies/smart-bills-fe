@@ -3,21 +3,21 @@ import { createTheme, type Shadows } from '@mui/material/styles'
 export const bhivePalette = {
   mode: 'light' as const,
   primary: {
-    main: '#087b65',
-    light: '#e4f2ed',
-    dark: '#075847',
+    main: '#4E2BCC',
+    light: '#EFE8FF',
+    dark: '#38209B',
     contrastText: '#ffffff',
   },
   secondary: {
-    main: '#29464a',
-    light: '#e7eef0',
-    dark: '#183437',
+    main: '#905BF4',
+    light: '#F1E9FF',
+    dark: '#7140CE',
     contrastText: '#ffffff',
   },
   success: {
-    main: '#16836b',
-    light: '#e1f3ec',
-    dark: '#0f624f',
+    main: '#4E2BCC',
+    light: '#EFE8FF',
+    dark: '#38209B',
     contrastText: '#ffffff',
   },
   warning: {
@@ -39,32 +39,32 @@ export const bhivePalette = {
     contrastText: '#ffffff',
   },
   background: {
-    default: '#f2f6f4',
+    default: '#EFEFEF',
     paper: '#ffffff',
   },
   text: {
-    primary: '#203638',
-    secondary: '#617477',
-    disabled: '#94a3a1',
+    primary: '#0F032D',
+    secondary: '#716A83',
+    disabled: '#9B96A8',
   },
-  divider: 'rgba(32, 54, 56, 0.10)',
+  divider: 'rgba(15, 3, 45, 0.10)',
 }
 
 export const bhiveDarkPalette = {
   mode: 'dark' as const,
-  primary: { main: '#69cba6', light: '#a3e4c8', dark: '#35a47b', contrastText: '#10251d' },
-  secondary: { main: '#a6bdba', light: '#d1dfdc', dark: '#708b86', contrastText: '#14201e' },
-  success: { main: '#61c99e', light: '#b0ead0', dark: '#32966e', contrastText: '#10251d' },
+  primary: { main: '#A783FF', light: '#D5C3FF', dark: '#4E2BCC', contrastText: '#0F032D' },
+  secondary: { main: '#B99AFF', light: '#E0D2FF', dark: '#905BF4', contrastText: '#0F032D' },
+  success: { main: '#A783FF', light: '#D5C3FF', dark: '#4E2BCC', contrastText: '#0F032D' },
   warning: { main: '#e8b75e', light: '#f5d89e', dark: '#bd852c', contrastText: '#2b2110' },
   error: { main: '#e8867e', light: '#f3b6af', dark: '#bd5a52', contrastText: '#2b1514' },
-  info: { main: '#79b9c7', light: '#b4dbe2', dark: '#4c8c9b', contrastText: '#122428' },
-  background: { default: '#101917', paper: '#192320' },
-  text: { primary: '#e7efec', secondary: '#a6b5b0', disabled: '#778781' },
-  divider: 'rgba(220, 239, 231, 0.12)',
+  info: { main: '#A783FF', light: '#D5C3FF', dark: '#4E2BCC', contrastText: '#0F032D' },
+  background: { default: '#0F032D', paper: '#1B1243' },
+  text: { primary: '#F7F3FF', secondary: '#C4B9DE', disabled: '#8E83A8' },
+  divider: 'rgba(239, 239, 239, 0.12)',
 }
 
 const bhiveShadows = Array.from({ length: 25 }, (_, index) =>
-  index === 0 ? 'none' : '0 8px 20px rgba(25, 55, 49, 0.07)',
+  index === 0 ? 'none' : '0 8px 22px rgba(15, 3, 45, 0.07)',
 ) as Shadows
 
 export const bhiveTheme = createTheme({
@@ -121,6 +121,10 @@ export const bhiveTheme = createTheme({
       styleOverrides: {
         ':root': {
           colorScheme: 'light dark',
+          '--bhive-ink': '#0F032D',
+          '--bhive-primary': '#4E2BCC',
+          '--bhive-accent': '#905BF4',
+          '--bhive-canvas': '#EFEFEF',
           '--app-bg-start': 'var(--mui-palette-background-default)',
           '--app-bg-end': 'var(--mui-palette-background-default)',
           '--surface-soft': 'var(--mui-palette-background-default)',
@@ -161,8 +165,8 @@ export const bhiveTheme = createTheme({
       },
       styleOverrides: {
         root: {
-          borderRadius: 10,
-          minHeight: 42,
+          borderRadius: 14,
+          minHeight: 44,
           paddingInline: '1rem',
           fontWeight: 700,
           letterSpacing: 0,
@@ -188,7 +192,7 @@ export const bhiveTheme = createTheme({
         root: {
           backgroundColor: 'var(--mui-palette-background-paper)',
           border: '1px solid var(--mui-palette-divider)',
-          boxShadow: '0 8px 22px rgba(0, 0, 0, 0.12)',
+          boxShadow: '0 8px 22px rgba(15, 3, 45, 0.06)',
         },
       },
     },
@@ -197,12 +201,12 @@ export const bhiveTheme = createTheme({
         root: {
           background: 'var(--mui-palette-background-paper)',
           border: '1px solid var(--mui-palette-divider)',
-          borderRadius: 10,
-          boxShadow: '0 5px 14px rgba(25, 55, 49, 0.035)',
+          borderRadius: 18,
+          boxShadow: '0 5px 18px rgba(15, 3, 45, 0.055)',
           transition: 'border-color 160ms ease, box-shadow 160ms ease',
           '&:hover': {
             borderColor: 'var(--mui-palette-primary-main)',
-            boxShadow: '0 8px 18px rgba(0, 0, 0, 0.18)',
+            boxShadow: '0 8px 22px rgba(15, 3, 45, 0.10)',
           },
         },
       },
@@ -214,7 +218,7 @@ export const bhiveTheme = createTheme({
       styleOverrides: {
         root: {
           '& .MuiOutlinedInput-root': {
-            borderRadius: 10,
+            borderRadius: 12,
             backgroundColor: 'var(--mui-palette-background-paper)',
             transition: 'border-color 160ms ease, box-shadow 160ms ease',
             '& fieldset': {
@@ -256,7 +260,7 @@ export const bhiveTheme = createTheme({
     MuiMenu: {
       styleOverrides: {
         paper: {
-          borderRadius: 10,
+          borderRadius: 14,
           border: '1px solid var(--mui-palette-divider)',
           boxShadow: '0 14px 34px rgba(0, 0, 0, 0.24)',
         },
@@ -265,7 +269,7 @@ export const bhiveTheme = createTheme({
     MuiDialog: {
       styleOverrides: {
         paper: {
-          borderRadius: 14,
+          borderRadius: 18,
           border: '1px solid var(--mui-palette-divider)',
           boxShadow: '0 24px 70px rgba(0, 0, 0, 0.3)',
         },

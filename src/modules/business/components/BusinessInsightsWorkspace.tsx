@@ -149,7 +149,7 @@ function TrendBars({ points, comparison }: { points: TrendPoint[]; comparison?: 
           return (
             <Stack key={point.key} spacing={0.7} sx={{ flex: 1, minWidth: 0, alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
               <Stack direction="row" spacing={0.3} sx={{ alignItems: 'flex-end', width: '100%', height: 100, justifyContent: 'center' }}>
-                <Box title={`${point.label}: ${money(point.amount)}`} sx={{ width: comparison ? '35%' : '58%', height: `${mainHeight}%`, minHeight: point.amount > 0 ? 4 : 0, borderRadius: '5px 5px 2px 2px', background: 'linear-gradient(180deg, #18a987 0%, #087b65 100%)', transition: 'height 250ms ease' }} />
+                <Box title={`${point.label}: ${money(point.amount)}`} sx={{ width: comparison ? '35%' : '58%', height: `${mainHeight}%`, minHeight: point.amount > 0 ? 4 : 0, borderRadius: '5px 5px 2px 2px', background: 'linear-gradient(180deg, #905BF4 0%, #4E2BCC 100%)', transition: 'height 250ms ease' }} />
                 {comparison && <Box title={`${point.label}: ${money(compareAmount)}`} sx={{ width: '35%', height: `${compareHeight}%`, minHeight: compareAmount > 0 ? 4 : 0, borderRadius: '5px 5px 2px 2px', bgcolor: alpha(theme.palette.info.main, 0.65), transition: 'height 250ms ease' }} />}
               </Stack>
               <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, fontWeight: 650 }}>{point.label}</Typography>
@@ -397,7 +397,7 @@ export function BusinessInsightsWorkspace({ businessId, appointmentsEnabled, mem
         overflow: 'hidden',
         borderRadius: 3,
         color: '#fff',
-        background: 'linear-gradient(128deg, #075f50 0%, #087b65 55%, #169b78 100%)',
+        background: 'linear-gradient(128deg, #0F032D 0%, #4E2BCC 55%, #905BF4 100%)',
         boxShadow: '0 14px 28px rgba(5, 102, 79, 0.22)',
       }}>
         <Box aria-hidden="true" sx={{ position: 'absolute', width: 190, height: 190, right: -62, top: -86, border: '1px solid rgba(255,255,255,0.13)', borderRadius: '50%', '&::after': { content: '""', position: 'absolute', inset: 18, border: '1px solid rgba(255,255,255,0.12)', borderRadius: '50%' } }} />

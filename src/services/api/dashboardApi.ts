@@ -11,7 +11,7 @@ import {
   normalizePayment,
   normalizeProduct,
 } from './normalizers'
-import type { BusinessDashboardSummary, DashboardData } from './types'
+import type { BusinessDashboardSummary, BusinessInsightsInterval, DashboardData } from './types'
 
 async function getFirstAvailable<T>(paths: string[]): Promise<T[]> {
   for (const path of paths) {
@@ -33,8 +33,11 @@ export async function fetchBusinessDashboardSummary(businessId?: number): Promis
     )
     return {
       totalRevenue: Number(data.totalRevenue ?? 0),
+      billableRevenue: data.billableRevenue == null ? undefined : Number(data.billableRevenue),
+      completedRevenue: data.completedRevenue == null ? undefined : Number(data.completedRevenue),
       activeMembers: Number(data.activeMembers ?? 0),
       pendingPayments: Number(data.pendingPayments ?? 0),
+      pendingPaymentCount: data.pendingPaymentCount == null ? undefined : Number(data.pendingPaymentCount),
       newCustomers: Number(data.newCustomers ?? 0),
       invoiceCount: Number(data.invoiceCount ?? 0),
       appointmentCount: Number(data.appointmentCount ?? 0),
@@ -59,6 +62,17 @@ export async function fetchBusinessDashboardSummary(businessId?: number): Promis
   } catch {
     return null
   }
+}
+
+export async function fetchBusinessRevenueTrend(
+  businessId: number,
+  interval: BusinessInsightsInterval,
+): Promise<BusinessDashboardSummary['revenueTrend']> {
+  const { data } = await apiClient.get<Pick<BusinessDashboardSummary, 'revenueTrend'>>(
+    '/api/v1/businesses/dashboard-summary',
+    { params: { businessId, interval } },
+  )
+  return data.revenueTrend
 }
 
 export async function fetchDashboardData(selectedBusinessId?: number, roleOverride?: Role): Promise<DashboardData> {

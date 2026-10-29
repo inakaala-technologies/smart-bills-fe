@@ -17,7 +17,7 @@ export function RecentActivityItem({
   badge,
   date,
   time,
-  accent = '#087b65',
+  accent = 'var(--mui-palette-primary-main)',
 }: RecentActivityItemProps) {
   const displayBadge = badge?.trim() || 'B'
 

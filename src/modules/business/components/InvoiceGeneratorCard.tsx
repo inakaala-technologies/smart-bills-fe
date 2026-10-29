@@ -74,9 +74,12 @@ export function InvoiceGeneratorCard({
   const membershipPlansError = membershipPlanState?.error ?? ''
   const [invoiceModeOverride, setInvoiceModeOverride] = useState<'products' | 'membership' | null>(null)
   const [selectedMembershipId, setSelectedMembershipId] = useState('')
-  const [businessProducts, setBusinessProducts] = useState<BusinessProduct[]>([])
-  const [productsLoading, setProductsLoading] = useState(false)
-  const [productsError, setProductsError] = useState('')
+  const [productsState, setProductsState] = useState<{
+    businessId: number
+    products: BusinessProduct[]
+    loading: boolean
+    error: string
+  } | null>(null)
   const [isBillPreviewOpen, setIsBillPreviewOpen] = useState(false)
   const [previewError, setPreviewError] = useState('')
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false)
@@ -86,36 +89,37 @@ export function InvoiceGeneratorCard({
   const [isAddingCustomer, setIsAddingCustomer] = useState(false)
   const [addCustomerMessage, setAddCustomerMessage] = useState('')
   const invoiceMode = invoiceModeOverride ?? (membershipPlans.length > 0 ? 'membership' : 'products')
+  const currentProductsState = productsState?.businessId === businessId ? productsState : null
+  const businessProducts = currentProductsState?.products ?? []
+  const productsLoading = currentProductsState?.loading ?? false
+  const productsError = currentProductsState?.error ?? ''
 
-  useEffect(() => {
-    if (!open) {
-      setIsBillPreviewOpen(false)
-      setInvoiceModeOverride(null)
-      setSelectedMembershipId('')
-    }
-  }, [open])
   const [loyaltyState, setLoyaltyState] = useState<{
     customerId: number
     balance: number
     settings: LoyaltyProgramSettings
   } | null>(null)
-  const [loyaltyError, setLoyaltyError] = useState('')
+  const [loyaltyError, setLoyaltyError] = useState<{ customerId: number; message: string } | null>(null)
 
   useEffect(() => {
-    if (!open || !selectedCustomer) {
-      setLoyaltyState(null)
-      setLoyaltyError('')
-      return
-    }
+    if (!open || !selectedCustomer) return
     let isCurrent = true
-    setLoyaltyError('')
+    const customerId = selectedCustomer.id
     Promise.all([
-      fetchLoyaltyBalance(businessId, selectedCustomer.id),
+      fetchLoyaltyBalance(businessId, customerId),
       fetchLoyaltySettings(businessId),
     ]).then(([balance, settings]) => {
-      if (isCurrent) setLoyaltyState({ customerId: selectedCustomer.id, balance: balance.balance, settings })
+      if (isCurrent) {
+        setLoyaltyState({ customerId, balance: balance.balance, settings })
+        setLoyaltyError(null)
+      }
     }).catch((error) => {
-      if (isCurrent) setLoyaltyError(error instanceof Error ? error.message : 'Could not load this customer’s loyalty balance.')
+      if (isCurrent) {
+        setLoyaltyError({
+          customerId,
+          message: error instanceof Error ? error.message : 'Could not load this customer’s loyalty balance.',
+        })
+      }
     })
     return () => { isCurrent = false }
   }, [businessId, open, selectedCustomer])
@@ -127,16 +131,17 @@ export function InvoiceGeneratorCard({
     }
   }, [businessId, dispatch, membershipPlanState?.loaded, membershipPlanState?.loading, open])
   useEffect(() => {
-  if (!open || !businessId) {
-    setBusinessProducts([])
-    return
-  }
+  if (!open || !businessId) return
 
   let cancelled = false
 
   const loadProducts = async () => {
-    setProductsLoading(true)
-    setProductsError('')
+    setProductsState((current) => ({
+      businessId,
+      products: current?.businessId === businessId ? current.products : [],
+      loading: true,
+      error: '',
+    }))
 
     try {
       const result = await getBusinessProducts(businessId)
@@ -144,22 +149,29 @@ export function InvoiceGeneratorCard({
       if (cancelled) return
 
       if (!result.ok) {
-        setBusinessProducts([])
-        setProductsError(result.message ?? 'Could not load saved products.')
+        setProductsState({
+          businessId,
+          products: [],
+          loading: false,
+          error: result.message ?? 'Could not load saved products.',
+        })
         return
       }
 
-      setBusinessProducts(
-        result.products.filter((product) => product.status === 'ACTIVE')
-      )
-    } catch {
+      setProductsState({
+        businessId,
+        products: result.products.filter((product) => product.status === 'ACTIVE'),
+        loading: false,
+        error: '',
+      })
+    } catch (error) {
       if (!cancelled) {
-        setBusinessProducts([])
-        setProductsError('Could not load saved products.')
-      }
-    } finally {
-      if (!cancelled) {
-        setProductsLoading(false)
+        setProductsState({
+          businessId,
+          products: [],
+          loading: false,
+          error: error instanceof Error ? error.message : 'Could not load saved products.',
+        })
       }
     }
   }
@@ -172,6 +184,7 @@ export function InvoiceGeneratorCard({
 }, [open, businessId])
 
   const handleClose = () => {
+    setIsBillPreviewOpen(false)
     setInvoiceModeOverride(null)
     setSelectedMembershipId('')
     setPreviewError('')
@@ -282,6 +295,9 @@ const handleAddCustomer = async () => {
       && !['CANCELLED', 'RENEWED', 'SUSPENDED'].includes(membership.status ?? ''),
   )
   const currentLoyaltyState = selectedCustomer && loyaltyState?.customerId === selectedCustomer.id ? loyaltyState : null
+  const currentLoyaltyError = selectedCustomer && loyaltyError?.customerId === selectedCustomer.id
+    ? loyaltyError.message
+    : ''
   const loyaltyPoints = Math.max(0, Math.floor(Number(invoiceForm.loyaltyPointsToRedeem) || 0))
   const loyaltySettings = currentLoyaltyState?.settings
   const loyaltyDiscount = loyaltySettings?.configured && loyaltySettings.pointsPerCurrencyUnit
@@ -322,7 +338,7 @@ const handleAddCustomer = async () => {
       sx={{ '& .MuiDialog-paper': { borderRadius: { xs: 2.5, sm: 3.2 }, overflow: 'hidden', boxShadow: '0 24px 70px rgba(14, 45, 38, 0.24)' } }}
     >
       <DialogTitle sx={{ p: { xs: 0.8, sm: 1.2 }, bgcolor: '#f4f7f6' }}>
-        <Stack direction="row" spacing={1.2} sx={{ alignItems: 'center', px: { xs: 1.3, sm: 2 }, py: 1.5, borderRadius: 2.4, color: '#fff', background: 'linear-gradient(120deg, #075f50 0%, #0a8b70 100%)' }}>
+        <Stack direction="row" spacing={1.2} sx={{ alignItems: 'center', px: { xs: 1.3, sm: 2 }, py: 1.5, borderRadius: 2.4, color: '#fff', background: 'linear-gradient(120deg, #0F032D 0%, #4E2BCC 70%, #905BF4 120%)' }}>
           <Box sx={{ width: 40, height: 40, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 1.6, bgcolor: 'rgba(255,255,255,0.14)' }}>
             <ReceiptText size={20} />
           </Box>
@@ -477,7 +493,7 @@ const handleAddCustomer = async () => {
 
           {selectedCustomer && (
             <Stack spacing={0.8}>
-              {loyaltyError && <Alert severity="error">{loyaltyError}</Alert>}
+              {currentLoyaltyError && <Alert severity="error">{currentLoyaltyError}</Alert>}
               {currentLoyaltyState?.settings.configured ? (
                 <>
                   <Alert severity="info">
@@ -494,7 +510,7 @@ const handleAddCustomer = async () => {
                     helperText={`Available: ${currentLoyaltyState.balance.toLocaleString('en-IN')} points`}
                   />
                 </>
-              ) : !loyaltyError && (
+              ) : !currentLoyaltyError && (
                 <Alert severity="info">This business has not enabled point redemption for this customer.</Alert>
               )}
             </Stack>
