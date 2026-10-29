@@ -7,6 +7,7 @@ import { BusinessOffersWorkspace } from './BusinessOffersWorkspace'
 type CustomerRetentionWorkspaceProps = {
   businessId: number
   businessName: string
+  businessLocation: string // CHANGED: new prop
   hasMappedLocation: boolean
   data: DashboardData
   onUpdated: () => void
@@ -29,7 +30,7 @@ function money(value: number) {
   return `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 }
 
-export function CustomerRetentionWorkspace({ businessId, businessName, hasMappedLocation, data, onUpdated }: CustomerRetentionWorkspaceProps) {
+export function CustomerRetentionWorkspace({ businessId, businessName, businessLocation, hasMappedLocation, data, onUpdated }: CustomerRetentionWorkspaceProps) { // CHANGED: added businessLocation
   const [now] = useState(() => Date.now())
   const [customerId, setCustomerId] = useState<number | ''>('')
   const [query, setQuery] = useState('')
@@ -163,7 +164,7 @@ export function CustomerRetentionWorkspace({ businessId, businessName, hasMapped
         </Stack>
       </Paper>
       <Divider />
-      <BusinessOffersWorkspace businessId={businessId} businessName={businessName} hasMappedLocation={hasMappedLocation} />
+      <BusinessOffersWorkspace businessId={businessId} businessName={businessName} businessLocation={businessLocation} hasMappedLocation={hasMappedLocation} /> {/* CHANGED: pass businessLocation */}
     </Stack>
   )
 }

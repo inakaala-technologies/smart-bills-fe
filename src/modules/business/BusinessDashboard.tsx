@@ -728,11 +728,29 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
             {activeTab === 'offers' && (
               selectedBusiness ? (
                 <BusinessOffersWorkspace
-                  key={selectedBusiness.id}
-                  businessId={selectedBusiness.id}
-                  businessName={selectedBusiness.businessName ?? selectedBusiness.name ?? 'your business'}
-                  hasMappedLocation={selectedBusiness.latitude != null && selectedBusiness.longitude != null}
-                />
+  businessId={selectedBusiness.id}
+  businessName={
+    selectedBusiness.businessName ??
+    selectedBusiness.name ??
+    selectedBusiness.companyName ??
+    'Your business'
+  }
+  businessLocation={
+    [
+      selectedBusiness.city,
+      selectedBusiness.region,
+      selectedBusiness.country,
+    ]
+      .filter(Boolean)
+      .join(', ') ||
+    selectedBusiness.address ||
+    'Location unavailable'
+  }
+  hasMappedLocation={
+    selectedBusiness.latitude != null &&
+    selectedBusiness.longitude != null
+  }
+/>
               ) : (
                 <Typography color="text.secondary">Create or select a business profile before posting offers.</Typography>
               )
@@ -798,6 +816,7 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
                 key={selectedBusiness.id}
                 businessId={selectedBusiness.id}
                 businessName={selectedBusiness.businessName ?? selectedBusiness.name ?? 'your business'}
+                businessLocation={selectedBusiness.address ?? ''}
                 hasMappedLocation={selectedBusiness.latitude != null && selectedBusiness.longitude != null}
                 data={data}
                 onUpdated={() => dispatch(fetchBusinessDashboard(selectedBusiness.id))}

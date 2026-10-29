@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { alpha } from '@mui/material/styles'
 import { Box, Button, Card, CardContent, Chip, Container, FormControl, InputLabel, MenuItem, Paper, Select, Stack, TextField, Typography } from '@mui/material'
 import { ArrowRight, Bell, Building2, CalendarCheck2, FileText, LayoutGrid, Plus, Search, UserRound, Users } from 'lucide-react'
@@ -58,6 +58,26 @@ export function DashboardPage({
   const selectedBusiness = data.businesses.find((business) => business.id === selectedBusinessId) ?? data.businesses[0] ?? null
 
   const activeBusinessLabel = selectedBusiness ? (selectedBusiness.businessName ?? selectedBusiness.name ?? 'Business workspace') : 'No business selected'
+  const [currentTime, setCurrentTime] = useState(new Date())
+
+useEffect(() => {
+  const interval = setInterval(() => {
+    setCurrentTime(new Date())
+  }, 60 * 1000)
+
+  return () => clearInterval(interval)
+}, [])
+
+const hour = currentTime.getHours()
+
+const greeting =
+  hour >= 5 && hour < 13
+    ? 'Good morning,'
+    : hour >= 13 && hour < 16
+      ? 'Good afternoon,'
+      : hour >= 16 && hour < 20
+        ? 'Good evening,'
+        : 'Good night,'
 
   const [invoiceForm, setInvoiceForm] = useState<{ customerId: number | string; productName: string; description: string; quantity: string; unitPrice: string; gstRate: string; dueDate: string; notes: string }>(() => ({
     customerId: data.customers[0]?.id ?? '',
@@ -328,7 +348,7 @@ export function DashboardPage({
           <Stack spacing={2}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Box>
-                <Typography variant="caption" sx={(theme) => ({ color: theme.palette.text.secondary, letterSpacing: 1.2, fontWeight: 700 })}>Good morning,</Typography>
+                <Typography variant="caption" sx={(theme) => ({ color: theme.palette.text.secondary, letterSpacing: 1.2, fontWeight: 700 })}> {greeting}</Typography>
                 <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.04em' }}>{authUser?.name ?? 'User'}</Typography>
                 <Typography variant="caption" sx={(theme) => ({ color: theme.palette.primary.main, fontWeight: 700 })}>{roleLabels[dashboardRole]} workspace</Typography>
               </Box>

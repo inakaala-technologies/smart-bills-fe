@@ -57,6 +57,8 @@ export type BusinessOffer = {
   endsAt: string
   active: boolean
   targetSegment?: CustomerSegment
+   imageUrl?: string | null
+   attachmentType?: 'IMAGE' | 'PDF' | null
 }
 
 export type CustomerSegment = 'ALL' | 'NEW' | 'LOYAL' | 'AT_RISK' | 'MEMBERS'
@@ -71,6 +73,8 @@ export type NearbyOfferSummary = {
   discountLabel: string
   endsAt: string
   distanceKm: number
+  imageUrl?: string | null
+  attachmentType?: 'IMAGE' | 'PDF' | null
 }
 
 export type ProductSummary = {

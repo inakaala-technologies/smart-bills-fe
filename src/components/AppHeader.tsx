@@ -1,4 +1,5 @@
 import { Avatar, Box, IconButton, Typography } from '@mui/material'
+import { useEffect, useState } from 'react'
 import type { MouseEvent } from 'react'
 import { NotificationBell } from './NotificationBell'
 import { ThemeModeToggle } from './ThemeModeToggle'
@@ -21,6 +22,27 @@ export function AppHeader({ authUser, contextLabel, roleLabel, menuId, isMenuOpe
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('')
+    const [currentTime, setCurrentTime] = useState(new Date())
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date())
+    }, 60 * 1000)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  const hour = currentTime.getHours()
+
+  const greeting =
+    hour >= 5 && hour < 13
+      ? 'Good morning,'
+      : hour >= 13 && hour < 16
+        ? 'Good afternoon,'
+        : hour >= 16 && hour < 20
+          ? 'Good evening,'
+          : 'Good night,'
+
 
   return (
     <Box sx={{
@@ -35,7 +57,7 @@ export function AppHeader({ authUser, contextLabel, roleLabel, menuId, isMenuOpe
     }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.9)', fontSize: compact ? 17 : undefined, fontWeight: 500, lineHeight: 1.2 }}>Hello,</Typography>
+          <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.9)', fontSize: compact ? 17 : undefined, fontWeight: 500, lineHeight: 1.2 }}>{greeting}</Typography>
           <Typography variant="h6" sx={{ fontSize: compact ? 27 : undefined, fontWeight: compact ? 500 : 800, lineHeight: 1.15, color: '#ffffff' }}>{authUser?.name ?? 'User'}</Typography>
           {!compact && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, mt: 0.65, minWidth: 0 }}>

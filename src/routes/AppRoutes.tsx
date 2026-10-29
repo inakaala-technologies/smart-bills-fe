@@ -17,10 +17,15 @@ import { fetchBusinessDashboard, fetchBusinessSummary } from '../store/businessD
 import { fetchCustomerDashboard } from '../store/customerDashboardSlice'
 import { appStyles } from '../theme/styles'
 import { setAuthUser } from '../store/authSlice'
+import { InsuranceHomePage, InsuranceCategoryPage } from '../pages/InsurancePages'
 
 function AuthenticatedRoute({ children }: { children: ReactNode }) {
   const authUser = useAppSelector((state: RootState) => state.auth.authUser)
   return authUser?.accessToken ? <>{children}</> : <Navigate to="/" replace />
+}
+
+function RoleRoute({ allow, role, children }: { allow: Role; role: Role; children: ReactNode }) {
+  return role === allow ? <>{children}</> : <Navigate to="/dashboard" replace />
 }
 
 function BusinessDetailRoute({
@@ -273,7 +278,7 @@ export default function AppRoutes() {
           }
         />
 
-        <Route
+                <Route
           path="/customer/:id"
           element={
             <AuthenticatedRoute>
@@ -296,6 +301,28 @@ export default function AppRoutes() {
           element={
             <AuthenticatedRoute>
               <AppointmentRouteRedirect />
+            </AuthenticatedRoute>
+          }
+        />
+
+        <Route
+          path="/insurance"
+          element={
+            <AuthenticatedRoute>
+              <RoleRoute allow="CUSTOMER" role={dashboardRole}>
+                <InsuranceHomePage />
+              </RoleRoute>
+            </AuthenticatedRoute>
+          }
+        />
+
+        <Route
+          path="/insurance/:category"
+          element={
+            <AuthenticatedRoute>
+              <RoleRoute allow="CUSTOMER" role={dashboardRole}>
+                <InsuranceCategoryPage />
+              </RoleRoute>
             </AuthenticatedRoute>
           }
         />
