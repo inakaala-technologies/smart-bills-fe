@@ -14,7 +14,6 @@ type CustomerDashboardMenuProps = {
   anchorEl: null | HTMLElement
   isOpen: boolean
   onClose: () => void
-  onChangeTab?: (tab: DashboardTab) => void
   currentRole?: Role
   availableAccounts?: Array<{ role: Role }>
   missingProfileRoles?: Role[]
@@ -29,7 +28,6 @@ export function CustomerDashboardMenu({
   anchorEl,
   isOpen,
   onClose,
-  onChangeTab,
   currentRole = 'CUSTOMER',
   availableAccounts = [],
   missingProfileRoles = [],

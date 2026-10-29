@@ -34,7 +34,6 @@ import { AddCustomerDialog } from './components/AddCustomerDialog'
 import { SendMembershipNotificationDialog } from './components/SendMembershipNotificationDialog'
 import type { BusinessFeature } from './components/BusinessProfileCard'
 import type { QuickActionId } from './components/QuickActionGrid'
-import type { DashboardTab } from '../types'
 import { normalizeBusinessType } from '../../constants/businessTypes'
 import { v4 as uuidv4 } from 'uuid';
 
