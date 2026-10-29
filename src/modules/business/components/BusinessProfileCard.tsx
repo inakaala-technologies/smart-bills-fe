@@ -5,7 +5,7 @@ import type { Role } from '../../../services/auth'
 import { LocationPicker, type LocationValue } from '../../../components/LocationPicker'
 import { BUSINESS_TYPES } from '../../../constants/businessTypes'
 
-export type BusinessFeature = 'appointments' | 'memberships'
+export type BusinessFeature = 'appointments' | 'memberships' | 'homeServices'
 
 export type BusinessProfileCardProps = {
   authUser: { id: string; name: string; email: string; phone?: string; role: Role } | null

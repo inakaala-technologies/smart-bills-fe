@@ -1,5 +1,5 @@
 import { Box, ButtonBase, Typography } from '@mui/material'
-import { CalendarCheck2, ShieldCheck, Tag, ReceiptText } from 'lucide-react'
+import { CalendarCheck2, ChartColumnIncreasing, ChevronRight, ShieldCheck, Tag, ReceiptText } from 'lucide-react'
 import type { DashboardData } from '../../../services/api'
 import type { DashboardTab } from '../../types'
 
@@ -118,6 +118,32 @@ export function SummaryCards({ data, loading, offersCount, onSelectTab }: Summar
           </Typography>
         </ButtonBase>
       ))}
+      <ButtonBase
+        onClick={() => onSelectTab('insights')}
+        aria-label="Open spending insights"
+        sx={{
+          gridColumn: '1 / -1',
+          width: '100%',
+          justifyContent: 'flex-start',
+          gap: 1.2,
+          px: 1.4,
+          py: 1.2,
+          borderRadius: '16px',
+          backgroundColor: 'background.paper',
+          border: '1px solid var(--mui-palette-divider)',
+          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
+          '&:focus-visible': { outline: '3px solid var(--mui-palette-primary-main)', outlineOffset: 2 },
+        }}
+      >
+        <Box sx={{ width: 40, height: 40, borderRadius: '12px', backgroundColor: 'primary.light', color: 'primary.dark', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ChartColumnIncreasing size={20} strokeWidth={2.2} />
+        </Box>
+        <Box sx={{ flex: 1, textAlign: 'left' }}>
+          <Typography sx={{ fontSize: 13, fontWeight: 800 }}>Spending insights</Typography>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>See your monthly expenses</Typography>
+        </Box>
+        <ChevronRight size={18} />
+      </ButtonBase>
     </Box>
   )
 }

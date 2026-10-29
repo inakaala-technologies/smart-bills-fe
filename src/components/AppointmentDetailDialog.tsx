@@ -295,7 +295,7 @@ export function AppointmentDetailDialog({
             {role === 'CUSTOMER' ? (
               <Stack spacing={1}>
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                  <Building2 size={16} color="#0d9488" />
+                  <Building2 size={16} color="#4E2BCC" />
                   <Typography sx={{ fontWeight: 700, color: 'text.primary' }}>
                     {business?.businessName ?? business?.name ?? 'Business'}
                   </Typography>
@@ -317,7 +317,7 @@ export function AppointmentDetailDialog({
             ) : (
               <Stack spacing={1}>
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                  <User size={16} color="#0d9488" />
+                  <User size={16} color="#4E2BCC" />
                   <Typography sx={{ fontWeight: 700, color: 'text.primary' }}>
                     {customer?.fullName ?? customer?.firstName ?? `Customer #${appointment.customerId ?? '—'}`}
                   </Typography>
@@ -367,7 +367,7 @@ export function AppointmentDetailDialog({
                 </TextField>
               ) : (
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                  <UserCheck size={16} color="#0d9488" />
+                  <UserCheck size={16} color="#4E2BCC" />
                   <Typography variant="body2" sx={{ fontWeight: 650, color: 'text.primary' }}>
                     {assignedStaffLabel}
                   </Typography>

@@ -35,6 +35,8 @@ export function normalizeBusiness(raw: Partial<BusinessSummary> & Record<string,
     status: typeof raw.status === 'string' ? raw.status : 'active',
     appointmentsEnabled: raw.appointmentsEnabled === true,
     membershipsEnabled: raw.membershipsEnabled !== false,
+    homeServicesEnabled: raw.homeServicesEnabled === true,
+    homeVisitCharge: Number(raw.homeVisitCharge ?? 0),
   }
 }
 
@@ -86,6 +88,9 @@ export function normalizeInvoice(raw: Partial<InvoiceSummary> & Record<string, u
     subtotal: typeof raw.subtotal === 'number' ? raw.subtotal : Number(raw.subtotal ?? 0),
     gstAmount: typeof raw.gstAmount === 'number' ? raw.gstAmount : Number(raw.gstAmount ?? 0),
     totalAmount: typeof raw.totalAmount === 'number' ? raw.totalAmount : Number(raw.totalAmount ?? 0),
+    invoiceDiscountAmount: Number(raw.invoiceDiscountAmount ?? 0),
+    invoiceDiscountType: raw.invoiceDiscountType === 'PERCENTAGE' || raw.invoiceDiscountType === 'AMOUNT' ? raw.invoiceDiscountType : undefined,
+    invoiceDiscountValue: Number(raw.invoiceDiscountValue ?? 0),
     loyaltyPointsRedeemed: Number(raw.loyaltyPointsRedeemed ?? 0),
     loyaltyDiscountAmount: Number(raw.loyaltyDiscountAmount ?? 0),
     status: typeof raw.status === 'string' ? raw.status : 'DRAFT',
@@ -117,6 +122,9 @@ export function normalizeAppointment(raw: Partial<AppointmentSummary> & Record<s
     servicePrice: typeof raw.servicePrice === 'number' ? raw.servicePrice : Number(raw.servicePrice ?? 0),
     loyaltyPointsRedeemed: Number(raw.loyaltyPointsRedeemed ?? 0),
     loyaltyDiscountAmount: Number(raw.loyaltyDiscountAmount ?? 0),
+    homeVisit: raw.homeVisit === true,
+    visitingCharge: Number(raw.visitingCharge ?? 0),
+    visitAddress: typeof raw.visitAddress === 'string' ? raw.visitAddress : undefined,
     scheduledAt: typeof raw.scheduledAt === 'string' ? raw.scheduledAt : undefined,
     durationMinutes: typeof raw.durationMinutes === 'number' ? raw.durationMinutes : Number(raw.durationMinutes ?? 0),
     status: typeof raw.status === 'string' ? raw.status : 'BOOKED',

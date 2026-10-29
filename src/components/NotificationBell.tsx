@@ -314,7 +314,7 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
                   />
                   <Box sx={{ minWidth: 0, flex: 1 }}>
                     <Stack direction="row" spacing={0.6} sx={{ alignItems: 'center' }}>
-                      {isAppt && <CalendarCheck2 size={13} color="#0d9488" style={{ flexShrink: 0 }} />}
+                      {isAppt && <CalendarCheck2 size={13} color="#4E2BCC" style={{ flexShrink: 0 }} />}
                       <Typography
                         sx={{
                           color: 'text.primary',

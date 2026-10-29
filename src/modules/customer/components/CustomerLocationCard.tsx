@@ -8,15 +8,18 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-
-import { FileText, MapPin } from 'lucide-react'
+import { FileText, Home, MapPin } from 'lucide-react'
 import { useEffect, useState } from 'react'
-
 import {
   LocationPicker,
   type LocationValue,
 } from '../../../components/LocationPicker'
-
+import { BusinessTypeFilter } from '../../../components/BusinessTypeFilter'
+import { BusinessTypeIcon } from '../../../components/BusinessTypeIcon'
+import {
+  getBusinessTypeLabel,
+  normalizeBusinessType,
+} from '../../../constants/businessTypes'
 import {
   fetchNearbyBusinesses,
   fetchNearbyOffers,
@@ -96,6 +99,13 @@ export function CustomerLocationCard({
 
   const [feedback, setFeedback] = useState('')
   const [feedbackError, setFeedbackError] = useState(false)
+  const [homeServicesOnly, setHomeServicesOnly] = useState(false)
+  const [businessTypeFilter, setBusinessTypeFilter] = useState('ALL')
+  const filteredBusinesses = nearbyBusinesses.filter((business) =>
+    (businessTypeFilter === 'ALL' ||
+      normalizeBusinessType(business.businessType) === businessTypeFilter) &&
+      (!homeServicesOnly || business.homeServicesEnabled === true),
+  )
 
   /*
    * Keep the location picker synchronized when the
@@ -382,7 +392,6 @@ export function CustomerLocationCard({
               />
             ))}
           </Stack>
-
           {/* OFFERS VIEW */}
           {view === 'offers' && (
             <Box sx={{ mt: 1.5 }}>
@@ -676,9 +685,44 @@ export function CustomerLocationCard({
                 )}
 
               {!businessesLoading &&
+                !businessesError &&
                 nearbyBusinesses.length > 0 && (
-                  <Stack spacing={0.8}>
-                    {nearbyBusinesses.map((business) => {
+                  <>
+                    <Stack
+                      direction={{ xs: 'column', sm: 'row' }}
+                      spacing={1}
+                      sx={{
+                        alignItems: { xs: 'stretch', sm: 'center' },
+                        justifyContent: 'space-between',
+                        mb: 1,
+                      }}
+                    >
+                      <Typography
+                        variant="caption"
+                        sx={{ color: 'text.secondary', fontWeight: 800 }}
+                      >
+                        {filteredBusinesses.length} nearby businesses
+                      </Typography>
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                        <Chip
+                          label="Home services"
+                          size="small"
+                          clickable
+                          color={homeServicesOnly ? 'success' : 'default'}
+                          variant={homeServicesOnly ? 'filled' : 'outlined'}
+                          onClick={() => setHomeServicesOnly((current) => !current)}
+                          aria-pressed={homeServicesOnly}
+                        />
+                        <BusinessTypeFilter
+                          id="nearby-business-type"
+                          value={businessTypeFilter}
+                          onChange={setBusinessTypeFilter}
+                        />
+                      </Stack>
+                    </Stack>
+                    {filteredBusinesses.length > 0 ? (
+                    <Stack spacing={0.8}>
+                    {filteredBusinesses.map((business) => {
                       const businessLocation =
                         formatBusinessLocation(business.address)
 
@@ -709,30 +753,46 @@ export function CustomerLocationCard({
                                 justifyContent: 'space-between',
                               }}
                             >
-                              <Box sx={{ minWidth: 0 }}>
-                                <Typography
-                                  sx={{
-                                    color: 'text.primary',
-                                    fontWeight: 900,
-                                    overflowWrap: 'anywhere',
-                                  }}
-                                >
-                                  {business.name}
-                                </Typography>
-
-                                {business.businessType && (
+                              <Stack
+                                direction="row"
+                                spacing={1}
+                                sx={{ minWidth: 0, alignItems: 'center' }}
+                              >
+                                <BusinessTypeIcon businessType={business.businessType} />
+                                <Box sx={{ minWidth: 0 }}>
                                   <Typography
-                                    variant="caption"
                                     sx={{
-                                      display: 'block',
-                                      mt: 0.3,
-                                      color: 'text.secondary',
+                                      color: 'text.primary',
+                                      fontWeight: 900,
+                                      overflowWrap: 'anywhere',
                                     }}
                                   >
-                                    {business.businessType}
+                                    {business.name}
                                   </Typography>
-                                )}
-                              </Box>
+                                  {business.businessType && (
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        display: 'block',
+                                        mt: 0.3,
+                                        color: 'text.secondary',
+                                      }}
+                                    >
+                                      {getBusinessTypeLabel(business.businessType)}
+                                    </Typography>
+                                  )}
+                                  {business.homeServicesEnabled && (
+                                    <Chip
+                                      icon={<Home size={12} />}
+                                      label="Home services"
+                                      size="small"
+                                      color="success"
+                                      variant="outlined"
+                                      sx={{ mt: 0.5, height: 20, fontSize: 11 }}
+                                    />
+                                  )}
+                                </Box>
+                              </Stack>
 
                               <Chip
                                 label={formatDistance(
@@ -778,6 +838,12 @@ export function CustomerLocationCard({
                       )
                     })}
                   </Stack>
+                    ) : (
+                      <Alert severity="info" sx={{ mt: 1 }}>
+                        No nearby businesses match these filters.
+                      </Alert>
+                    )}
+                  </>
                 )}
             </Box>
           )}

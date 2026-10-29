@@ -18,14 +18,8 @@ import {
 import {
   CalendarCheck2,
   ChevronRight,
-  Award,
-  FileText,
-  Home,
-    LayoutGrid,
   ShieldCheck,
   ShoppingCart,
-  UserRound,
-  type LucideIcon,
 } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
@@ -34,7 +28,10 @@ import { EmptyState } from '../../components/EmptyState'
 import { ProfileManagerDialog } from '../../components/ProfileManagerDialog'
 import { CustomerLocationCard } from './components/CustomerLocationCard'
 import { HeroBanner, SummaryCards } from './components/CustomerDashboardOverview'
-import { CustomerDashboardMenu } from './components/CustomerDashboardMenu'
+import { CustomerProfileMenuPage } from './components/CustomerProfileMenuPage'
+import { CustomerInsights } from './components/CustomerInsights'
+import { CustomerLoyaltyPanel } from './components/CustomerLoyaltyPanel'
+import { CustomerBottomNavBar } from './components/CustomerBottomNavBar'
 import { CustomerInvoicesList } from './components/CustomerInvoicesList'
 import { CustomerProfilePanel } from './components/CustomerProfilePanel'
 import { CustomerAppointmentsPanel } from './components/CustomerAppointmentsPanel'
@@ -48,20 +45,7 @@ import type { DashboardTab } from '../types'
 import { FamilyManagementDialog } from './components/FamilyManagementDialog'
 import { CustomerBillsPage } from './components/CustomerBillsPage'
 
-const roleNav: Array<{
-  key: DashboardTab
-  label: string
-  icon: LucideIcon
-}> = [
-  { key: 'overview', label: 'Home', icon: Home },
-  { key: 'businesses', label: 'Businesses', icon: LayoutGrid },
-  { key: 'invoices', label: 'Documents', icon: FileText },
-  { key: 'appointments', label: 'Bookings', icon: CalendarCheck2 },
-  { key: 'rewards', label: 'Rewards', icon: Award },
-  { key: 'profile', label: 'Profile', icon: UserRound },
-]
-
-const customerDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'appointments', 'rewards', 'memberships', 'bills', 'profile']
+const customerDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'appointments', 'rewards', 'memberships', 'bills', 'insights', 'profile']
 
 function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
@@ -77,15 +61,14 @@ export function CustomerDashboard() {
   const availableAccounts = (authUser?.accounts ?? []).filter((account) => account.role !== authUser?.role)
   const missingProfileRoles = (['BUSINESS', 'CUSTOMER'] as Role[]).filter((role) => role !== authUser?.role && !accountRoles.has(role))
   const { data, loading, activeTab } = useAppSelector((state: RootState) => state.customerDashboard)
-  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
+  const [isProfilePageOpen, setIsProfilePageOpen] = useState(false)
   const [managerOpen, setManagerOpen] = useState(false)
   const [nearbyOffersCount, setNearbyOffersCount] = useState(0)
   const [activityNow] = useState(Date.now)
   const [explicitAppointment, setExplicitAppointment] = useState<AppointmentSummary | null>(null)
   const setSelectedAppointment = setExplicitAppointment
   const [selectedInvoice, setSelectedInvoice] = useState<DashboardData['invoices'][number] | null>(null)
-  const isMenuOpen = Boolean(menuAnchorEl)
-
+  const isMenuOpen = isProfilePageOpen
   const customerLatitude = data.customers[0]?.latitude
   const customerLongitude = data.customers[0]?.longitude
   const [familyDialogOpen, setFamilyDialogOpen] = useState(false)
@@ -225,6 +208,42 @@ export function CustomerDashboard() {
     ...invoiceActivities,
   ].slice(0, 5)
 
+  if (isProfilePageOpen) {
+    return (
+      <CustomerProfileMenuPage
+        authUser={authUser}
+        currentRole={authUser?.role ?? 'CUSTOMER'}
+        availableAccounts={availableAccounts}
+        missingProfileRoles={missingProfileRoles}
+        onBack={() => setIsProfilePageOpen(false)}
+        onNavigateTab={(tab) => {
+          setIsProfilePageOpen(false)
+          handleChangeTab(tab)
+        }}
+        onSwitchAccount={(role: Role) => {
+          const updated = switchAccount(role)
+          if (updated) {
+            dispatch(setAuthUser(updated))
+            navigate('/dashboard')
+            window.location.reload()
+          }
+        }}
+        onAddProfile={(role: Role) => {
+          const updated = addProfile(role)
+          if (updated) {
+            dispatch(setAuthUser(updated))
+            navigate('/dashboard')
+            window.location.reload()
+          }
+        }}
+        onLogout={() => {
+          logoutUser()
+          navigate('/')
+        }}
+      />
+    )
+  }
+
   return (
     <Box
       sx={{
@@ -270,55 +289,11 @@ export function CustomerDashboard() {
             roleLabel="Customer"
             menuId="customer-menu"
             isMenuOpen={isMenuOpen}
-            onOpenMenu={(event) =>
-              setMenuAnchorEl(event.currentTarget)
-            }
+            onOpenMenu={() => setIsProfilePageOpen(true)}
           />
 
           {/* Main Content Area */}
-          <Box
-            sx={{
-              px: { xs: 2, sm: 2.2 },
-              pt: { xs: 2, sm: 2.2 },
-              pb: 'calc(96px + env(safe-area-inset-bottom))',
-              flex: 1,
-              minHeight: 0,
-              overflowY: 'auto',
-              overscrollBehaviorY: 'contain',
-            }}
-          >
-            <CustomerDashboardMenu
-              tabs={roleNav}
-              activeTab={activeTab}
-              onChangeTab={handleChangeTab}
-              anchorEl={menuAnchorEl}
-              isOpen={isMenuOpen}
-              onClose={() => setMenuAnchorEl(null)}
-              currentRole={authUser?.role ?? 'CUSTOMER'}
-              availableAccounts={availableAccounts}
-              missingProfileRoles={missingProfileRoles}
-              onSwitchAccount={(role: Role) => {
-                const updated = switchAccount(role)
-
-                if (updated) {
-                  dispatch(setAuthUser(updated))
-                  setMenuAnchorEl(null)
-                  navigate('/dashboard')
-                  window.location.reload()
-                }
-              }}
-              onAddProfile={(role: Role) => {
-                const updated = addProfile(role)
-
-                if (updated) {
-                  dispatch(setAuthUser(updated))
-                  setMenuAnchorEl(null)
-                  navigate('/dashboard')
-                  window.location.reload()
-                }
-              }}
-            />
-
+          <Box sx={{ px: { xs: 2, sm: 2.2 }, pt: { xs: 2, sm: 2.2 }, pb: 'calc(96px + env(safe-area-inset-bottom))', flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehaviorY: 'contain' }}>
             {/* Profile Dialog */}
             <ProfileManagerDialog
               open={managerOpen}
@@ -573,15 +548,13 @@ export function CustomerDashboard() {
                                   width: 48,
                                   height: 48,
                                   borderRadius: '50%',
-                                  background:
-                                    'linear-gradient(135deg, #065f46 0%, #0d9488 100%)',
+                                  background: 'linear-gradient(135deg, #4E2BCC 0%, #905BF4 100%)',
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
                                   color: '#ffffff',
                                   flexShrink: 0,
-                                  boxShadow:
-                                    '0 4px 10px rgba(6, 95, 70, 0.2)',
+                                  boxShadow: '0 4px 10px rgba(78, 43, 204, 0.22)',
                                 }}
                               >
                                 <Icon
@@ -847,6 +820,14 @@ export function CustomerDashboard() {
                                 )}
                               </Typography>
                             </Box>
+                            {(selectedInvoice.invoiceDiscountAmount ?? 0) > 0 && (
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                                <Typography sx={{ color: 'success.main' }}>
+                                  Discount{selectedInvoice.invoiceDiscountType === 'PERCENTAGE' ? ` (${selectedInvoice.invoiceDiscountValue}%)` : ''}
+                                </Typography>
+                                <Typography sx={{ color: 'success.main' }}>−{formatCurrency(selectedInvoice.invoiceDiscountAmount)}</Typography>
+                              </Box>
+                            )}
                             {(selectedInvoice.loyaltyPointsRedeemed ?? 0) > 0 && (
                               <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
                                 <Typography sx={{ color: 'success.main' }}>Loyalty discount ({selectedInvoice.loyaltyPointsRedeemed} points)</Typography>
@@ -902,6 +883,8 @@ export function CustomerDashboard() {
             )}
 
             {activeTab === 'invoices' && <CustomerInvoicesList invoices={data.invoices} businesses={data.businesses} />}
+            {activeTab === 'rewards' && <CustomerLoyaltyPanel customerId={authUser?.id ? Number(authUser.id) : null} businesses={data.businesses} />}
+            {activeTab === 'insights' && <CustomerInsights invoices={data.invoices} businesses={data.businesses} customerId={authUser?.id ? Number(authUser.id) : null} />}
             {activeTab === 'appointments' && (
               <CustomerAppointmentsPanel
                 appointments={data.appointments}
@@ -1118,68 +1101,7 @@ export function CustomerDashboard() {
             onClose={() => setSelectedAppointment(null)}
           />
 
-          {/* Bottom Navigation Bar matching the reference */}
-          <Box
-            sx={{
-              position: 'absolute',
-              bottom: 'calc(10px + env(safe-area-inset-bottom))',
-              left: 12,
-              right: 12,
-              backgroundColor: 'background.paper',
-              border: '1px solid var(--mui-palette-divider)',
-              borderRadius: 999,
-              boxShadow: '0 8px 24px rgba(15, 3, 45, 0.14)',
-              display: 'grid',
-              gridTemplateColumns: `repeat(${roleNav.length}, minmax(0, 1fr))`,
-              py: 0.7,
-              px: 0.6,
-              zIndex: 10,
-            }}
-          >
-            {roleNav.map((tab) => {
-              const isActive = activeTab === tab.key
-              const Icon = tab.icon
-
-              return (
-                <Box
-                  key={tab.key}
-                  onClick={() => handleChangeTab(tab.key)}
-                  sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 0.6,
-                    cursor: 'pointer',
-                    backgroundColor: isActive ? 'primary.main' : 'transparent',
-                    borderRadius: 999,
-                    transition: 'background-color 0.18s ease, color 0.18s ease',
-                    py: 0.7,
-                    px: 0.4,
-                    color: isActive ? 'primary.contrastText' : 'text.secondary',
-                  }}
-                >
-                  <Icon
-                    size={19}
-                    strokeWidth={isActive ? 2.6 : 2}
-                    color={isActive ? 'var(--mui-palette-primary-contrastText)' : 'var(--mui-palette-text-secondary)'}
-                  />
-
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      fontWeight: isActive ? 800 : 600,
-                      fontSize: '10px',
-                      lineHeight: 1,
-                      letterSpacing: '-0.01em',
-                    }}
-                  >
-                    {tab.label}
-                  </Typography>
-                </Box>
-              )
-            })}
-          </Box>
+          <CustomerBottomNavBar activeTab={activeTab} onChangeTab={handleChangeTab} />
         </Paper>
       </Container>
     </Box>

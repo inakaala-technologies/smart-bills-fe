@@ -12,6 +12,8 @@ import {
   searchCustomers,
   setBusinessAppointmentsEnabled,
   setBusinessMembershipsEnabled,
+  setBusinessHomeServicesEnabled,
+  setBusinessHomeVisitCharge,
   updateAppointmentStaff,
   updateAppointmentStatus,
   updateInvoiceStatus,
@@ -26,7 +28,7 @@ import type { RootState } from '../../store/store'
 import { ArrowLeft } from 'lucide-react'
 import { BusinessProductsSection } from './components/BusinessProductsSection'
 import { getBusinessProducts } from '../../services/api/billingApi'
-import { fetchBusinessDashboard, fetchBusinessSummary, setActiveTab,setBusinessFeatures, setSelectedBusinessId } from '../../store/businessDashboardSlice'
+import { fetchBusinessDashboard, fetchBusinessSummary, setActiveTab,setBusinessFeatures, setBusinessHomeVisitCharge as setBusinessHomeVisitChargeAction, setSelectedBusinessId } from '../../store/businessDashboardSlice'
 import { setAuthUser } from '../../store/authSlice'
 import { AppointmentListCard } from './components/AppointmentListCard'
 import { AppointmentServiceManager } from './components/AppointmentServiceManager'
@@ -94,6 +96,7 @@ export function BusinessDashboard() {
   const selectedBusiness = data.businesses.find((business) => business.id === selectedBusinessId) ?? data.businesses[0] ?? null
   const appointmentsEnabled = selectedBusiness?.appointmentsEnabled ?? false
   const membershipsEnabled = selectedBusiness?.membershipsEnabled ?? true
+  const homeServicesEnabled = selectedBusiness?.homeServicesEnabled ?? false
 
   useEffect(() => {
     if (!selectedBusiness) return
@@ -112,7 +115,8 @@ export function BusinessDashboard() {
   const [invoiceForm, setInvoiceForm] = useState<BusinessInvoiceForm>(() => ({
     customerId: data.customers[0]?.id ?? '',
     dueDate: '',
-    loyaltyPointsToRedeem: '0',
+    discountType: 'AMOUNT',
+    discountValue: '',
     items: [createInvoiceItem()],
   }))
   const [invoiceMessage, setInvoiceMessage] = useState('')
@@ -282,11 +286,21 @@ export function BusinessDashboard() {
     }
   }
 
+  const handleSaveHomeVisitCharge = async (charge: number) => {
+    if (!selectedBusiness) return { ok: false, message: 'Select a business profile first.' }
+    const result = await setBusinessHomeVisitCharge(selectedBusiness.id, charge)
+    if (!result.ok || !result.business) return { ok: false, message: result.message }
+    dispatch(setBusinessHomeVisitChargeAction({ businessId: selectedBusiness.id, homeVisitCharge: result.business.homeVisitCharge ?? 0 }))
+    return { ok: true }
+  }
+
   const handleFeatureToggle = async (feature: BusinessFeature, enabled: boolean) => {
     if (!selectedBusiness) return { ok: false, message: 'Select a business profile first.' }
     const result = feature === 'appointments'
       ? await setBusinessAppointmentsEnabled(selectedBusiness.id, enabled)
-      : await setBusinessMembershipsEnabled(selectedBusiness.id, enabled)
+      : feature === 'homeServices'
+        ? await setBusinessHomeServicesEnabled(selectedBusiness.id, enabled)
+        : await setBusinessMembershipsEnabled(selectedBusiness.id, enabled)
     if (!result.ok || !result.business) {
       return { ok: false, message: result.message ?? 'Could not update this feature.' }
     }
@@ -294,6 +308,7 @@ export function BusinessDashboard() {
       businessId: selectedBusiness.id,
       appointmentsEnabled: result.business.appointmentsEnabled ?? false,
       membershipsEnabled: result.business.membershipsEnabled ?? true,
+      homeServicesEnabled: result.business.homeServicesEnabled ?? false,
     }))
     return { ok: true }
   }
@@ -375,7 +390,12 @@ export function BusinessDashboard() {
     }
   }, [customerSearchText, data.customers])
 
-  const handleInvoiceInput = (field: 'customerId' | 'dueDate' | 'loyaltyPointsToRedeem', value: string) => {
+  const handleInvoiceInput = (field: 'customerId' | 'dueDate' | 'discountType' | 'discountValue', value: string) => {
+    if (field === 'discountType') {
+      if (value !== 'PERCENTAGE' && value !== 'AMOUNT') return
+      setInvoiceForm((current) => ({ ...current, discountType: value }))
+      return
+    }
     setInvoiceForm((current) => ({ ...current, [field]: value }))
   }
 
@@ -494,7 +514,29 @@ export function BusinessDashboard() {
 
     const subtotal = Number(items.reduce((total, item) => total + item.quantity * item.unitPrice, 0).toFixed(2))
     const gstAmount = Number(items.reduce((total, item) => total + item.quantity * item.unitPrice * (item.gstRate / 100), 0).toFixed(2))
-    const totalAmount = Number((subtotal + gstAmount).toFixed(2))
+    const grossTotal = Number((subtotal + gstAmount).toFixed(2))
+    const discountValue = Number(invoiceForm.discountValue)
+    if (
+      invoiceForm.discountValue.trim()
+      && (!Number.isFinite(discountValue)
+        || discountValue < 0
+        || (invoiceForm.discountType === 'PERCENTAGE' && discountValue > 100))
+    ) {
+      setInvoiceMessageSeverity('error')
+      setInvoiceMessage(invoiceForm.discountType === 'PERCENTAGE'
+        ? 'Enter a discount percentage from 0 to 100.'
+        : 'Enter a valid discount amount.')
+      return
+    }
+    const invoiceDiscountAmount = invoiceForm.discountValue.trim()
+      ? Number((invoiceForm.discountType === 'PERCENTAGE' ? grossTotal * discountValue / 100 : discountValue).toFixed(2))
+      : 0
+    if (invoiceDiscountAmount > grossTotal) {
+      setInvoiceMessageSeverity('error')
+      setInvoiceMessage('Discount amount cannot be greater than the invoice total.')
+      return
+    }
+    const totalAmount = Number((grossTotal - invoiceDiscountAmount).toFixed(2))
     const issueDate = getLocalDate()
     // const issueDate = new Date().toISOString().slice(0, 10)
     setIsInvoiceSubmitting(true)
@@ -508,8 +550,12 @@ export function BusinessDashboard() {
   subtotal,
   gstAmount,
   totalAmount,
+  invoiceDiscountAmount,
+  ...(invoiceForm.discountValue.trim() ? {
+    invoiceDiscountType: invoiceForm.discountType,
+    invoiceDiscountValue: discountValue,
+  } : {}),
   status,
-  loyaltyPointsToRedeem: Math.max(0, Math.floor(Number(invoiceForm.loyaltyPointsToRedeem) || 0)),
 })
 
       if (!result.ok) {
@@ -531,7 +577,8 @@ export function BusinessDashboard() {
       setInvoiceForm((current) => ({
         ...current,
         customerId: '',
-        loyaltyPointsToRedeem: '0',
+        discountType: 'AMOUNT',
+        discountValue: '',
         items: [createInvoiceItem()],
       }))
 
@@ -582,6 +629,9 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
       subtotal: invoice.subtotal,
       gstAmount: invoice.gstAmount,
       totalAmount: invoice.totalAmount,
+      invoiceDiscountAmount: invoice.invoiceDiscountAmount,
+      invoiceDiscountType: invoice.invoiceDiscountType,
+      invoiceDiscountValue: invoice.invoiceDiscountValue,
       amount: formatCurrency(invoice.totalAmount),
       loyaltyDetails: (invoice.loyaltyPointsRedeemed ?? 0) > 0
         ? `${invoice.loyaltyPointsRedeemed} points redeemed · ${formatCurrency(invoice.loyaltyDiscountAmount)} discount`
@@ -670,7 +720,7 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
             roleLabel="Business Owner"
             menuId="profile-menu-page"
             isMenuOpen={isProfilePageOpen}
-            compact={activeTab === 'overview'}
+            showWorkspaceContext={activeTab !== 'overview'}
             onOpenMenu={() => setIsProfilePageOpen(true)}
           />
 
@@ -706,6 +756,8 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
                 <BusinessDashboardOverview
                   onQuickAction={handleQuickAction}
                   onOpenInsights={() => changeTab('insights')}
+                  onOpenInvoices={() => changeTab('invoices')}
+                  onOpenCustomers={() => changeTab('customers')}
                   onOpenInvoice={(invoiceId) => {
                     setPreviewInvoiceId(invoiceId)
                     changeTab('invoices')
@@ -789,7 +841,6 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
                       setSelectedCustomer(customer)
                       if (customer) {
                         handleInvoiceInput('customerId', String(customer.id))
-                        handleInvoiceInput('loyaltyPointsToRedeem', '0')
                       }
                     }}
                     onInvoiceFieldChange={handleInvoiceInput}
@@ -860,6 +911,10 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
                     key={selectedBusiness.id}
                     businessId={selectedBusiness.id}
                     appointmentsEnabled={selectedBusiness.appointmentsEnabled ?? false}
+                    homeServicesEnabled={homeServicesEnabled}
+                    onToggleHomeServices={(enabled) => handleFeatureToggle('homeServices', enabled)}
+                    homeVisitCharge={selectedBusiness.homeVisitCharge ?? 0}
+                    onSaveHomeVisitCharge={handleSaveHomeVisitCharge}
                     onConfigurationChanged={() => dispatch(fetchBusinessDashboard(selectedBusiness.id))}
                   />
                 )}

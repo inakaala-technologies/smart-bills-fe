@@ -111,7 +111,7 @@ function buildSalesTrend(
   }))
 }
 
-export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpenInvoice, hasBusiness, appointmentsEnabled, membershipsEnabled }: { onQuickAction: (action: QuickActionId) => void; onOpenInsights: () => void; onOpenInvoice: (invoiceId: number) => void; hasBusiness: boolean; appointmentsEnabled: boolean; membershipsEnabled: boolean }) {
+export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpenInvoice, onOpenInvoices, onOpenCustomers, hasBusiness, appointmentsEnabled, membershipsEnabled }: { onQuickAction: (action: QuickActionId) => void; onOpenInsights: () => void; onOpenInvoice: (invoiceId: number) => void; onOpenInvoices: () => void; onOpenCustomers: () => void; hasBusiness: boolean; appointmentsEnabled: boolean; membershipsEnabled: boolean }) {
   const { data, loading, summary, selectedBusinessId } = useAppSelector((state) => state.businessDashboard)
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<number | null>(null)
   const [salesInterval, setSalesInterval] = useState<BusinessInsightsInterval>('MONTHLY')
@@ -170,13 +170,14 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
     { label: 'Completed', amount: completedRevenueAmount, percentage: completedPercentage, color: '#4E2BCC' },
     { label: 'Remaining', amount: remainingRevenueAmount, percentage: remainingPercentage, color: '#E8A23A' },
   ]
-  const summaryCards: Array<{ title: string; value: string; detail: string; icon: LucideIcon; tone: 'amber' | 'purple' }> = [
+  const summaryCards: Array<{ title: string; value: string; detail: string; icon: LucideIcon; tone: 'amber' | 'purple'; onClick: () => void }> = [
     {
       title: 'Pending Payments',
       value: formatCurrency(pendingPaymentAmount),
       detail: `${pendingPaymentCount} ${pendingPaymentCount === 1 ? 'invoice' : 'invoices'}`,
       icon: LockKeyhole,
       tone: 'amber',
+      onClick: onOpenInvoices,
     },
     {
       title: 'New Customers',
@@ -184,6 +185,7 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
       detail: 'New customer profiles',
       icon: UserRoundPlus,
       tone: 'purple',
+      onClick: onOpenCustomers,
     },
   ]
   const recentActivity = (summary?.recentTransactions?.length
@@ -357,8 +359,30 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
         </Box>
 
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1.2 }}>
-          {summaryCards.map(({ title, value, detail, icon: Icon, tone }) => (
-            <Box key={title} sx={{ minWidth: 0, minHeight: 136, p: 1.6, borderRadius: 2.5, bgcolor: 'background.paper', boxShadow: '0 8px 20px rgba(20, 16, 35, 0.08)' }}>
+          {summaryCards.map(({ title, value, detail, icon: Icon, tone, onClick }) => (
+            <ButtonBase
+              key={title}
+              type="button"
+              aria-label={`Open ${title}`}
+              onClick={onClick}
+              disabled={!hasBusiness}
+              sx={{
+                display: 'block',
+                width: '100%',
+                minWidth: 0,
+                minHeight: 136,
+                p: 1.6,
+                borderRadius: 2.5,
+                bgcolor: 'background.paper',
+                boxShadow: '0 8px 20px rgba(20, 16, 35, 0.08)',
+                textAlign: 'left',
+                color: 'inherit',
+                transition: 'box-shadow 150ms ease, transform 150ms ease',
+                '&:hover': { boxShadow: '0 10px 24px rgba(20, 16, 35, 0.14)', transform: 'translateY(-1px)' },
+                '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                '&.Mui-disabled': { opacity: 0.6 },
+              }}
+            >
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                 <Box sx={{ width: 34, height: 34, display: 'grid', placeItems: 'center', borderRadius: 1.5, bgcolor: tone === 'amber' ? '#FFF2D8' : '#F0E9FF', color: tone === 'amber' ? '#F59E0B' : '#5D36D3' }}>
                   <Icon size={17} strokeWidth={2.1} />
@@ -368,7 +392,7 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
               <Typography noWrap sx={{ color: 'text.primary', fontSize: 25, lineHeight: 1.1, fontWeight: 600, letterSpacing: '-0.7px' }}>{value}</Typography>
               <Typography noWrap sx={{ mt: 0.5, color: 'text.primary', fontSize: 11.5, lineHeight: 1.2 }}>{title}</Typography>
               <Typography noWrap sx={{ mt: 0.6, color: tone === 'amber' ? '#E89100' : '#4E2BCC', fontSize: 9.5, lineHeight: 1.2 }}>{detail}</Typography>
-            </Box>
+            </ButtonBase>
           ))}
         </Box>
 

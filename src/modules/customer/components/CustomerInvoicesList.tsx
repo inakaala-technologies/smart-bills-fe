@@ -357,7 +357,7 @@ export function CustomerInvoicesList({
               badge={entry.badge}
               date={entry.date}
               time={entry.time}
-              accent="linear-gradient(135deg, #065f46 0%, #0d9488 100%)"
+              accent="linear-gradient(135deg, #4E2BCC 0%, #905BF4 100%)"
             />
           ))}
         </Stack>

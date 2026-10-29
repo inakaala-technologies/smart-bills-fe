@@ -64,6 +64,24 @@ export async function setBusinessMembershipsEnabled(businessId: number, enabled:
   }
 }
 
+export async function setBusinessHomeServicesEnabled(businessId: number, enabled: boolean): Promise<{ ok: boolean; business?: BusinessSummary; message?: string }> {
+  try {
+    const { data } = await apiClient.put<Record<string, unknown>>(`/api/v1/businesses/${businessId}/home-services-enabled`, undefined, { params: { enabled } })
+    return { ok: true, business: normalizeBusiness(data) }
+  } catch (error) {
+    return { ok: false, message: getErrorMessage(error, 'Could not update home services.') }
+  }
+}
+
+export async function setBusinessHomeVisitCharge(businessId: number, charge: number): Promise<{ ok: boolean; business?: BusinessSummary; message?: string }> {
+  try {
+    const { data } = await apiClient.put<Record<string, unknown>>(`/api/v1/businesses/${businessId}/home-visit-charge`, undefined, { params: { charge } })
+    return { ok: true, business: normalizeBusiness(data) }
+  } catch (error) {
+    return { ok: false, message: getErrorMessage(error, 'Could not update the visiting charge.') }
+  }
+}
+
 export async function createBusiness(payload: BusinessCreateRequest): Promise<{ ok: boolean; business?: BusinessSummary; message?: string }> {
   try {
     const { data } = await apiClient.post<Record<string, unknown>>('/api/v1/businesses', payload)

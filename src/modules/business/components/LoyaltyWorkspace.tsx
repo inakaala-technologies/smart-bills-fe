@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, Stack, Switch, TextField, Typography } from '@mui/material'
 import { Award, Pencil, Plus } from 'lucide-react'
 import {
@@ -37,9 +37,16 @@ export function LoyaltyWorkspace({ businessId, products }: LoyaltyWorkspaceProps
   const [services, setServices] = useState<AppointmentServiceSummary[]>([])
   const [plans, setPlans] = useState<MembershipPlanSummary[]>([])
   const [settings, setSettings] = useState<LoyaltyProgramSettings | null>(null)
-  const [settingsForm, setSettingsForm] = useState({ pointsPerCurrencyUnit: '', maxRedemptionPercent: '' })
+  const [settingsForm, setSettingsForm] = useState({
+    pointsPerCurrencyUnit: '',
+    maxRedemptionPercent: '',
+    invoiceEarningMode: '' as '' | 'FIXED_POINTS' | 'PERCENTAGE',
+    invoiceEarningValue: '',
+  })
   const [savingSettings, setSavingSettings] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [loadedBusinessId, setLoadedBusinessId] = useState<number | null>(null)
+  const isLoading = loading || loadedBusinessId !== businessId
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingRule, setEditingRule] = useState<LoyaltyRule | null>(null)
   const [saving, setSaving] = useState(false)
@@ -64,8 +71,7 @@ export function LoyaltyWorkspace({ businessId, products }: LoyaltyWorkspaceProps
     return options.find((option) => option.id === rule.targetId)?.label ?? `${typeLabels[rule.targetType]} #${rule.targetId}`
   }
 
-  const load = async () => {
-    setLoading(true)
+  const load = useCallback(async () => {
     try {
       const [loadedRules, loadedServices, loadedPlans, loadedSettings] = await Promise.all([
         fetchLoyaltyRules(businessId),
@@ -80,16 +86,21 @@ export function LoyaltyWorkspace({ businessId, products }: LoyaltyWorkspaceProps
       setSettingsForm({
         pointsPerCurrencyUnit: loadedSettings.pointsPerCurrencyUnit == null ? '' : String(loadedSettings.pointsPerCurrencyUnit),
         maxRedemptionPercent: loadedSettings.maxRedemptionPercent == null ? '' : String(loadedSettings.maxRedemptionPercent),
+        invoiceEarningMode: loadedSettings.invoiceEarningMode ?? '',
+        invoiceEarningValue: loadedSettings.invoiceEarningValue == null ? '' : String(loadedSettings.invoiceEarningValue),
       })
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : 'Could not load loyalty settings.')
       setFeedbackSeverity('error')
     } finally {
       setLoading(false)
+      setLoadedBusinessId(businessId)
     }
-  }
+  }, [businessId])
 
-  useEffect(() => { void load() }, [businessId])
+  useEffect(() => {
+    void Promise.resolve().then(() => load())
+  }, [load])
 
   const openRuleDialog = (rule?: LoyaltyRule) => {
     setEditingRule(rule ?? null)
@@ -126,20 +137,36 @@ export function LoyaltyWorkspace({ businessId, products }: LoyaltyWorkspaceProps
     setDialogOpen(false)
     setFeedback(editingRule ? 'Loyalty rule updated.' : 'Loyalty rule created.')
     setFeedbackSeverity('success')
+    setLoading(true)
     await load()
   }
 
   const saveSettings = async () => {
     const pointsPerCurrencyUnit = Number(settingsForm.pointsPerCurrencyUnit)
     const maxRedemptionPercent = Number(settingsForm.maxRedemptionPercent)
+    const invoiceEarningValue = Number(settingsForm.invoiceEarningValue)
     if (!Number.isInteger(pointsPerCurrencyUnit) || pointsPerCurrencyUnit <= 0
       || !Number.isFinite(maxRedemptionPercent) || maxRedemptionPercent <= 0 || maxRedemptionPercent > 100) {
       setFeedback('Enter a positive whole-number points rate and a redemption cap greater than 0% and at most 100%.')
       setFeedbackSeverity('error')
       return
     }
+    if (settingsForm.invoiceEarningMode && (!Number.isFinite(invoiceEarningValue) || invoiceEarningValue <= 0
+      || (settingsForm.invoiceEarningMode === 'PERCENTAGE' && invoiceEarningValue > 100)
+      || (settingsForm.invoiceEarningMode === 'FIXED_POINTS' && !Number.isInteger(invoiceEarningValue)))) {
+      setFeedback(settingsForm.invoiceEarningMode === 'PERCENTAGE'
+        ? 'Enter an earning percentage greater than 0 and at most 100.'
+        : 'Enter a positive whole number of points to earn per paid invoice.')
+      setFeedbackSeverity('error')
+      return
+    }
     setSavingSettings(true)
-    const result = await saveLoyaltySettings(businessId, { pointsPerCurrencyUnit, maxRedemptionPercent })
+    const result = await saveLoyaltySettings(businessId, {
+      pointsPerCurrencyUnit,
+      maxRedemptionPercent,
+      invoiceEarningMode: settingsForm.invoiceEarningMode || null,
+      invoiceEarningValue: settingsForm.invoiceEarningMode ? invoiceEarningValue : null,
+    })
     setSavingSettings(false)
     if (!result.ok || !result.settings) {
       setFeedback(result.message ?? 'Could not save loyalty redemption settings.')
@@ -147,7 +174,7 @@ export function LoyaltyWorkspace({ businessId, products }: LoyaltyWorkspaceProps
       return
     }
     setSettings(result.settings)
-    setFeedback('Loyalty redemption settings saved.')
+    setFeedback('Loyalty settings saved.')
     setFeedbackSeverity('success')
   }
 
@@ -177,6 +204,35 @@ export function LoyaltyWorkspace({ businessId, products }: LoyaltyWorkspaceProps
               slotProps={{ htmlInput: { min: 0.01, max: 100, step: 0.01 } }}
               fullWidth
             />
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 0.6 }}>Invoice earning</Typography>
+              <Typography variant="body2" color="text.secondary">Award points once an invoice is paid. Percentage mode awards that percentage of the final payable amount as whole points.</Typography>
+            </Box>
+            <TextField
+              select
+              label="Invoice reward"
+              value={settingsForm.invoiceEarningMode}
+              onChange={(event) => setSettingsForm((current) => ({
+                ...current,
+                invoiceEarningMode: event.target.value as '' | 'FIXED_POINTS' | 'PERCENTAGE',
+                invoiceEarningValue: '',
+              }))}
+              fullWidth
+            >
+              <MenuItem value="">No invoice reward</MenuItem>
+              <MenuItem value="FIXED_POINTS">Fixed points per paid invoice</MenuItem>
+              <MenuItem value="PERCENTAGE">Percentage of final bill as points</MenuItem>
+            </TextField>
+            {settingsForm.invoiceEarningMode && (
+              <TextField
+                label={settingsForm.invoiceEarningMode === 'PERCENTAGE' ? 'Final bill percentage (%)' : 'Points per paid invoice'}
+                type="number"
+                value={settingsForm.invoiceEarningValue}
+                onChange={(event) => setSettingsForm((current) => ({ ...current, invoiceEarningValue: event.target.value }))}
+                slotProps={{ htmlInput: { min: 0.01, max: settingsForm.invoiceEarningMode === 'PERCENTAGE' ? 100 : undefined, step: settingsForm.invoiceEarningMode === 'PERCENTAGE' ? 0.01 : 1 } }}
+                fullWidth
+              />
+            )}
             <Button variant="contained" onClick={() => void saveSettings()} disabled={savingSettings}>
               {savingSettings ? 'Saving…' : settings?.configured ? 'Save redemption settings' : 'Enable redemptions'}
             </Button>
@@ -195,7 +251,7 @@ export function LoyaltyWorkspace({ businessId, products }: LoyaltyWorkspaceProps
               <Button size="small" startIcon={<Plus size={16} />} onClick={() => openRuleDialog()} sx={{ textTransform: 'none' }}>Add rule</Button>
             </Stack>
             {feedback && <Alert severity={feedbackSeverity}>{feedback}</Alert>}
-            {loading ? (
+            {isLoading ? (
               <Typography color="text.secondary">Loading loyalty rules…</Typography>
             ) : rules.length === 0 ? (
               <Alert severity="info">No loyalty rules yet. Add a rule to start awarding points.</Alert>
