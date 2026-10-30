@@ -21,7 +21,7 @@ import {
   ShieldCheck,
   ShoppingCart,
 } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { AppointmentDetailDialog } from '../../components/AppointmentDetailDialog'
 import { EmptyState } from '../../components/EmptyState'
@@ -45,7 +45,7 @@ import type { DashboardTab } from '../types'
 import { FamilyManagementDialog } from './components/FamilyManagementDialog'
 import { CustomerBillsPage } from './components/CustomerBillsPage'
 
-const customerDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'appointments', 'rewards', 'memberships', 'bills', 'insights', 'profile']
+//const customerDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'appointments', 'rewards', 'memberships', 'bills', 'insights', 'profile']
 
 function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
@@ -54,7 +54,7 @@ function formatCurrency(value?: number) {
 
 export function CustomerDashboard() {
   const navigate = useNavigate()
-  const { tab: routeTab } = useParams()
+  //const { tab: routeTab } = useParams()
   const dispatch = useAppDispatch()
   const authUser = useAppSelector((state: RootState) => state.auth.authUser)
   const accountRoles = new Set((authUser?.accounts ?? []).map((account) => account.role).concat(authUser?.role ?? 'CUSTOMER'))
@@ -285,7 +285,7 @@ export function CustomerDashboard() {
 
           {/* Main Content Area */}
           <Box sx={{ px: { xs: 2, sm: 2.2 }, pt: { xs: 2, sm: 2.2 }, pb: 'calc(96px + env(safe-area-inset-bottom))', flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehaviorY: 'contain' }}>
-            <CustomerDashboardMenu
+            {/* <CustomerDashboardMenu
               tabs={roleNav}
               activeTab={activeTab}
               onChangeTab={handleChangeTab}
@@ -314,7 +314,7 @@ export function CustomerDashboard() {
                 }
               }}
               onInviteFamily={() => setFamilyDialogMode('invite')}
-            />
+            /> */}
 
             {/* Profile Dialog for easy profile switching */}
             <ProfileManagerDialog
