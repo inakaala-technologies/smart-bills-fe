@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { alpha } from '@mui/material/styles'
 import { Box, Menu, MenuItem } from '@mui/material'
-import { UserRound, type LucideIcon } from 'lucide-react'
+import { UserPlus, UserRound, type LucideIcon } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { ProfileManagerDialog } from '../../../components/ProfileManagerDialog'
 import { logoutUser, type Role } from '../../../services/auth'
@@ -19,6 +19,7 @@ type CustomerDashboardMenuProps = {
   missingProfileRoles?: Role[]
   onSwitchAccount?: (role: Role) => void
   onAddProfile?: (role: Role) => void
+  onInviteFamily: () => void
 }
 
 export function CustomerDashboardMenu({
@@ -33,6 +34,7 @@ export function CustomerDashboardMenu({
   missingProfileRoles = [],
   onSwitchAccount,
   onAddProfile,
+  onInviteFamily
 }: CustomerDashboardMenuProps) {
   const navigate = useNavigate()
   const [managerOpen, setManagerOpen] = useState(false)
@@ -75,6 +77,18 @@ export function CustomerDashboardMenu({
             </MenuItem>
           )
         })}
+
+        <MenuItem
+          onClick={() => {
+            onInviteFamily()
+            onClose()
+          }}
+          sx={{ gap: 1, py: 1.1, fontWeight: 600 }}
+        >
+          <UserPlus size={16} />
+          Invite family member
+        </MenuItem>
+
         {(availableAccounts.length > 0 || missingProfileRoles.length > 0) && (
           <>
             <Box component="div" sx={{ borderTop: '1px solid var(--mui-palette-divider)', my: 0.5 }} />
