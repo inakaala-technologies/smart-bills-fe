@@ -69,15 +69,11 @@ type SummaryCardsProps = {
 
 export function SummaryCards({ data, loading, offersCount, onSelectTab }: SummaryCardsProps) {
   const summaryCards = [
-    { label: 'Offers', count: offersCount, tab: 'businesses' as const, icon: Tag },
+    // The Offers tile opens the Offers tab (it used to open Businesses).
+    { label: 'Offers', count: offersCount, tab: 'offers' as const, icon: Tag },
     { label: 'Memberships', count: data.memberships.length, tab: 'memberships' as const, icon: ShieldCheck },
     { label: 'Appointments', count: data.appointments.length, tab: 'appointments' as const, icon: CalendarCheck2 },
-  {
-    label: 'Bills',
-    count: 0,
-    tab: 'bills' as const,
-    icon: ReceiptText,
-  },
+    { label: 'Bills', count: 0, tab: 'bills' as const, icon: ReceiptText },
   ]
 
   return (

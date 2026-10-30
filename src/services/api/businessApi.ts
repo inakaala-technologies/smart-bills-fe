@@ -1,9 +1,12 @@
 import { apiClient, getErrorMessage } from './httpClient'
 import { normalizeBusiness } from './normalizers'
+import { normalizeOfferAsset } from './offerNormalizers'
 import type { BusinessCreateRequest, BusinessInsights, BusinessOffer, BusinessSummary } from './types'
 
 export async function fetchBusinessOffers(businessId: number): Promise<BusinessOffer[]> {
-  return (await apiClient.get<BusinessOffer[]>(`/api/v1/businesses/${businessId}/offers`)).data
+  const { data } = await apiClient.get<BusinessOffer[]>(`/api/v1/businesses/${businessId}/offers`)
+  // The backend sends the file as `attachmentUrl`; map it to `imageUrl`.
+  return data.map(normalizeOfferAsset)
 }
 
 export async function createBusinessOffer(
@@ -14,12 +17,12 @@ export async function createBusinessOffer(
   try {
     const url = `/api/v1/businesses/${businessId}/offers`
 
-    // No file: same JSON request as before, so existing behavior is unchanged.
+    // No file: plain JSON request, same as before.
     if (!image) {
-      return (await apiClient.post<BusinessOffer>(url, offer)).data
+      return normalizeOfferAsset((await apiClient.post<BusinessOffer>(url, offer)).data)
     }
 
-    // With a file: send multipart (needs the backend change).
+    // With a file: send multipart.
     const formData = new FormData()
     formData.append(
       'offer',
@@ -27,7 +30,16 @@ export async function createBusinessOffer(
     )
     formData.append('image', image)
 
-    return (await apiClient.post<BusinessOffer>(url, formData, { timeout: 60000 })).data
+    const { data } = await apiClient.post<BusinessOffer>(url, formData, {
+        timeout: 60000,
+        // If apiClient defaults to "Content-Type: application/json", axios would
+        // serialize this FormData to JSON and the file would be lost. Declaring
+        // multipart here overrides that default; the browser still adds the
+        // boundary automatically.
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+
+    return normalizeOfferAsset(data)
   } catch (error) {
     throw new Error(getErrorMessage(error, 'Could not publish this offer.'), { cause: error })
   }

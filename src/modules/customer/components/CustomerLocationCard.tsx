@@ -25,6 +25,9 @@ import {
   type NearbyOfferSummary,
 } from '../../../services/api'
 
+// Shared helpers: resolve relative backend paths and detect PDF flyers.
+import { isPdfOffer, resolveAssetUrl } from '../../../utils/offerAsset'
+
 type CustomerLocationCardProps = {
   locationAddress?: string
   latitude?: number
@@ -46,12 +49,6 @@ function formatBusinessLocation(address?: string) {
   }
 
   return address.trim()
-}
-function isPdfAttachment(offer: NearbyOfferSummary) {
-  if (offer.attachmentType) return offer.attachmentType === 'PDF'
-
-  // Fallback: check the file extension, ignoring any query string.
-  return /\.pdf$/i.test((offer.imageUrl ?? '').split('?')[0])
 }
 
 export function CustomerLocationCard({
@@ -394,7 +391,7 @@ export function CustomerLocationCard({
                   fontWeight: 900,
                 }}
               >
-                Offers near you
+                Offers near you ({nearbyOffers.length})
               </Typography>
 
               {offersLoading && (
@@ -433,29 +430,34 @@ export function CustomerLocationCard({
                     const businessLocation =
                       getOfferBusinessLocation(offer)
 
+                    // Resolve relative backend paths (e.g. /uploads/...)
+                    // to a full URL the browser can load.
+                    const assetUrl = resolveAssetUrl(offer.imageUrl)
+                    const isPdf = isPdfOffer(offer)
+
                     return (
-                                            <Card
+                      <Card
                         key={offer.id}
                         variant="outlined"
                         sx={{
                           display: 'flex',
-                          flexDirection: { xs: 'column', sm: 'row' },
+                          flexDirection: 'column',
                           borderRadius: 1.5,
                           borderColor: 'divider',
                           bgcolor: 'background.paper',
                         }}
                       >
-                        {/* Offer banner image (left on desktop, top on mobile) */}
-                                                {offer.imageUrl && (
+                        {/* Offer image or PDF flyer (always on top: the app is a fixed phone-width column) */}
+                        {assetUrl && (
                           <Box
                             sx={{
                               flexShrink: 0,
-                              width: { xs: '100%', sm: 264 },
+                              width: '100%',
                               p: 1.2,
-                              pb: { xs: 0, sm: 1.2 },
+                              pb: 0,
                             }}
                           >
-                            {isPdfAttachment(offer) ? (
+                            {isPdf ? (
                               <Box
                                 sx={{
                                   display: 'flex',
@@ -472,20 +474,23 @@ export function CustomerLocationCard({
                                 <FileText size={32} />
                                 <Button
                                   component="a"
-                                  href={offer.imageUrl}
+                                  href={assetUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   size="small"
                                   variant="outlined"
-                                  sx={{ textTransform: 'none', fontWeight: 700 }}
+                                  sx={{
+                                    textTransform: 'none',
+                                    fontWeight: 700,
+                                  }}
                                 >
-                                  View PDF
+                                  View flyer (PDF)
                                 </Button>
                               </Box>
                             ) : (
                               <Box
                                 component="img"
-                                src={offer.imageUrl}
+                                src={assetUrl}
                                 alt={offer.title}
                                 loading="lazy"
                                 sx={{
@@ -500,6 +505,7 @@ export function CustomerLocationCard({
                             )}
                           </Box>
                         )}
+
                         <CardContent
                           sx={{
                             flex: 1,
