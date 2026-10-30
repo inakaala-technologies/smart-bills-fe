@@ -6,7 +6,7 @@ import { ThemeModeToggle } from './ThemeModeToggle'
 import type { AuthUser } from '../services/auth'
 
 type AppHeaderProps = {
-  authUser: Pick<AuthUser, 'name' | 'email'> | null
+  authUser: Pick<AuthUser, 'name' | 'email' | 'profilePictureUrl'> | null
   contextLabel: string
   roleLabel: string
   menuId: string
@@ -79,7 +79,11 @@ export function AppHeader({ authUser, contextLabel, roleLabel, menuId, isMenuOpe
             onClick={onOpenMenu}
             sx={{ width: 54, height: 54, p: 0, borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.16)', outline: isMenuOpen ? '2px solid rgba(255,255,255,0.7)' : 'none', '&:hover': { backgroundColor: 'rgba(255,255,255,0.26)' } }}
           >
-            <Avatar sx={{ width: 48, height: 48, bgcolor: 'secondary.main', color: '#ffffff', fontSize: 16, fontWeight: 800 }}>
+            <Avatar
+              src={authUser?.profilePictureUrl || undefined}
+              alt={authUser?.name ? `${authUser.name} profile picture` : 'Profile picture'}
+              sx={{ width: 48, height: 48, bgcolor: 'secondary.main', color: '#ffffff', fontSize: 16, fontWeight: 800 }}
+            >
               {initials || 'U'}
             </Avatar>
           </IconButton>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, Box, Card, CardContent, CircularProgress, Stack, Typography } from '@mui/material'
 import { Award } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { fetchLoyaltyBalance, type BusinessSummary, type LoyaltyBalance } from '../../../services/api'
 
 type CustomerLoyaltyPanelProps = {
@@ -15,6 +16,7 @@ type BusinessBalance = {
 }
 
 export function CustomerLoyaltyPanel({ customerId, businesses }: CustomerLoyaltyPanelProps) {
+  const navigate = useNavigate()
   const [balances, setBalances] = useState<BusinessBalance[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -61,7 +63,24 @@ export function CustomerLoyaltyPanel({ customerId, businesses }: CustomerLoyalty
       ) : (
         <Stack spacing={1.2}>
           {balances.map(({ business, balance, error }) => (
-            <Card key={business.id} variant="outlined" sx={{ borderRadius: 3 }}>
+            <Card
+              key={business.id}
+              component="button"
+              type="button"
+              variant="outlined"
+              onClick={() => navigate(`/business/${business.id}`)}
+              aria-label={`View ${business.businessName ?? business.name ?? 'business'} details`}
+              sx={{
+                width: '100%',
+                textAlign: 'left',
+                cursor: 'pointer',
+                borderRadius: 3,
+                color: 'inherit',
+                backgroundColor: 'background.paper',
+                '&:hover': { borderColor: 'primary.main', backgroundColor: 'action.hover' },
+                '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+              }}
+            >
               <CardContent>
                 {error ? (
                   <Alert severity="error">{business.businessName ?? business.name ?? 'Business'}: {error}</Alert>

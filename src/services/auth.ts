@@ -14,6 +14,7 @@ export type AuthUser = {
   name: string
   email: string
   phone?: string
+  profilePictureUrl?: string
   accessToken: string
   role: Role
   activeRole?: Role
@@ -147,7 +148,7 @@ export async function signUpUser(input: { name: string; email: string; phone?: s
     return { ok: false, message: 'Passwords do not match.' }
   }
 
-  const apiResult = await callApi<{ id?: number | string; name?: string; email?: string; phone?: string; role?: Role; activeRole?: Role; tenantId?: number; businessId?: number; accessToken?: string; accounts?: Array<{ role?: Role; tenantId?: number; businessId?: number; status?: string }>; message?: string }>('/api/v1/auth/register', {
+  const apiResult = await callApi<{ id?: number | string; name?: string; email?: string; phone?: string; profilePictureUrl?: string; role?: Role; activeRole?: Role; tenantId?: number; businessId?: number; accessToken?: string; accounts?: Array<{ role?: Role; tenantId?: number; businessId?: number; status?: string }>; message?: string }>('/api/v1/auth/register', {
     name,
     email,
     phone,
@@ -175,6 +176,7 @@ export async function signUpUser(input: { name: string; email: string; phone?: s
     name: responseData.name ?? name,
     email: responseData.email ?? email,
     phone: responseData.phone ?? (phone || undefined),
+    profilePictureUrl: responseData.profilePictureUrl ?? undefined,
     accessToken: responseData.accessToken,
     role: responseData.role ?? input.role,
     activeRole: responseData.activeRole ?? (responseData.role ?? input.role),
@@ -195,7 +197,7 @@ export async function signUpUser(input: { name: string; email: string; phone?: s
 
 export async function getCurrentUserProfile(): Promise<AuthUser | null> {
   const requestedSession = getCurrentUser()
-  const apiResult = await callApi<{ id?: number | string; name?: string; email?: string; phone?: string; role?: Role; activeRole?: Role; tenantId?: number; businessId?: number; accessToken?: string; accounts?: Array<{ role?: Role; tenantId?: number; businessId?: number; status?: string }>; message?: string }>('/api/v1/auth/me')
+  const apiResult = await callApi<{ id?: number | string; name?: string; email?: string; phone?: string; profilePictureUrl?: string; role?: Role; activeRole?: Role; tenantId?: number; businessId?: number; accessToken?: string; accounts?: Array<{ role?: Role; tenantId?: number; businessId?: number; status?: string }>; message?: string }>('/api/v1/auth/me')
 
   if (!apiResult.ok || !apiResult.data) {
     return null
@@ -213,6 +215,7 @@ export async function getCurrentUserProfile(): Promise<AuthUser | null> {
     name: responseData.name ?? 'User',
     email: responseData.email ?? '',
     phone: responseData.phone ?? undefined,
+    profilePictureUrl: responseData.profilePictureUrl ?? undefined,
     accessToken: responseData.accessToken ?? requestedSession?.accessToken ?? '',
     role: responseData.role ?? 'BUSINESS',
     activeRole: responseData.activeRole ?? (responseData.role ?? 'BUSINESS'),
@@ -296,6 +299,52 @@ export async function updateCurrentUserProfile(input: {
   return { ok: true, user: updatedUser }
 }
 
+export async function uploadCurrentUserProfilePicture(file: File) {
+  const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024
+  const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
+
+  if (!file || file.size === 0) {
+    return { ok: false, message: 'Select an image to upload.' }
+  }
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    return { ok: false, message: 'Profile images must be 2 MB or smaller.' }
+  }
+  if (!allowedTypes.has(file.type.toLowerCase())) {
+    return { ok: false, message: 'Choose a JPEG, PNG, GIF, or WebP image.' }
+  }
+
+  const requestedSession = getCurrentUser()
+  if (!requestedSession) {
+    return { ok: false, message: 'Your session has expired. Please sign in again.' }
+  }
+
+  const formData = new FormData()
+  formData.append('file', file)
+
+  try {
+    const response = await apiClient.post<{ profilePictureUrl?: string }>(
+      '/api/v1/auth/me/profile-picture',
+      formData,
+    )
+    const currentSession = getCurrentUser()
+    if (currentSession?.id !== requestedSession.id || currentSession.email !== requestedSession.email) {
+      return { ok: false, message: 'Your session changed. Please try again.' }
+    }
+    if (!response.data.profilePictureUrl) {
+      return { ok: false, message: 'The server did not return the uploaded profile picture.' }
+    }
+
+    const updatedUser: AuthUser = {
+      ...currentSession,
+      profilePictureUrl: response.data.profilePictureUrl,
+    }
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(updatedUser))
+    return { ok: true, user: updatedUser }
+  } catch (error) {
+    return { ok: false, message: getErrorMessage(error, 'Could not upload your profile picture.') }
+  }
+}
+
 export async function loginUser(input: { identifier: string; password: string; role?: Role }) {
   const identifier = input.identifier.trim()
   const password = input.password
@@ -311,7 +360,7 @@ export async function loginUser(input: { identifier: string; password: string; r
     return { ok: false, message: 'Phone number must be 30 characters or fewer.' }
   }
 
-  const apiResult = await callApi<{ id?: number | string; name?: string; email?: string; phone?: string; role?: Role; activeRole?: Role; tenantId?: number; businessId?: number; accessToken?: string; accounts?: Array<{ role?: Role; tenantId?: number; businessId?: number; status?: string }>; message?: string }>('/api/v1/auth/login', {
+  const apiResult = await callApi<{ id?: number | string; name?: string; email?: string; phone?: string; profilePictureUrl?: string; role?: Role; activeRole?: Role; tenantId?: number; businessId?: number; accessToken?: string; accounts?: Array<{ role?: Role; tenantId?: number; businessId?: number; status?: string }>; message?: string }>('/api/v1/auth/login', {
     ...(isEmail ? { email: identifier } : { phone: identifier }),
     password,
   })
@@ -335,6 +384,7 @@ export async function loginUser(input: { identifier: string; password: string; r
     name: responseData.name ?? responseData.email ?? responseData.phone ?? identifier,
     email: responseData.email ?? (isEmail ? identifier : ''),
     phone: responseData.phone ?? (!isEmail ? identifier : undefined),
+    profilePictureUrl: responseData.profilePictureUrl ?? undefined,
     accessToken: responseData.accessToken,
     role: responseData.role ?? input.role ?? 'BUSINESS',
     activeRole: responseData.activeRole ?? (responseData.role ?? input.role ?? 'BUSINESS'),

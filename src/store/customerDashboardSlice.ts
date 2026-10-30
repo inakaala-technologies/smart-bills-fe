@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import { fetchDashboardData, type DashboardData } from '../services/api'
 import type { DashboardTab } from '../modules/types'
+import { emptyFreshness, markLoaded, type DashboardFreshness } from './dashboardFreshness'
 
 const emptyDashboardData: DashboardData = {
   businesses: [],
@@ -14,7 +15,7 @@ const emptyDashboardData: DashboardData = {
   documents: [],
 }
 
-type CustomerDashboardState = {
+type CustomerDashboardState = DashboardFreshness & {
   data: DashboardData
   loading: boolean
   selectedBusinessId: number | null
@@ -24,6 +25,7 @@ type CustomerDashboardState = {
 }
 
 const initialState: CustomerDashboardState = {
+  ...emptyFreshness,
   data: emptyDashboardData,
   loading: false,
   selectedBusinessId: null,
@@ -60,6 +62,7 @@ const customerDashboardSlice = createSlice({
       .addCase(fetchCustomerDashboard.fulfilled, (state, action) => {
         state.loading = false
         state.data = action.payload
+        Object.assign(state, markLoaded('customer'))
         if (!state.data.customers.length) {
           state.selectedCustomerId = null
         } else if (state.selectedCustomerId == null || !state.data.customers.some((customer) => customer.id === state.selectedCustomerId)) {
@@ -68,6 +71,7 @@ const customerDashboardSlice = createSlice({
       })
       .addCase(fetchCustomerDashboard.rejected, (state, action) => {
         state.loading = false
+        Object.assign(state, emptyFreshness)
         state.error = action.error.message ?? 'Unable to load the customer dashboard.'
         state.data = emptyDashboardData
       })

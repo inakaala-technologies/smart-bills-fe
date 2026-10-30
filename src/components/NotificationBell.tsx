@@ -14,6 +14,7 @@ import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { setActiveTab as setBusinessActiveTab } from '../store/businessDashboardSlice'
 import { setActiveTab as setCustomerActiveTab } from '../store/customerDashboardSlice'
 import { setActiveTab as setAdminActiveTab } from '../store/adminDashboardSlice'
+import { getDashboardPath } from '../routes/dashboardPaths'
 
 const emptyFeed: NotificationFeed = { notifications: [], unreadCount: 0 }
 const pollingIntervalMs = 30_000
@@ -109,6 +110,7 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
   const businessAppointments = useAppSelector((state) => state.businessDashboard.data.appointments)
   const customerAppointments = useAppSelector((state) => state.customerDashboard.data.appointments)
   const adminAppointments = useAppSelector((state) => state.adminDashboard.data.appointments)
+  const role = useAppSelector((state) => state.auth.authUser?.role ?? 'BUSINESS')
   const allAppointments = [...businessAppointments, ...customerAppointments, ...adminAppointments]
 
   useEffect(() => {
@@ -187,12 +189,8 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
         )
       }
 
-      const query = new URLSearchParams()
-      query.set('tab', 'appointments')
-      if (appointmentId) {
-        query.set('appointmentId', String(appointmentId))
-      }
-      navigate(`/dashboard?${query.toString()}`)
+      const query = appointmentId ? `?appointmentId=${appointmentId}` : ''
+      navigate(`${getDashboardPath(role, 'appointments')}${query}`)
       return
     }
 
@@ -228,8 +226,8 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
           setReloadToken((current) => current + 1)
         }}
         sx={{
-          width: prominent ? 58 : 38,
-          height: prominent ? 58 : 38,
+          width: prominent ? 44 : 38,
+          height: prominent ? 44 : 38,
           color: prominent ? '#0F032D' : contrast ? '#ffffff' : 'primary.main',
           backgroundColor: prominent ? '#ffffff' : contrast ? 'rgba(255,255,255,0.14)' : 'transparent',
           '&:hover': { backgroundColor: prominent ? '#f5efff' : contrast ? 'rgba(255,255,255,0.24)' : 'action.hover' },

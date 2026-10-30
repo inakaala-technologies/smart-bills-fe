@@ -1,5 +1,5 @@
 import { alpha, Divider, Menu, MenuItem } from '@mui/material'
-import { Award, BadgeCheck, Building2, CalendarCheck2, ChartColumnIncreasing, Home, Megaphone, ReceiptText, UserRound, UsersRound } from 'lucide-react'
+import { Award, BadgeCheck, Building2, CalendarCheck2, ChartColumnIncreasing, Home, Megaphone, PhoneCall, ReceiptText, UserRound, UsersRound } from 'lucide-react'
 import { useState } from 'react'
 import { ProfileManagerDialog } from '../../../components/ProfileManagerDialog'
 import type { DashboardTab } from '../../types'
@@ -13,6 +13,7 @@ const roleNav: Array<{ key: DashboardTab; label: string }> = [
   { key: 'memberships', label: 'Memberships' },
   { key: 'loyalty', label: 'Loyalty points' },
   { key: 'retention', label: 'Retention' },
+  { key: 'callbacks', label: 'Callback requests' },
   { key: 'insights', label: 'Insights' },
   { key: 'offers', label: 'Offers' },
   { key: 'profile', label: 'Profile' },
@@ -72,7 +73,7 @@ export function BusinessMenu({ activeTab, anchorEl, isOpen, onClose, onChangeTab
             }}
             sx={{ gap: 1, py: 1.1, fontWeight: 600 }}
           >
-            {tab.key === 'overview' ? <Home size={16} /> : tab.key === 'businesses' ? <Building2 size={16} /> : tab.key === 'invoices' ? <ReceiptText size={16} /> : tab.key === 'appointments' ? <CalendarCheck2 size={16} /> : tab.key === 'memberships' ? <BadgeCheck size={16} /> : tab.key === 'loyalty' ? <Award size={16} /> : tab.key === 'offers' ? <Megaphone size={16} /> : tab.key === 'retention' ? <UsersRound size={16} /> : tab.key === 'insights' ? <ChartColumnIncreasing size={16} /> : <UserRound size={16} />}
+            {tab.key === 'overview' ? <Home size={16} /> : tab.key === 'businesses' ? <Building2 size={16} /> : tab.key === 'invoices' ? <ReceiptText size={16} /> : tab.key === 'appointments' ? <CalendarCheck2 size={16} /> : tab.key === 'memberships' ? <BadgeCheck size={16} /> : tab.key === 'loyalty' ? <Award size={16} /> : tab.key === 'offers' ? <Megaphone size={16} /> : tab.key === 'retention' ? <UsersRound size={16} /> : tab.key === 'callbacks' ? <PhoneCall size={16} /> : tab.key === 'insights' ? <ChartColumnIncreasing size={16} /> : <UserRound size={16} />}
             {tab.label}
           </MenuItem>
         ))}

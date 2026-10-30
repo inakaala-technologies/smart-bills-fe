@@ -21,6 +21,7 @@ import { setActiveTab as setBusinessTab } from '../store/businessDashboardSlice'
 import { setActiveTab as setCustomerTab } from '../store/customerDashboardSlice'
 import type { BusinessSummary } from '../services/api'
 import type { DashboardTab } from '../modules/types'
+import { getDashboardPath } from '../routes/dashboardPaths'
 
 type BusinessDetailPageProps = {
   business: BusinessSummary
@@ -77,7 +78,7 @@ export function BusinessDetailPage({
     if (window.history.length > 1) {
       navigate(-1)
     } else {
-      navigate('/dashboard')
+      navigate(getDashboardPath(role))
     }
   }
   const handleNavigateTab = (tab: DashboardTab) => {
@@ -88,7 +89,7 @@ export function BusinessDetailPage({
     } else {
       dispatch(setBusinessTab(tab))
     }
-    navigate('/dashboard')
+    navigate(getDashboardPath(role, tab))
   }
 
   const primaryDetails = [

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Avatar, Box, Button, ButtonBase, Container, Paper, Stack, Typography } from '@mui/material'
+import { Box, Button, ButtonBase, Container, Paper, Stack, Typography } from '@mui/material'
 import { useColorScheme } from '@mui/material/styles'
 import {
   ArrowLeft,
@@ -13,6 +13,7 @@ import {
   LogOut,
   Megaphone,
   Moon,
+  PhoneCall,
   ReceiptText,
   Sun,
   UserRound,
@@ -20,11 +21,14 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { ProfileManagerDialog } from '../../../components/ProfileManagerDialog'
+import { ProfilePictureUpload } from '../../../components/ProfilePictureUpload'
+import { BusinessBannerUpload } from '../../../components/BusinessBannerUpload'
+import type { BusinessSummary } from '../../../services/api/types'
 import type { AuthUser, Role } from '../../../services/auth'
 import type { DashboardTab } from '../../types'
 
 type BusinessProfileMenuPageProps = {
-  authUser: Pick<AuthUser, 'name' | 'email'> | null
+  authUser: Pick<AuthUser, 'name' | 'email' | 'profilePictureUrl'> | null
   currentRole: Role
   availableAccounts: Array<{ role: Role }>
   missingProfileRoles: Role[]
@@ -35,6 +39,9 @@ type BusinessProfileMenuPageProps = {
   onSwitchAccount: (role: Role) => void
   onAddProfile: (role: Role) => void
   onLogout: () => void
+  onProfilePictureUpdated: (user: AuthUser) => void
+  business?: { id: number; bannerImageUrl?: string } | null
+  onBannerUploaded?: (business: BusinessSummary) => void
 }
 
 type ProfileMenuItem = {
@@ -55,16 +62,12 @@ export function BusinessProfileMenuPage({
   onSwitchAccount,
   onAddProfile,
   onLogout,
+  onProfilePictureUpdated,
+  business,
+  onBannerUploaded,
 }: BusinessProfileMenuPageProps) {
   const { mode, setMode } = useColorScheme()
   const [managerOpen, setManagerOpen] = useState(false)
-  const initials = (authUser?.name ?? 'User')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || 'U'
-
   const sections: Array<{ title: string; items: ProfileMenuItem[] }> = [
     {
       title: 'Account',
@@ -79,6 +82,7 @@ export function BusinessProfileMenuPage({
       items: [
         { label: 'Loyalty points', icon: Award, onClick: () => onNavigateTab('loyalty') },
         { label: 'Retention', icon: UsersRound, onClick: () => onNavigateTab('retention') },
+        { label: 'Callback requests', icon: PhoneCall, onClick: () => onNavigateTab('callbacks') },
         { label: 'Insights', icon: ChartColumnIncreasing, onClick: () => onNavigateTab('insights') },
         { label: 'Offers', icon: Megaphone, onClick: () => onNavigateTab('offers') },
       ],
@@ -156,19 +160,12 @@ export function BusinessProfileMenuPage({
             </Stack>
 
             <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', mt: 1.5, px: 0.6 }}>
-              <Avatar
-                sx={{
-                  width: 66,
-                  height: 66,
-                  bgcolor: 'rgba(15,3,45,0.5)',
-                  color: '#ffffff',
-                  fontSize: 20,
-                  fontWeight: 800,
-                  border: '2px solid rgba(255,255,255,0.35)',
-                }}
-              >
-                {initials}
-              </Avatar>
+              <ProfilePictureUpload
+                authUser={authUser}
+                onUploaded={onProfilePictureUpdated}
+                size={66}
+                inverted
+              />
               <Box sx={{ minWidth: 0 }}>
                 <Typography noWrap sx={{ fontSize: 19, fontWeight: 600 }}>{authUser?.name ?? 'User'}</Typography>
                 <Typography noWrap sx={{ fontSize: 11, color: 'rgba(255,255,255,0.88)' }}>{authUser?.email ?? ''}</Typography>
@@ -177,6 +174,13 @@ export function BusinessProfileMenuPage({
           </Box>
 
           <Stack spacing={1.7} sx={{ px: 1.5, pt: 1.7, pb: 'calc(24px + env(safe-area-inset-bottom))' }}>
+            {business && onBannerUploaded && (
+              <BusinessBannerUpload
+                businessId={business.id}
+                bannerImageUrl={business.bannerImageUrl}
+                onUploaded={onBannerUploaded}
+              />
+            )}
             {sections.map(({ title, items }) => (
               <Box component="section" key={title}>
                 <Typography sx={{ mb: 0.7, ml: 0.6, color: 'text.secondary', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>

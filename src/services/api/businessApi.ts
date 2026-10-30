@@ -2,6 +2,21 @@ import { apiClient, getErrorMessage } from './httpClient'
 import { normalizeBusiness } from './normalizers'
 import type { BusinessCreateRequest, BusinessInsights, BusinessOffer, BusinessSummary } from './types'
 
+export async function uploadBusinessBanner(businessId: number, file: File): Promise<BusinessSummary> {
+  const formData = new FormData()
+  formData.append('file', file)
+  try {
+    const response = await apiClient.post<Partial<BusinessSummary> & Record<string, unknown>>(
+      `/api/v1/businesses/${businessId}/banner`,
+      formData,
+      { timeout: 60000 },
+    )
+    return normalizeBusiness(response.data)
+  } catch (error) {
+    throw new Error(getErrorMessage(error, 'Could not upload the banner image.'), { cause: error })
+  }
+}
+
 export async function fetchBusinessOffers(businessId: number): Promise<BusinessOffer[]> {
   return (await apiClient.get<BusinessOffer[]>(`/api/v1/businesses/${businessId}/offers`)).data
 }

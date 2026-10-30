@@ -30,6 +30,7 @@ import { BusinessProductsSection } from './components/BusinessProductsSection'
 import { getBusinessProducts } from '../../services/api/billingApi'
 import { fetchBusinessDashboard, fetchBusinessSummary, setActiveTab,setBusinessFeatures, setBusinessHomeVisitCharge as setBusinessHomeVisitChargeAction, setSelectedBusinessId } from '../../store/businessDashboardSlice'
 import { setAuthUser } from '../../store/authSlice'
+import { getDashboardPath } from '../../routes/dashboardPaths'
 import { AppointmentListCard } from './components/AppointmentListCard'
 import { AppointmentServiceManager } from './components/AppointmentServiceManager'
 import { BottomNavBar } from './components/BottomNavBar'
@@ -43,6 +44,7 @@ import { InvoiceGeneratorCard, type BusinessInvoiceForm, type InvoiceLineItemFor
 import { InvoiceListPanel } from './components/InvoiceListPanel'
 import { MembershipWorkspace } from './components/MembershipWorkspace'
 import { CustomerRetentionWorkspace } from './components/CustomerRetentionWorkspace'
+import { CallbackRequestsWorkspace } from './components/CallbackRequestsWorkspace'
 import { BusinessInsightsWorkspace } from './components/BusinessInsightsWorkspace'
 import { GlobalSearchWorkspace } from './components/GlobalSearchWorkspace'
 import { LoyaltyWorkspace } from './components/LoyaltyWorkspace'
@@ -54,7 +56,7 @@ import type { DashboardTab } from '../types'
 import { normalizeBusinessType } from '../../constants/businessTypes'
 import { v4 as uuidv4 } from 'uuid'
 
-const businessDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'customers', 'appointments', 'memberships', 'loyalty', 'offers', 'retention', 'insights', 'search', 'profile']
+const businessDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'customers', 'appointments', 'memberships', 'loyalty', 'offers', 'retention', 'callbacks', 'insights', 'search', 'profile']
 
 function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
@@ -81,7 +83,7 @@ export function BusinessDashboard() {
   const { data, activeTab, selectedBusinessId } = useAppSelector((state: RootState) => state.businessDashboard)
   const changeTab = useCallback((tab: DashboardTab, replace = false) => {
     dispatch(setActiveTab(tab))
-    navigate(`/dashboard/${tab}`, { replace })
+    navigate(getDashboardPath('BUSINESS', tab), { replace })
   }, [dispatch, navigate])
 
   useEffect(() => {
@@ -661,7 +663,7 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
           const updated = switchAccount(role)
           if (updated) {
             dispatch(setAuthUser(updated))
-            navigate('/dashboard')
+            navigate(getDashboardPath(updated.role))
             window.location.reload()
           }
         }}
@@ -669,7 +671,7 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
           const updated = addProfile(role)
           if (updated) {
             dispatch(setAuthUser(updated))
-            navigate('/dashboard')
+            navigate(getDashboardPath(updated.role))
             window.location.reload()
           }
         }}
@@ -677,6 +679,9 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
           logoutUser()
           navigate('/')
         }}
+        onProfilePictureUpdated={(user) => dispatch(setAuthUser(user))}
+        business={selectedBusiness}
+        onBannerUploaded={(updated) => dispatch(fetchBusinessDashboard(updated.id))}
       />
     )
   }
@@ -872,6 +877,10 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
                 data={data}
                 onUpdated={() => dispatch(fetchBusinessDashboard(selectedBusiness.id))}
               />
+            )}
+
+            {activeTab === 'callbacks' && selectedBusiness && (
+              <CallbackRequestsWorkspace key={selectedBusiness.id} businessId={selectedBusiness.id} />
             )}
 
             {activeTab === 'loyalty' && selectedBusiness && (

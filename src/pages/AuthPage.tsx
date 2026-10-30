@@ -8,6 +8,7 @@ import { loginUser, signUpUser, type Role } from '../services/auth'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import type { RootState } from '../store/store'
 import { clearAuthError, resetAuthForms, setAuthError, setAuthUser, setLoginForm, setSignupForm } from '../store/authSlice'
+import { getDashboardPath } from '../routes/dashboardPaths'
 
 export function AuthPage() {
   const navigate = useNavigate()
@@ -48,7 +49,7 @@ export function AuthPage() {
       dispatch(clearAuthError())
       dispatch(setAuthUser(result.user))
       dispatch(resetAuthForms())
-      navigate('/dashboard')
+      navigate(getDashboardPath(result.user.role))
     } finally {
       submittingRef.current = false
       setIsSubmitting(false)
@@ -75,7 +76,7 @@ export function AuthPage() {
       dispatch(clearAuthError())
       dispatch(setAuthUser(result.user))
       dispatch(resetAuthForms())
-      navigate('/dashboard')
+      navigate(getDashboardPath(result.user.role))
     } finally {
       submittingRef.current = false
       setIsSubmitting(false)

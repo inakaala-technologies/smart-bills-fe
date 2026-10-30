@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Avatar, Box, Button, ButtonBase, Container, Paper, Stack, Typography } from '@mui/material'
+import { Box, Button, ButtonBase, Container, Paper, Stack, Typography } from '@mui/material'
 import { useColorScheme } from '@mui/material/styles'
 import {
   ArrowLeft,
@@ -18,11 +18,12 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { ProfileManagerDialog } from '../../../components/ProfileManagerDialog'
+import { ProfilePictureUpload } from '../../../components/ProfilePictureUpload'
 import type { AuthUser, Role } from '../../../services/auth'
 import type { DashboardTab } from '../../types'
 
 type CustomerProfileMenuPageProps = {
-  authUser: Pick<AuthUser, 'name' | 'email'> | null
+  authUser: Pick<AuthUser, 'name' | 'email' | 'profilePictureUrl'> | null
   currentRole: Role
   availableAccounts: Array<{ role: Role }>
   missingProfileRoles: Role[]
@@ -31,6 +32,7 @@ type CustomerProfileMenuPageProps = {
   onSwitchAccount: (role: Role) => void
   onAddProfile: (role: Role) => void
   onLogout: () => void
+  onProfilePictureUpdated: (user: AuthUser) => void
 }
 
 type ProfileMenuItem = {
@@ -49,16 +51,10 @@ export function CustomerProfileMenuPage({
   onSwitchAccount,
   onAddProfile,
   onLogout,
+  onProfilePictureUpdated,
 }: CustomerProfileMenuPageProps) {
   const { mode, setMode } = useColorScheme()
   const [managerOpen, setManagerOpen] = useState(false)
-  const initials = (authUser?.name ?? 'User')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || 'U'
-
   const sections: Array<{ title: string; items: ProfileMenuItem[] }> = [
     {
       title: 'Account',
@@ -142,19 +138,12 @@ export function CustomerProfileMenuPage({
             </Stack>
 
             <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', mt: 1.5, px: 0.6 }}>
-              <Avatar
-                sx={{
-                  width: 66,
-                  height: 66,
-                  bgcolor: 'rgba(15,3,45,0.5)',
-                  color: '#ffffff',
-                  fontSize: 20,
-                  fontWeight: 800,
-                  border: '2px solid rgba(255,255,255,0.35)',
-                }}
-              >
-                {initials}
-              </Avatar>
+              <ProfilePictureUpload
+                authUser={authUser}
+                onUploaded={onProfilePictureUpdated}
+                size={66}
+                inverted
+              />
               <Box sx={{ minWidth: 0 }}>
                 <Typography noWrap sx={{ fontSize: 19, fontWeight: 600 }}>{authUser?.name ?? 'User'}</Typography>
                 <Typography noWrap sx={{ fontSize: 11, color: 'rgba(255,255,255,0.88)' }}>{authUser?.email ?? ''}</Typography>

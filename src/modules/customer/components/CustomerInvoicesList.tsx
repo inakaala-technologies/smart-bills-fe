@@ -11,6 +11,11 @@ import {
   Chip,
   ToggleButton,
   ToggleButtonGroup,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Button,
 } from '@mui/material'
 import SearchIcon from '@mui/icons-material/Search'
 import { EmptyState } from '../../../components/EmptyState'
@@ -23,7 +28,7 @@ import {
 } from '../../../services/api'
 import { getErrorMessage } from '../../../services/api/httpClient'
 
-type InvoiceFilter = 'ALL' | 'PAID' | 'SENT' | 'OVERDUE'
+type InvoiceFilter = 'ALL' | 'PAID' | 'UNPAID' | 'OVERDUE'
 type InvoiceSort = 'NEWEST' | 'OLDEST' | 'HIGHEST' | 'LOWEST'
 type InvoiceView = 'MY' | 'FAMILY'
 
@@ -44,6 +49,10 @@ export function CustomerInvoicesList({
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<InvoiceFilter>('ALL')
   const [sort, setSort] = useState<InvoiceSort>('NEWEST')
+  const [selectedInvoice, setSelectedInvoice] = useState<{
+    invoice: InvoiceSummary
+    businessName: string
+  } | null>(null)
 
   const [view, setView] = useState<InvoiceView>('MY')
   const [familyInvoices, setFamilyInvoices] = useState<InvoiceSummary[]>([])
@@ -133,10 +142,14 @@ export function CustomerInvoicesList({
       : null
 
     const status = String(invoice.status ?? 'SENT').toUpperCase()
+    const displayStatus = ['SENT', 'PENDING', 'UNPAID'].includes(status)
+      ? 'Unpaid'
+      : status.charAt(0) + status.slice(1).toLowerCase()
     const amountValue = invoice.totalAmount ?? 0
 
     return {
       id: invoice.id,
+      invoice,
       businessId: invoice.businessId,
       businessName,
       invoiceNumber: invoice.invoiceNumber ?? `INV-${invoice.id}`,
@@ -144,7 +157,7 @@ export function CustomerInvoicesList({
       amount: formatCurrency(invoice.totalAmount),
       amountValue,
       timestamp: invoiceDate?.getTime() ?? 0,
-      subtitle: `${invoice.invoiceNumber ?? `INV-${invoice.id}`} · ${status}`,
+      subtitle: `${invoice.invoiceNumber ?? `INV-${invoice.id}`} · ${displayStatus}`,
       date:
         invoiceDate?.toLocaleDateString('en-IN', {
           day: 'numeric',
@@ -193,7 +206,7 @@ export function CustomerInvoicesList({
         const matchesStatus =
           filter === 'ALL' ||
           (filter === 'PAID' && entry.status === 'PAID') ||
-          (filter === 'SENT' &&
+          (filter === 'UNPAID' &&
             ['SENT', 'PENDING', 'UNPAID'].includes(entry.status)) ||
           (filter === 'OVERDUE' && entry.status === 'OVERDUE')
 
@@ -313,7 +326,7 @@ export function CustomerInvoicesList({
               [
                 ['ALL', 'All'],
                 ['PAID', 'Paid'],
-                ['SENT', 'Sent'],
+                ['UNPAID', 'Unpaid'],
                 ['OVERDUE', 'Overdue'],
               ] as const
             ).map(([value, label]) => (
@@ -358,10 +371,97 @@ export function CustomerInvoicesList({
               date={entry.date}
               time={entry.time}
               accent="linear-gradient(135deg, #4E2BCC 0%, #905BF4 100%)"
+              onClick={() => setSelectedInvoice({ invoice: entry.invoice, businessName: entry.businessName })}
             />
           ))}
         </Stack>
       )}
+
+      <Dialog
+        open={Boolean(selectedInvoice)}
+        onClose={() => setSelectedInvoice(null)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle sx={{ color: 'text.primary', fontWeight: 800 }}>Bill details</DialogTitle>
+        {selectedInvoice && (
+          <DialogContent dividers>
+            <Stack spacing={1.5}>
+              <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Invoice number</Typography>
+                <Typography sx={{ color: 'text.primary', fontWeight: 700 }}>
+                  {selectedInvoice.invoice.invoiceNumber ?? `INV-${selectedInvoice.invoice.id}`}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Business</Typography>
+                <Typography sx={{ color: 'text.primary', fontWeight: 700 }}>{selectedInvoice.businessName}</Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Status</Typography>
+                <Typography sx={{ color: 'text.primary', fontWeight: 700 }}>
+                  {['SENT', 'PENDING', 'UNPAID'].includes(String(selectedInvoice.invoice.status ?? 'SENT').toUpperCase())
+                    ? 'Unpaid'
+                    : selectedInvoice.invoice.status ?? 'Paid'}
+                </Typography>
+              </Box>
+              <Stack direction="row" spacing={2}>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Issue date</Typography>
+                  <Typography sx={{ color: 'text.primary' }}>
+                    {selectedInvoice.invoice.issueDate
+                      ? new Date(`${selectedInvoice.invoice.issueDate}T00:00:00`).toLocaleDateString('en-IN', { dateStyle: 'medium' })
+                      : 'Not provided'}
+                  </Typography>
+                </Box>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Due date</Typography>
+                  <Typography sx={{ color: 'text.primary' }}>
+                    {selectedInvoice.invoice.dueDate
+                      ? new Date(`${selectedInvoice.invoice.dueDate}T00:00:00`).toLocaleDateString('en-IN', { dateStyle: 'medium' })
+                      : 'Not provided'}
+                  </Typography>
+                </Box>
+              </Stack>
+              <Stack spacing={0.6} sx={{ borderTop: '1px solid var(--mui-palette-divider)', pt: 1.2 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                  <Typography sx={{ color: 'text.secondary' }}>Subtotal</Typography>
+                  <Typography sx={{ color: 'text.primary' }}>{formatCurrency(selectedInvoice.invoice.subtotal)}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                  <Typography sx={{ color: 'text.secondary' }}>GST</Typography>
+                  <Typography sx={{ color: 'text.primary' }}>{formatCurrency(selectedInvoice.invoice.gstAmount)}</Typography>
+                </Box>
+                {(selectedInvoice.invoice.invoiceDiscountAmount ?? 0) > 0 && (
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                    <Typography sx={{ color: 'success.main' }}>Discount</Typography>
+                    <Typography sx={{ color: 'success.main' }}>−{formatCurrency(selectedInvoice.invoice.invoiceDiscountAmount)}</Typography>
+                  </Box>
+                )}
+                {(selectedInvoice.invoice.loyaltyPointsRedeemed ?? 0) > 0 && (
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                    <Typography sx={{ color: 'success.main' }}>
+                      Loyalty discount ({selectedInvoice.invoice.loyaltyPointsRedeemed} points)
+                    </Typography>
+                    <Typography sx={{ color: 'success.main' }}>−{formatCurrency(selectedInvoice.invoice.loyaltyDiscountAmount)}</Typography>
+                  </Box>
+                )}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, pt: 0.7, borderTop: '1px solid var(--mui-palette-divider)' }}>
+                  <Typography sx={{ color: 'text.primary', fontWeight: 800 }}>Total</Typography>
+                  <Typography sx={{ color: 'primary.main', fontWeight: 800 }}>
+                    {formatCurrency(selectedInvoice.invoice.totalAmount)}
+                  </Typography>
+                </Box>
+              </Stack>
+            </Stack>
+          </DialogContent>
+        )}
+        <DialogActions>
+          <Button onClick={() => setSelectedInvoice(null)} sx={{ color: 'primary.main', fontWeight: 700, textTransform: 'none' }}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {!loadingFamily &&
         filteredRows.length === 0 &&

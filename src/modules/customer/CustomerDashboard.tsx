@@ -21,7 +21,7 @@ import {
   ShieldCheck,
   ShoppingCart,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { AppointmentDetailDialog } from '../../components/AppointmentDetailDialog'
 import { EmptyState } from '../../components/EmptyState'
@@ -44,8 +44,9 @@ import { setActiveTab, setSelectedBusinessId } from '../../store/customerDashboa
 import type { DashboardTab } from '../types'
 import { FamilyManagementDialog } from './components/FamilyManagementDialog'
 import { CustomerBillsPage } from './components/CustomerBillsPage'
+import { getDashboardPath } from '../../routes/dashboardPaths'
 
-//const customerDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'appointments', 'rewards', 'memberships', 'bills', 'insights', 'profile']
+const customerDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'appointments', 'rewards', 'memberships', 'bills', 'insights', 'profile']
 
 function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
@@ -54,7 +55,7 @@ function formatCurrency(value?: number) {
 
 export function CustomerDashboard() {
   const navigate = useNavigate()
-  //const { tab: routeTab } = useParams()
+  const { tab: routeTab } = useParams()
   const dispatch = useAppDispatch()
   const authUser = useAppSelector((state: RootState) => state.auth.authUser)
   const accountRoles = new Set((authUser?.accounts ?? []).map((account) => account.role).concat(authUser?.role ?? 'CUSTOMER'))
@@ -69,9 +70,24 @@ export function CustomerDashboard() {
   const setSelectedAppointment = setExplicitAppointment
   const [selectedInvoice, setSelectedInvoice] = useState<DashboardData['invoices'][number] | null>(null)
   const isMenuOpen = isProfilePageOpen
+  // Loyalty endpoints expect the customer profile id, which differs from the login user id.
+  const customerProfileEmail = authUser?.email?.trim().toLowerCase()
+  const customerProfileId = (
+    data.customers.find((customer) => customerProfileEmail && customer.email?.trim().toLowerCase() === customerProfileEmail)
+    ?? data.customers[0]
+  )?.id ?? null
   const customerLatitude = data.customers[0]?.latitude
   const customerLongitude = data.customers[0]?.longitude
   const [familyDialogMode, setFamilyDialogMode] = useState<'closed' | 'manage' | 'invite'>('closed')
+
+  useEffect(() => {
+    const matchingTab = customerDashboardTabs.find((tab) => tab === routeTab)
+    if (matchingTab) {
+      dispatch(setActiveTab(matchingTab))
+    } else {
+      navigate(getDashboardPath('CUSTOMER', 'overview'), { replace: true })
+    }
+  }, [dispatch, navigate, routeTab])
 
   useEffect(() => {
     if (customerLatitude === undefined || customerLongitude === undefined) return
@@ -96,7 +112,7 @@ export function CustomerDashboard() {
 
   const handleChangeTab = (tab: DashboardTab) => {
     dispatch(setActiveTab(tab))
-    navigate(`/dashboard/${tab}`)
+    navigate(getDashboardPath('CUSTOMER', tab))
   }
 
   const upcomingAppointmentActivities = data.appointments
@@ -215,7 +231,7 @@ export function CustomerDashboard() {
           const updated = switchAccount(role)
           if (updated) {
             dispatch(setAuthUser(updated))
-            navigate('/dashboard')
+            navigate(getDashboardPath(updated.role))
             window.location.reload()
           }
         }}
@@ -223,7 +239,7 @@ export function CustomerDashboard() {
           const updated = addProfile(role)
           if (updated) {
             dispatch(setAuthUser(updated))
-            navigate('/dashboard')
+            navigate(getDashboardPath(updated.role))
             window.location.reload()
           }
         }}
@@ -231,6 +247,7 @@ export function CustomerDashboard() {
           logoutUser()
           navigate('/')
         }}
+        onProfilePictureUpdated={(user) => dispatch(setAuthUser(user))}
       />
     )
   }
@@ -300,7 +317,7 @@ export function CustomerDashboard() {
                 if (updated) {
                   dispatch(setAuthUser(updated))
                   setMenuAnchorEl(null)
-                  navigate('/dashboard')
+                  navigate(getDashboardPath(updated.role))
                   window.location.reload()
                 }
               }}
@@ -309,7 +326,7 @@ export function CustomerDashboard() {
                 if (updated) {
                   dispatch(setAuthUser(updated))
                   setMenuAnchorEl(null)
-                  navigate('/dashboard')
+                  navigate(getDashboardPath(updated.role))
                   window.location.reload()
                 }
               }}
@@ -329,7 +346,7 @@ export function CustomerDashboard() {
                 if (updated) {
                   dispatch(setAuthUser(updated))
                   setManagerOpen(false)
-                  navigate('/dashboard')
+                  navigate(getDashboardPath(updated.role))
                   window.location.reload()
                 }
               }}
@@ -339,7 +356,7 @@ export function CustomerDashboard() {
                 if (updated) {
                   dispatch(setAuthUser(updated))
                   setManagerOpen(false)
-                  navigate('/dashboard')
+                  navigate(getDashboardPath(updated.role))
                   window.location.reload()
                 }
               }}
@@ -739,7 +756,13 @@ export function CustomerDashboard() {
 
                           <Box>
                             <Chip
-                              label={selectedInvoice.status ?? 'SENT'}
+                              label={
+                                ['SENT', 'PENDING', 'UNPAID'].includes(
+                                  String(selectedInvoice.status ?? 'SENT').toUpperCase(),
+                                )
+                                  ? 'Unpaid'
+                                  : selectedInvoice.status ?? 'SENT'
+                              }
                               size="small"
                               color="success"
                               sx={{ mt: 0.4, fontWeight: 800 }}
@@ -905,13 +928,13 @@ export function CustomerDashboard() {
             )}
 
             {activeTab === 'invoices' && <CustomerInvoicesList invoices={data.invoices} businesses={data.businesses} />}
-            {activeTab === 'rewards' && <CustomerLoyaltyPanel customerId={authUser?.id ? Number(authUser.id) : null} businesses={data.businesses} />}
-            {activeTab === 'insights' && <CustomerInsights invoices={data.invoices} businesses={data.businesses} customerId={authUser?.id ? Number(authUser.id) : null} />}
+            {activeTab === 'rewards' && <CustomerLoyaltyPanel customerId={customerProfileId} businesses={data.businesses} />}
+            {activeTab === 'insights' && <CustomerInsights invoices={data.invoices} businesses={data.businesses} customerId={customerProfileId} />}
             {activeTab === 'appointments' && (
               <CustomerAppointmentsPanel
                 appointments={data.appointments}
                 businesses={data.businesses}
-                customerId={Number(authUser?.id ?? 0)}
+                customerId={customerProfileId ?? Number(authUser?.id ?? 0)}
                 selectedAppointmentId={explicitAppointment?.id}
                 onSelectAppointment={setSelectedAppointment}
               />
