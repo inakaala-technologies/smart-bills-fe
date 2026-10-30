@@ -71,16 +71,7 @@ export function CustomerDashboard() {
   const isMenuOpen = isProfilePageOpen
   const customerLatitude = data.customers[0]?.latitude
   const customerLongitude = data.customers[0]?.longitude
-  const [familyDialogOpen, setFamilyDialogOpen] = useState(false)
-
-  useEffect(() => {
-    const matchingTab = customerDashboardTabs.find((tab) => tab === routeTab)
-    if (matchingTab) {
-      dispatch(setActiveTab(matchingTab))
-    } else {
-      navigate('/dashboard/overview', { replace: true })
-    }
-  }, [dispatch, navigate, routeTab])
+  const [familyDialogMode, setFamilyDialogMode] = useState<'closed' | 'manage' | 'invite'>('closed')
 
   useEffect(() => {
     if (customerLatitude === undefined || customerLongitude === undefined) return
@@ -188,13 +179,13 @@ export function CustomerDashboard() {
       subtitle: `Invoice #${invoice.invoiceNumber ?? invoice.id}`,
       date: invoice.issueDate
         ? new Date(invoice.issueDate).toLocaleDateString(
-            'en-IN',
-            {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            },
-          )
+          'en-IN',
+          {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          },
+        )
         : '—',
       amount: formatCurrency(invoice.totalAmount),
       icon: ShoppingCart,
@@ -294,7 +285,38 @@ export function CustomerDashboard() {
 
           {/* Main Content Area */}
           <Box sx={{ px: { xs: 2, sm: 2.2 }, pt: { xs: 2, sm: 2.2 }, pb: 'calc(96px + env(safe-area-inset-bottom))', flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehaviorY: 'contain' }}>
-            {/* Profile Dialog */}
+            <CustomerDashboardMenu
+              tabs={roleNav}
+              activeTab={activeTab}
+              onChangeTab={handleChangeTab}
+              anchorEl={menuAnchorEl}
+              isOpen={isMenuOpen}
+              onClose={() => setMenuAnchorEl(null)}
+              currentRole={authUser?.role ?? 'CUSTOMER'}
+              availableAccounts={availableAccounts}
+              missingProfileRoles={missingProfileRoles}
+              onSwitchAccount={(role: Role) => {
+                const updated = switchAccount(role)
+                if (updated) {
+                  dispatch(setAuthUser(updated))
+                  setMenuAnchorEl(null)
+                  navigate('/dashboard')
+                  window.location.reload()
+                }
+              }}
+              onAddProfile={(role: Role) => {
+                const updated = addProfile(role)
+                if (updated) {
+                  dispatch(setAuthUser(updated))
+                  setMenuAnchorEl(null)
+                  navigate('/dashboard')
+                  window.location.reload()
+                }
+              }}
+              onInviteFamily={() => setFamilyDialogMode('invite')}
+            />
+
+            {/* Profile Dialog for easy profile switching */}
             <ProfileManagerDialog
               open={managerOpen}
               onClose={() => setManagerOpen(false)}
@@ -324,20 +346,21 @@ export function CustomerDashboard() {
             />
 
             <FamilyManagementDialog
-              open={familyDialogOpen}
-              onClose={() => setFamilyDialogOpen(false)}
+              open={familyDialogMode !== 'closed'}
+              mode={familyDialogMode === 'closed' ? 'manage' : familyDialogMode}
+              onClose={() => setFamilyDialogMode('closed')}
               currentUserId={Number(authUser?.id)}
             />
-            
+
             {activeTab === 'bills' && (
-          <CustomerBillsPage />
+              <CustomerBillsPage />
             )}
 
             {activeTab === 'overview' && (
               <Box>
                 <HeroBanner />
 
-                                <SummaryCards
+                <SummaryCards
                   data={data}
                   loading={loading}
                   offersCount={nearbyOffersCount}
@@ -461,10 +484,9 @@ export function CustomerDashboard() {
                             }
                             aria-label={
                               entry.invoice
-                                ? `View invoice details for ${
-                                    entry.invoice.invoiceNumber ??
-                                    entry.invoice.id
-                                  }`
+                                ? `View invoice details for ${entry.invoice.invoiceNumber ??
+                                entry.invoice.id
+                                }`
                                 : entry.appointment
                                   ? `View appointment details for ${entry.title}`
                                   : undefined
@@ -472,34 +494,34 @@ export function CustomerDashboard() {
                             onClick={
                               entry.invoice
                                 ? () =>
-                                    setSelectedInvoice(entry.invoice)
+                                  setSelectedInvoice(entry.invoice)
                                 : entry.appointment
                                   ? () =>
-                                      setSelectedAppointment(
-                                        entry.appointment,
-                                      )
+                                    setSelectedAppointment(
+                                      entry.appointment,
+                                    )
                                   : undefined
                             }
                             onKeyDown={
                               entry.appointment || entry.invoice
                                 ? (event) => {
-                                    if (
-                                      event.key === 'Enter' ||
-                                      event.key === ' '
-                                    ) {
-                                      event.preventDefault()
+                                  if (
+                                    event.key === 'Enter' ||
+                                    event.key === ' '
+                                  ) {
+                                    event.preventDefault()
 
-                                      if (entry.invoice) {
-                                        setSelectedInvoice(
-                                          entry.invoice,
-                                        )
-                                      } else if (entry.appointment) {
-                                        setSelectedAppointment(
-                                          entry.appointment,
-                                        )
-                                      }
+                                    if (entry.invoice) {
+                                      setSelectedInvoice(
+                                        entry.invoice,
+                                      )
+                                    } else if (entry.appointment) {
+                                      setSelectedAppointment(
+                                        entry.appointment,
+                                      )
                                     }
                                   }
+                                }
                                 : undefined
                             }
                             sx={{
@@ -526,10 +548,10 @@ export function CustomerDashboard() {
                               '&:focus-visible':
                                 entry.appointment || entry.invoice
                                   ? {
-                                      outline:
-                                        '3px solid var(--mui-palette-primary-main)',
-                                      outlineOffset: 2,
-                                    }
+                                    outline:
+                                      '3px solid var(--mui-palette-primary-main)',
+                                    outlineOffset: 2,
+                                  }
                                   : undefined,
                             }}
                           >
@@ -746,10 +768,10 @@ export function CustomerDashboard() {
                             <Typography sx={{ color: 'text.primary' }}>
                               {selectedInvoice.issueDate
                                 ? new Date(
-                                    `${selectedInvoice.issueDate}T00:00:00`,
-                                  ).toLocaleDateString('en-IN', {
-                                    dateStyle: 'medium',
-                                  })
+                                  `${selectedInvoice.issueDate}T00:00:00`,
+                                ).toLocaleDateString('en-IN', {
+                                  dateStyle: 'medium',
+                                })
                                 : 'Not provided'}
                             </Typography>
                           </Box>
@@ -768,10 +790,10 @@ export function CustomerDashboard() {
                             <Typography sx={{ color: 'text.primary' }}>
                               {selectedInvoice.dueDate
                                 ? new Date(
-                                    `${selectedInvoice.dueDate}T00:00:00`,
-                                  ).toLocaleDateString('en-IN', {
-                                    dateStyle: 'medium',
-                                  })
+                                  `${selectedInvoice.dueDate}T00:00:00`,
+                                ).toLocaleDateString('en-IN', {
+                                  dateStyle: 'medium',
+                                })
                                 : 'Not provided'}
                             </Typography>
                           </Box>
@@ -926,12 +948,12 @@ export function CustomerDashboard() {
 
                   const daysRemaining = membership.endDate
                     ? Math.ceil(
-                        (
-                          new Date(
-                            `${membership.endDate}T23:59:59`,
-                          ).getTime() - activityNow
-                        ) / 86400000,
-                      )
+                      (
+                        new Date(
+                          `${membership.endDate}T23:59:59`,
+                        ).getTime() - activityNow
+                      ) / 86400000,
+                    )
                     : null
 
                   const membershipMessages =
@@ -1029,9 +1051,8 @@ export function CustomerDashboard() {
                             >
                               {daysRemaining < 0
                                 ? 'Expired'
-                                : `Expires in ${daysRemaining} day${
-                                    daysRemaining === 1 ? '' : 's'
-                                  }`}
+                                : `Expires in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'
+                                }`}
                             </Typography>
                           )}
 
@@ -1077,9 +1098,9 @@ export function CustomerDashboard() {
                 data={data}
                 onProfileUpdated={(user) => dispatch(setAuthUser(user))}
                 onOpenManageDialog={() => setManagerOpen(true)}
-                onOpenBusinesses={() => handleChangeTab('businesses')}
-                onOpenDocuments={() => handleChangeTab('invoices')}
-                onOpenFamily={() => setFamilyDialogOpen(true)}
+                onOpenBusinesses={() => dispatch(setActiveTab('businesses'))}
+                onOpenDocuments={() => dispatch(setActiveTab('invoices'))}
+                onOpenFamily={() => setFamilyDialogMode('manage')}
                 onOpenBusiness={(businessId) => {
                   dispatch(setSelectedBusinessId(businessId))
                   navigate(`/business/${businessId}`)
