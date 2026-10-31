@@ -112,9 +112,76 @@ function getMutationKey(config: Parameters<AxiosAdapter>[0]): string | null {
   ].join('|')
 }
 
+// Short-lived GET cache with in-flight de-duplication. Any successful write clears it,
+// so screens that re-fetch after saving always see fresh data.
+const GET_CACHE_TTL_MS = 60_000
+const getCache = new Map<string, { expiresAt: number; response: AxiosResponse }>()
+const inFlightGets = new Map<string, Promise<AxiosResponse>>()
+let cacheEpoch = 0
+
+export function invalidateApiCache(): void {
+  cacheEpoch += 1
+  getCache.clear()
+  inFlightGets.clear()
+}
+
+// Lets callers (e.g. the dashboard store) tell whether a write happened since they loaded.
+export function getApiCacheEpoch(): number {
+  return cacheEpoch
+}
+
+function isCacheableGet(config: Parameters<AxiosAdapter>[0]): boolean {
+  if (config.responseType && config.responseType !== 'json') return false
+  if ((config as { skipCache?: boolean }).skipCache) return false
+  const { pathname } = new URL(config.url ?? '', config.baseURL ?? API_BASE_URL)
+  return !isAuthSessionPath(pathname) && !pathname.includes('/notifications')
+}
+
+function cloneResponse(response: AxiosResponse, config: Parameters<AxiosAdapter>[0]): AxiosResponse {
+  const data = typeof structuredClone === 'function' ? structuredClone(response.data) : response.data
+  return { ...response, data, config }
+}
+
+async function cachedGet(config: Parameters<AxiosAdapter>[0]): Promise<AxiosResponse> {
+  const headers = AxiosHeaders.from(config.headers)
+  const key = [
+    config.baseURL ?? '',
+    config.url ?? '',
+    stableSerialize(config.params),
+    String(headers.get('Authorization') ?? ''),
+    String(headers.get('X-Tenant-Id') ?? ''),
+  ].join('|')
+
+  const cached = getCache.get(key)
+  if (cached && cached.expiresAt > Date.now()) return cloneResponse(cached.response, config)
+
+  const pending = inFlightGets.get(key)
+  if (pending) return pending.then((response) => cloneResponse(response, config))
+
+  const epochAtStart = cacheEpoch
+  const request = defaultAdapter(config)
+  inFlightGets.set(key, request)
+  try {
+    const response = await request
+    if (epochAtStart === cacheEpoch) {
+      getCache.set(key, { expiresAt: Date.now() + GET_CACHE_TTL_MS, response })
+    }
+    return cloneResponse(response, config)
+  } finally {
+    if (inFlightGets.get(key) === request) inFlightGets.delete(key)
+  }
+}
+
 apiClient.defaults.adapter = async (config) => {
-  if (!mutationMethods.has(config.method?.toLowerCase() ?? '')) return defaultAdapter(config)
-  if (isAuthSessionRequest(config)) return defaultAdapter(config)
+  if (!mutationMethods.has(config.method?.toLowerCase() ?? '')) {
+    return (config.method ?? 'get').toLowerCase() === 'get' && isCacheableGet(config)
+      ? cachedGet(config)
+      : defaultAdapter(config)
+  }
+  if (isAuthSessionRequest(config)) {
+    invalidateApiCache()
+    return defaultAdapter(config)
+  }
 
   const mutationKey = getMutationKey(config)
   if (mutationKey === null) return defaultAdapter(config)
@@ -138,7 +205,9 @@ apiClient.defaults.adapter = async (config) => {
   const request = defaultAdapter(config)
   inFlightMutations.set(mutationKey, request)
   try {
-    return await request
+    const response = await request
+    invalidateApiCache()
+    return response
   } finally {
     if (inFlightMutations.get(mutationKey) === request) inFlightMutations.delete(mutationKey)
   }
