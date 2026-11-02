@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { addCustomerToBusiness, type DashboardData } from '../../../services/api'
-import { Alert, Autocomplete, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, IconButton, MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
-import { ArrowRight, CalendarClock, CheckCircle2, CircleDollarSign, PackagePlus, Plus, ReceiptText, Trash2, UserRound, X } from 'lucide-react'
+import { Alert, Autocomplete, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Drawer, FormControl, IconButton, MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
+import { ArrowRight, CalendarClock, CheckCircle2, CircleDollarSign, Gift, PackagePlus, Percent, Plus, ReceiptText, Trash2, UserRound, X } from 'lucide-react'
 import { fetchLoyaltyBalance, fetchLoyaltySettings, type LoyaltyProgramSettings } from '../../../services/api'
 import { fetchBusinessMembershipPlans } from '../../../store/businessDashboardSlice'
 import { useAppDispatch, useAppSelector } from '../../../store/hooks'
@@ -82,6 +82,8 @@ export function InvoiceGeneratorCard({
     error: string
   } | null>(null)
   const [isBillPreviewOpen, setIsBillPreviewOpen] = useState(false)
+  const [payLaterChosen, setPayLaterChosen] = useState(false)
+  const [showDiscount, setShowDiscount] = useState(false)
   const [previewError, setPreviewError] = useState('')
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false)
   const [newCustomerName, setNewCustomerName] = useState('')
@@ -184,11 +186,16 @@ export function InvoiceGeneratorCard({
   }
 }, [open, businessId])
 
+  const payLater = payLaterChosen || Boolean(invoiceForm.dueDate)
+  const discountOpen = showDiscount || Number(invoiceForm.discountValue) > 0
+
   const handleClose = () => {
     setIsBillPreviewOpen(false)
     setInvoiceModeOverride(null)
     setSelectedMembershipId('')
     setPreviewError('')
+    setPayLaterChosen(false)
+    setShowDiscount(false)
     onClose()
   }
 
@@ -345,28 +352,59 @@ const handleAddCustomer = async () => {
 
   return (
     <>
-    <Dialog
+    <Drawer
+      anchor="bottom"
       open={open}
       onClose={handleClose}
-      fullWidth
-      maxWidth="sm"
-      scroll="paper"
-      sx={{ '& .MuiDialog-paper': { borderRadius: { xs: 2.5, sm: 3.2 }, overflow: 'hidden', boxShadow: '0 24px 70px rgba(14, 45, 38, 0.24)' } }}
+      slotProps={{
+        paper: {
+          sx: {
+            width: '100%',
+            maxWidth: 560,
+            mx: 'auto',
+            height: 'min(94dvh, 900px)',
+            display: 'flex',
+            flexDirection: 'column',
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+            overflow: 'hidden',
+            backgroundImage: 'none',
+            bgcolor: 'background.default',
+            boxShadow: '0 -18px 60px rgba(15, 3, 45, 0.32)',
+          },
+        },
+      }}
     >
-      <DialogTitle sx={{ p: { xs: 0.8, sm: 1.2 }, bgcolor: '#f4f7f6' }}>
-        <Stack direction="row" spacing={1.2} sx={{ alignItems: 'center', px: { xs: 1.3, sm: 2 }, py: 1.5, borderRadius: 2.4, color: '#fff', background: 'linear-gradient(120deg, #0F032D 0%, #4E2BCC 70%, #905BF4 120%)' }}>
-          <Box sx={{ width: 40, height: 40, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 1.6, bgcolor: 'rgba(255,255,255,0.14)' }}>
-            <ReceiptText size={20} />
+      <Box sx={{ flexShrink: 0, pt: 1, px: { xs: 1.2, sm: 1.6 }, pb: 1.2, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Box sx={{ width: 42, height: 4.5, borderRadius: 99, bgcolor: 'divider', mx: 'auto', mb: 1.2 }} />
+        <Stack direction="row" spacing={1.4} sx={{ alignItems: 'center', px: { xs: 1.3, sm: 1.8 }, py: 1.3, borderRadius: 3, color: '#fff', background: 'linear-gradient(120deg, #0F032D 0%, #4E2BCC 70%, #905BF4 120%)' }}>
+          <Box sx={{ width: 42, height: 42, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 2.2, bgcolor: 'rgba(255,255,255,0.16)' }}>
+            <ReceiptText size={21} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="h6" sx={{ fontWeight: 900, lineHeight: 1.15 }}>Create invoice</Typography>
-            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.78)' }}>Prepare a clear bill for your customer</Typography>
+            <Typography variant="h6" component="h2" sx={{ fontWeight: 900, lineHeight: 1.15, fontSize: 19 }}>Create invoice</Typography>
+            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.78)' }}>{isBillPreviewOpen ? 'Review the bill before saving' : 'Prepare a clear bill for your customer'}</Typography>
           </Box>
-          <IconButton aria-label="Close invoice form" onClick={handleClose} size="small" sx={{ color: '#fff' }}><X size={19} /></IconButton>
+          <IconButton aria-label="Close invoice form" onClick={handleClose} size="small" sx={{ color: '#fff', bgcolor: 'rgba(255,255,255,0.14)', '&:hover': { bgcolor: 'rgba(255,255,255,0.24)' } }}><X size={18} /></IconButton>
         </Stack>
-      </DialogTitle>
+        <Stack direction="row" spacing={0.8} sx={{ mt: 1.2, px: 0.4 }}>
+          {['Details', 'Review'].map((label, index) => {
+            const active = index === (isBillPreviewOpen ? 1 : 0)
+            const done = index === 0 && isBillPreviewOpen
+            return (
+              <Stack key={label} direction="row" spacing={0.7} sx={{ flex: 1, alignItems: 'center' }}>
+                <Box sx={{ width: 22, height: 22, display: 'grid', placeItems: 'center', borderRadius: '50%', fontSize: 11, fontWeight: 850, color: active || done ? '#fff' : 'text.secondary', bgcolor: active || done ? 'primary.main' : 'action.hover' }}>
+                  {done ? <CheckCircle2 size={13} /> : index + 1}
+                </Box>
+                <Typography variant="caption" sx={{ fontWeight: 800, color: active ? 'text.primary' : 'text.secondary' }}>{label}</Typography>
+                {index === 0 && <Box sx={{ flex: 1, height: 2, borderRadius: 1, bgcolor: isBillPreviewOpen ? 'primary.main' : 'divider' }} />}
+              </Stack>
+            )
+          })}
+        </Stack>
+      </Box>
       {!isBillPreviewOpen ? (
-      <DialogContent dividers sx={{ p: { xs: 1.4, sm: 2.4 }, bgcolor: '#f4f7f6' }}>
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: { xs: 1.4, sm: 2 }, bgcolor: 'background.default' }}>
         <Stack spacing={1.8}>
           {!membershipPlansLoading && membershipPlans.length > 0 && (
             <ToggleButtonGroup
@@ -377,10 +415,10 @@ const handleAddCustomer = async () => {
               onChange={(_, value: 'products' | 'membership' | null) => value && setInvoiceModeOverride(value)}
               sx={{
                 p: 0.4,
-                bgcolor: '#e7eeec',
-                borderRadius: 2,
-                '& .MuiToggleButton-root': { flex: 1, minHeight: 40, border: 0, borderRadius: '8px !important', color: 'text.secondary', fontWeight: 800, textTransform: 'none' },
-                '& .Mui-selected': { bgcolor: 'background.paper !important', color: 'primary.main !important', boxShadow: '0 2px 7px rgba(20, 54, 48, 0.12)' },
+                bgcolor: 'action.hover',
+                borderRadius: 2.4,
+                '& .MuiToggleButton-root': { flex: 1, minHeight: 40, border: 0, borderRadius: '10px !important', color: 'text.secondary', fontWeight: 800, textTransform: 'none' },
+                '& .Mui-selected': { bgcolor: 'background.paper !important', color: 'primary.main !important', boxShadow: '0 2px 8px rgba(78, 43, 204, 0.16)' },
               }}
             >
               <ToggleButton value="products">Products</ToggleButton>
@@ -390,15 +428,15 @@ const handleAddCustomer = async () => {
 
           {membershipPlansError && <Alert severity="error">{membershipPlansError}</Alert>}
 
-          <Box>
-            <Stack direction="row" spacing={0.8} sx={{ alignItems: 'center', mb: 0.9 }}>
-              <Box sx={{ width: 25, height: 25, display: 'grid', placeItems: 'center', borderRadius: '50%', bgcolor: 'primary.main', color: '#fff' }}><UserRound size={14} /></Box>
+          <Paper variant="outlined" sx={{ p: { xs: 1.3, sm: 1.6 }, borderRadius: 3, borderColor: 'divider' }}>
+            <Stack direction="row" spacing={0.8} sx={{ alignItems: 'center', mb: 1.1 }}>
+              <Box sx={{ width: 26, height: 26, display: 'grid', placeItems: 'center', borderRadius: 1.6, bgcolor: 'primary.main', color: '#fff' }}><UserRound size={14} /></Box>
               <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>Customer</Typography>
             </Stack>
           {invoiceMode === 'products' ? (
           <FormControl fullWidth size="small">
             {selectedCustomer ? (
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, border: '1px solid', borderColor: 'success.light', borderRadius: 2, px: 1.3, py: 1.1, background: 'linear-gradient(120deg, rgba(15, 139, 112, 0.07), rgba(15, 139, 112, 0.015))', minHeight: 68 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, border: '1px solid', borderColor: 'success.light', borderRadius: 2.4, px: 1.3, py: 1.1, background: 'linear-gradient(120deg, rgba(15, 139, 112, 0.09), rgba(15, 139, 112, 0.02))', minHeight: 68 }}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
                   <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 850, letterSpacing: 0.4, textTransform: 'uppercase' }}>Selected customer</Typography>
                   <Typography variant="body2" sx={{ fontWeight: 800, color: 'text.primary', whiteSpace: 'normal', lineHeight: 1.4, wordBreak: 'break-word' }}>
@@ -486,7 +524,7 @@ const handleAddCustomer = async () => {
                 value={selectedMembershipId}
                 onChange={(event) => handleMembershipSelection(event.target.value)}
                 disabled={membershipPlansLoading || billableMemberships.length === 0}
-                helperText={membershipPlansLoading ? 'Loading membership plans…' : 'Select an enrolled member and plan to use its saved price.'}
+                helperText={membershipPlansLoading ? 'Loading membership plans…' : undefined}
               >
                 {billableMemberships.map((membership) => {
                   const plan = membershipPlans.find((item) => item.id === membership.planId)
@@ -500,54 +538,48 @@ const handleAddCustomer = async () => {
                 })}
               </TextField>
               {!membershipPlansLoading && !membershipPlansError && billableMemberships.length === 0 && <Alert severity="info">There are no enrolled memberships to invoice for this business.</Alert>}
-              <Alert severity="info">This creates a one-time invoice using the member’s saved plan price. Membership dates and automatic renewals are not changed.</Alert>
+              <Typography variant="caption" color="text.secondary">One-time invoice at the member’s saved plan price. Renewal dates are not changed.</Typography>
             </Stack>
           )}
-          </Box>
+          </Paper>
 
           {selectedCustomer && (
             <Stack spacing={0.8}>
               {currentLoyaltyError && <Alert severity="error">{currentLoyaltyError}</Alert>}
               {currentLoyaltyState?.settings.configured ? (
-                <>
-                  <Alert severity="info">
-                    {selectedCustomer.fullName ?? 'Customer'} has {currentLoyaltyState.balance.toLocaleString('en-IN')} points with this business.
-                  </Alert>
-                  <Alert severity="info">
-                    Points are not redeemed on this invoice. Service rewards take priority and are redeemed through the service flow.
-                  </Alert>
-                  {invoiceEarningPoints > 0 && (
-                    <Alert severity="info">
-                      This invoice will earn {invoiceEarningPoints.toLocaleString('en-IN')} points when it is marked paid.
-                    </Alert>
-                  )}
-                </>
+                <Alert severity="info" icon={<Gift size={16} />} sx={{ py: 0, borderRadius: 2.4, alignItems: 'center' }}>
+                  <strong>{currentLoyaltyState.balance.toLocaleString('en-IN')} points</strong> with this business
+                  {invoiceEarningPoints > 0 && <> · earns <strong>{invoiceEarningPoints.toLocaleString('en-IN')}</strong> when paid</>}
+                </Alert>
               ) : !currentLoyaltyError && (
-                <Alert severity="info">Configure loyalty settings to enable invoice rewards.</Alert>
+                <Typography variant="caption" color="text.secondary">Configure loyalty settings to enable invoice rewards.</Typography>
               )}
             </Stack>
           )}
 
           <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
-            <Box>
-              <Stack direction="row" spacing={0.8} sx={{ alignItems: 'center' }}>
-                <Box sx={{ width: 25, height: 25, display: 'grid', placeItems: 'center', borderRadius: '50%', bgcolor: 'primary.main', color: '#fff' }}><PackagePlus size={14} /></Box>
-                <Typography variant="subtitle2" sx={{ color: 'text.primary', fontWeight: 850 }}>{invoiceMode === 'membership' ? 'Invoice items' : 'Products & services'}</Typography>
-              </Stack>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.35, ml: 4 }}>Add the items included in this bill.</Typography>
-            </Box>
+            <Stack direction="row" spacing={0.9} sx={{ alignItems: 'center' }}>
+              <Box sx={{ width: 26, height: 26, display: 'grid', placeItems: 'center', borderRadius: 1.6, bgcolor: 'primary.main', color: '#fff' }}><PackagePlus size={14} /></Box>
+              <Typography variant="subtitle2" sx={{ color: 'text.primary', fontWeight: 850 }}>{invoiceMode === 'membership' ? 'Invoice items' : 'Products & services'}</Typography>
+            </Stack>
             <Button
               size="small"
-              variant="outlined"
+              variant="contained"
+              disableElevation
               startIcon={<Plus size={15} />}
               onClick={onAddItem}
-              sx={{ flexShrink: 0, px: 1.2, borderRadius: 1.8, fontWeight: 750, textTransform: 'none' }}
+              sx={{ flexShrink: 0, px: 1.4, minHeight: '34px !important', borderRadius: 2, fontWeight: 750, textTransform: 'none' }}
             >
-              {invoiceMode === 'membership' ? 'Add add-on' : 'Add item'}
+              Add product
             </Button>
           </Stack>
+          {(productsLoading || productsError || businessProducts.length === 0) && (
+            <Typography variant="caption" color="text.secondary" sx={{ mt: '-8px !important' }}>
+              {productsLoading ? 'Loading saved products…' : productsError ? 'Saved products could not be loaded. Enter items manually.' : 'No saved products yet. Enter items manually.'}
+            </Typography>
+          )}
 
-          <Stack spacing={1}>
+          <Stack spacing={1.2}>
             {invoiceForm.items.map((item, index) => {
               const quantity = Number(item.quantity)
               const unitPrice = Number(item.unitPrice)
@@ -556,18 +588,14 @@ const handleAddCustomer = async () => {
                 ? quantity * unitPrice * (1 + (gstRate >= 0 ? gstRate : 0) / 100)
                 : 0
               return (
-              <Paper key={item.id} variant="outlined" sx={{ p: { xs: 1.15, sm: 1.5 }, borderRadius: 2, boxShadow: '0 3px 12px rgba(20, 54, 48, 0.045)', borderColor: 'rgba(32, 54, 56, 0.12)' }}>
-                <Stack spacing={1}>
-                  <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Stack direction="row" spacing={0.7} sx={{ alignItems: 'center', minWidth: 0 }}>
-                      <Chip size="small" label={`${index + 1}`.padStart(2, '0')} sx={{ height: 22, minWidth: 30, fontSize: 10, fontWeight: 850, bgcolor: 'action.hover' }} />
-                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 750 }}>Item</Typography>
-                    </Stack>
-                    <Stack direction="row" spacing={0.8} sx={{ alignItems: 'center' }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 750 }}>Line total</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 850 }}>{formatMoney(lineTotal)}</Typography>
-                      <IconButton aria-label={`Remove item ${index + 1}`} size="small" onClick={() => onRemoveItem(item.id)} disabled={invoiceForm.items.length <= 1} sx={{ ml: 0.2, color: 'text.secondary', '&:hover': { color: 'error.main', bgcolor: 'error.50' } }}><Trash2 size={15} /></IconButton>
-                    </Stack>
+              <Paper key={item.id} variant="outlined" sx={{ p: 1.3, borderRadius: 3, boxShadow: '0 4px 14px rgba(78, 43, 204, 0.06)', borderColor: 'divider' }}>
+                <Stack spacing={1.1}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                    <Box sx={{ width: 24, height: 24, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: '50%', bgcolor: 'action.hover', color: 'primary.main', fontSize: 11, fontWeight: 850 }}>{index + 1}</Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 750 }}>Item</Typography>
+                    <Box sx={{ flex: 1 }} />
+                    <Typography variant="body2" sx={{ fontWeight: 850, color: lineTotal > 0 ? 'primary.main' : 'text.disabled' }}>{formatMoney(lineTotal)}</Typography>
+                    <IconButton aria-label={`Remove item ${index + 1}`} size="small" onClick={() => onRemoveItem(item.id)} disabled={invoiceForm.items.length <= 1} sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}><Trash2 size={15} /></IconButton>
                   </Stack>
                   <Autocomplete<BusinessProduct, false, false, true>
                     freeSolo
@@ -615,17 +643,8 @@ const handleAddCustomer = async () => {
                       <TextField
                         {...params}
                         size="small"
-                        label={invoiceMode === 'membership' ? 'Add-on name' : 'Product or service'}
+                        label={invoiceMode === 'membership' ? 'Product name' : 'Product or service'}
                         placeholder="Select a saved item or type a name"
-                        helperText={
-                          productsLoading
-                            ? 'Loading saved products…'
-                            : productsError
-                              ? 'Saved products could not be loaded. You can still enter an item manually.'
-                              : businessProducts.length === 0
-                                ? 'No saved products available. Enter an item name manually.'
-                                : 'Select a saved item to fill its price and GST, or type manually.'
-                        }
                       />
                     )}
                   />
@@ -640,46 +659,43 @@ const handleAddCustomer = async () => {
             })}
           </Stack>
 
-          <Paper variant="outlined" sx={{ p: { xs: 1.4, sm: 1.8 }, borderRadius: 2.2 }}>
-            <Stack spacing={1}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>Optional discount</Typography>
-              <Typography variant="caption" color="text.secondary">
-                Apply a percentage to the full bill including GST, or enter a fixed amount.
-              </Typography>
-              <ToggleButtonGroup
-                exclusive
-                fullWidth
-                size="small"
-                value={invoiceForm.discountType}
-                onChange={(_, value: 'PERCENTAGE' | 'AMOUNT' | null) => {
-                  if (value) onInvoiceFieldChange('discountType', value)
-                }}
-                aria-label="Discount type"
-              >
-                <ToggleButton value="PERCENTAGE">Percentage</ToggleButton>
-                <ToggleButton value="AMOUNT">Fixed amount</ToggleButton>
-              </ToggleButtonGroup>
-              <TextField
-                size="small"
-                label={invoiceForm.discountType === 'PERCENTAGE' ? 'Discount percentage' : 'Discount amount'}
-                type="number"
-                value={invoiceForm.discountValue}
-                onChange={(event) => onInvoiceFieldChange('discountValue', event.target.value)}
-                slotProps={{ htmlInput: { min: 0, max: invoiceForm.discountType === 'PERCENTAGE' ? 100 : undefined, step: 0.01 } }}
-                helperText={invoiceForm.discountType === 'PERCENTAGE' ? 'Calculated on subtotal plus GST.' : 'Leave blank if no discount applies.'}
-              />
-              {invoiceDiscount > 0 && (
-                <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
-                  <Typography variant="body2" color="success.main">
-                    Discount{invoiceForm.discountType === 'PERCENTAGE' ? ` (${discountInput}%)` : ''}
-                  </Typography>
-                  <Typography variant="body2" color="success.main" sx={{ fontWeight: 750 }}>−{formatMoney(invoiceDiscount)}</Typography>
+          {discountOpen ? (
+            <Paper variant="outlined" sx={{ p: 1.4, borderRadius: 3 }}>
+              <Stack spacing={1.1}>
+                <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>Discount</Typography>
+                  <Button size="small" color="inherit" onClick={() => { onInvoiceFieldChange('discountValue', ''); setShowDiscount(false) }} sx={{ textTransform: 'none' }}>Remove</Button>
                 </Stack>
-              )}
-            </Stack>
-          </Paper>
+                <Stack direction="row" spacing={1}>
+                  <ToggleButtonGroup
+                    exclusive
+                    size="small"
+                    value={invoiceForm.discountType}
+                    onChange={(_, value: 'PERCENTAGE' | 'AMOUNT' | null) => {
+                      if (value) onInvoiceFieldChange('discountType', value)
+                    }}
+                    aria-label="Discount type"
+                  >
+                    <ToggleButton value="PERCENTAGE" sx={{ px: 1.5 }}>%</ToggleButton>
+                    <ToggleButton value="AMOUNT" sx={{ px: 1.5 }}>₹</ToggleButton>
+                  </ToggleButtonGroup>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    label={invoiceForm.discountType === 'PERCENTAGE' ? 'Discount %' : 'Discount amount'}
+                    type="number"
+                    value={invoiceForm.discountValue}
+                    onChange={(event) => onInvoiceFieldChange('discountValue', event.target.value)}
+                    slotProps={{ htmlInput: { min: 0, max: invoiceForm.discountType === 'PERCENTAGE' ? 100 : undefined, step: 0.01 } }}
+                  />
+                </Stack>
+              </Stack>
+            </Paper>
+          ) : (
+            <Button size="small" startIcon={<Percent size={15} />} onClick={() => setShowDiscount(true)} sx={{ alignSelf: 'flex-start', textTransform: 'none', fontWeight: 750 }}>Add discount</Button>
+          )}
 
-          <Paper variant="outlined" sx={{ p: { xs: 1.4, sm: 1.8 }, borderRadius: 2.2, borderColor: 'rgba(32, 54, 56, 0.12)', boxShadow: '0 4px 14px rgba(20, 54, 48, 0.045)' }}>
+          <Paper variant="outlined" sx={{ p: { xs: 1.4, sm: 1.8 }, borderRadius: 3, borderColor: 'primary.light', background: 'linear-gradient(135deg, rgba(78, 43, 204, 0.07), rgba(144, 91, 244, 0.03))' }}>
             <Stack spacing={1}>
               <Stack direction="row" spacing={0.8} sx={{ alignItems: 'center', mb: 0.3 }}>
                 <Box sx={{ width: 25, height: 25, display: 'grid', placeItems: 'center', borderRadius: '50%', bgcolor: 'primary.main', color: '#fff' }}><CircleDollarSign size={14} /></Box>
@@ -699,47 +715,51 @@ const handleAddCustomer = async () => {
               )}
               <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', gap: 1, mt: 0.4, pt: 1.1, borderTop: '1px solid', borderColor: 'divider' }}>
                 <Box>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>{invoiceForm.dueDate ? 'Amount due' : 'Amount paid'}</Typography>
-                  <Typography variant="caption" color="text.secondary">Including applicable taxes</Typography>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>                  {payLater ? 'Amount due' : 'Amount paid'}</Typography>
+                                    <Typography variant="caption" color="text.secondary">Including taxes</Typography>
                 </Box>
                 <Typography variant="h5" color="primary.main" sx={{ fontWeight: 900, letterSpacing: '-0.04em' }}>{formatMoney(discountedTotal)}</Typography>
               </Stack>
             </Stack>
           </Paper>
 
-          <Paper variant="outlined" sx={{ p: { xs: 1.4, sm: 1.8 }, borderRadius: 2.2, borderColor: invoiceForm.dueDate ? 'warning.light' : 'success.light', bgcolor: invoiceForm.dueDate ? 'rgba(183, 121, 31, 0.035)' : 'rgba(22, 132, 95, 0.035)' }}>
-            <Stack direction="row" spacing={0.9} sx={{ alignItems: 'center', mb: 1 }}>
-              <Box sx={{ width: 25, height: 25, display: 'grid', placeItems: 'center', borderRadius: '50%', bgcolor: invoiceForm.dueDate ? 'warning.main' : 'success.main', color: '#fff' }}><CalendarClock size={14} /></Box>
-              <Box sx={{ flex: 1 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>Payment timing</Typography>
-                <Typography variant="caption" color="text.secondary">Choose whether this bill is already paid or due later.</Typography>
-              </Box>
-              <Chip
+          <Paper variant="outlined" sx={{ p: 1.4, borderRadius: 3 }}>
+            <Stack spacing={1.1}>
+              <ToggleButtonGroup
+                exclusive
+                fullWidth
                 size="small"
-                icon={invoiceForm.dueDate ? <CalendarClock size={13} /> : <CheckCircle2 size={13} />}
-                label={invoiceForm.dueDate ? 'Pending' : 'Paid'}
-                color={invoiceForm.dueDate ? 'warning' : 'success'}
-                sx={{ fontWeight: 800 }}
-              />
+                color={payLater ? 'warning' : 'success'}
+                value={payLater ? 'later' : 'paid'}
+                onChange={(_, value: 'paid' | 'later' | null) => {
+                  if (!value) return
+                  setPayLaterChosen(value === 'later')
+                  if (value === 'paid') onInvoiceFieldChange('dueDate', '')
+                }}
+                aria-label="Payment status"
+              >
+                <ToggleButton value="paid" sx={{ gap: 0.7, textTransform: 'none', fontWeight: 750 }}><CheckCircle2 size={15} />Paid now</ToggleButton>
+                <ToggleButton value="later" sx={{ gap: 0.7, textTransform: 'none', fontWeight: 750 }}><CalendarClock size={15} />Pay later</ToggleButton>
+              </ToggleButtonGroup>
+              {payLater && (
+                <TextField
+                  size="small"
+                  label="Due date"
+                  type="date"
+                  value={invoiceForm.dueDate}
+                  onChange={(event) => onInvoiceFieldChange('dueDate', event.target.value)}
+                  fullWidth
+                  slotProps={{ inputLabel: { shrink: true } }}
+                />
+              )}
             </Stack>
-            <TextField
-              size="small"
-              label="Due date (optional)"
-              type="date"
-              value={invoiceForm.dueDate}
-              onChange={(event) => onInvoiceFieldChange('dueDate', event.target.value)}
-              helperText={invoiceForm.dueDate ? `This invoice will be pending and due on ${invoiceForm.dueDate}.` : 'Leave blank to record this invoice as paid.'}
-              fullWidth
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.7, bgcolor: 'background.paper' } }}
-            />
           </Paper>
           {previewError && <Alert severity="error">{previewError}</Alert>}
           {invoiceMessage && <Alert severity={invoiceMessageSeverity}>{invoiceMessage}</Alert>}
         </Stack>
-          </DialogContent>
+          </Box>
     ) : (
-      <DialogContent dividers>
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: { xs: 1.4, sm: 2 } }}>
          <Paper
           variant="outlined"
           sx={{ p: { xs: 2, sm: 3 }, borderRadius: 2, boxShadow: 'none' }}
@@ -916,20 +936,20 @@ const handleAddCustomer = async () => {
             </Typography>
           </Box>
         </Paper>
-      </DialogContent>
+      </Box>
       )}
-      <DialogActions sx={{ px: { xs: 1.2, sm: 2.2 }, py: 1.2, gap: 0.8, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', '& .MuiButton-root': { minHeight: 40, borderRadius: 1.8, fontWeight: 800, textTransform: 'none', whiteSpace: 'nowrap' } }}>
+      <Box sx={{ flexShrink: 0, display: 'flex', alignItems: 'center', px: { xs: 1.2, sm: 2 }, py: 1.2, pb: 'max(10px, env(safe-area-inset-bottom))', gap: 0.8, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', boxShadow: '0 -6px 18px rgba(15, 3, 45, 0.06)', '& .MuiButton-root': { minHeight: 42, borderRadius: 2.4, fontWeight: 800, textTransform: 'none', whiteSpace: 'nowrap' } }}>
         {!isBillPreviewOpen ? (
           <>
             <Button onClick={handleClose} color="inherit" sx={{ px: { xs: 0.8, sm: 1.5 } }}>Cancel</Button>
             <Box sx={{ flex: 1 }} />
-            <Button onClick={() => onCreateInvoice('DRAFT', invoiceMode)} disabled={isSubmitting} variant="outlined" sx={{ px: { xs: 1, sm: 1.8 } }}>Save draft</Button>
+            <Button onClick={() => onCreateInvoice('DRAFT', invoiceMode)} loading={isSubmitting} variant="outlined" sx={{ px: { xs: 1, sm: 1.8 } }}>Save draft</Button>
             <Button
               variant="contained"
               onClick={handleContinueToPreview}
               disabled={isSubmitting}
               endIcon={<ArrowRight size={15} />}
-              sx={{ px: { xs: 1, sm: 2 }, fontSize: { xs: 10, sm: 13 }, boxShadow: '0 5px 12px rgba(8, 123, 101, 0.2)' }}
+              sx={{ px: { xs: 1, sm: 2 }, fontSize: { xs: 10, sm: 13 }, boxShadow: '0 6px 14px rgba(78, 43, 204, 0.28)' }}
             >
               Continue
             </Button>
@@ -938,20 +958,20 @@ const handleAddCustomer = async () => {
           <>
             <Button onClick={() => setIsBillPreviewOpen(false)} color="inherit" sx={{ px: { xs: 0.8, sm: 1.5 } }}>Back to edit</Button>
             <Box sx={{ flex: 1 }} />
-            <Button onClick={() => onCreateInvoice('DRAFT', invoiceMode)} disabled={isSubmitting} variant="outlined" sx={{ px: { xs: 1, sm: 1.8 } }}>Save draft</Button>
+            <Button onClick={() => onCreateInvoice('DRAFT', invoiceMode)} loading={isSubmitting} variant="outlined" sx={{ px: { xs: 1, sm: 1.8 } }}>Save draft</Button>
             <Button
               variant="contained"
               onClick={() => onCreateInvoice(invoiceForm.dueDate ? 'SENT' : 'PAID', invoiceMode)}
-              disabled={isSubmitting}
+              loading={isSubmitting}
               endIcon={<ArrowRight size={15} />}
-              sx={{ px: { xs: 1, sm: 2 }, fontSize: { xs: 10, sm: 13 }, boxShadow: '0 5px 12px rgba(8, 123, 101, 0.2)' }}
+              sx={{ px: { xs: 1, sm: 2 }, fontSize: { xs: 10, sm: 13 }, boxShadow: '0 6px 14px rgba(78, 43, 204, 0.28)' }}
             >
-              {isSubmitting ? 'Saving…' : invoiceForm.dueDate ? 'Create pending invoice' : 'Create paid invoice'}
+              {invoiceForm.dueDate ? 'Create pending invoice' : 'Create paid invoice'}
             </Button>
           </>
         )}
-      </DialogActions>
-    </Dialog>
+      </Box>
+    </Drawer>
 
     <Dialog
       open={isAddCustomerOpen}

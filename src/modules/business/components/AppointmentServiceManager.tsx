@@ -49,6 +49,7 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, hom
   const [messageSeverity, setMessageSeverity] = useState<'success' | 'error'>('success')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isTogglingAppointments, setIsTogglingAppointments] = useState(false)
 
   useEffect(() => {
     let isActive = true
@@ -63,8 +64,11 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, hom
         enabled: serviceEnabled,
       })))
       setIsLoading(false)
-    }).catch(() => {
-      if (isActive) setIsLoading(false)
+    }).catch((error: unknown) => {
+      if (!isActive) return
+      setMessage(error instanceof Error ? error.message : 'Could not load appointment services.')
+      setMessageSeverity('error')
+      setIsLoading(false)
     })
     return () => {
       isActive = false
@@ -77,11 +81,17 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, hom
     if (!onToggleHomeServices) return
     setIsTogglingHome(true)
     setMessage('')
-    const result = await onToggleHomeServices(next)
-    setIsTogglingHome(false)
-    if (!result.ok) {
-      setMessage(result.message ?? 'Could not update home services.')
+    try {
+      const result = await onToggleHomeServices(next)
+      if (!result.ok) {
+        setMessage(result.message ?? 'Could not update home services.')
+        setMessageSeverity('error')
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not update home services.')
       setMessageSeverity('error')
+    } finally {
+      setIsTogglingHome(false)
     }
   }
 
@@ -93,16 +103,24 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, hom
     }
 
     setMessage('')
-    const result = await setBusinessAppointmentsEnabled(businessId, nextEnabled)
-    if (!result.ok) {
-      setMessage(result.message ?? 'Could not update appointment availability.')
+    setIsTogglingAppointments(true)
+    try {
+      const result = await setBusinessAppointmentsEnabled(businessId, nextEnabled)
+      if (!result.ok) {
+        setMessage(result.message ?? 'Could not update appointment availability.')
+        setMessageSeverity('error')
+        return
+      }
+      setEnabled(nextEnabled)
+      setMessage(nextEnabled ? 'Appointments are available to customers.' : 'Appointments are turned off.')
+      setMessageSeverity('success')
+      onConfigurationChanged()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not update appointment availability.')
       setMessageSeverity('error')
-      return
+    } finally {
+      setIsTogglingAppointments(false)
     }
-    setEnabled(nextEnabled)
-    setMessage(nextEnabled ? 'Appointments are available to customers.' : 'Appointments are turned off.')
-    setMessageSeverity('success')
-    onConfigurationChanged()
   }
 
   const updateService = (index: number, changes: Partial<AppointmentServiceRequest>) => {
@@ -126,25 +144,31 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, hom
 
     setIsSaving(true)
     setMessage('')
-    const result = await saveAppointmentServices(businessId, services)
-    setIsSaving(false)
-    if (!result.ok || !result.services) {
-      setMessage(result.message ?? 'Could not save services.')
-      setMessageSeverity('error')
-      return
-    }
+    try {
+      const result = await saveAppointmentServices(businessId, services)
+      if (!result.ok || !result.services) {
+        setMessage(result.message ?? 'Could not save services.')
+        setMessageSeverity('error')
+        return
+      }
 
-    setServices(result.services.map((service: AppointmentServiceSummary) => ({
-      id: service.id,
-      name: service.name,
-      description: service.description ?? '',
-      price: service.price,
-      durationMinutes: service.durationMinutes,
-      enabled: service.enabled,
-    })))
-    setMessage('Service list saved.')
-    setMessageSeverity('success')
-    onConfigurationChanged()
+      setServices(result.services.map((service: AppointmentServiceSummary) => ({
+        id: service.id,
+        name: service.name,
+        description: service.description ?? '',
+        price: service.price,
+        durationMinutes: service.durationMinutes,
+        enabled: service.enabled,
+      })))
+      setMessage('Service list saved.')
+      setMessageSeverity('success')
+      onConfigurationChanged()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not save services.')
+      setMessageSeverity('error')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -161,6 +185,7 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, hom
             </Stack>
             <Chip size="small" label={`${services.filter((service) => service.enabled).length} active`} color={enabled ? 'success' : 'default'} variant="outlined" sx={{ alignSelf: { xs: 'flex-start', sm: 'center' }, fontWeight: 700 }} />
           </Stack>
+          {(isSaving || isTogglingAppointments || isTogglingHome) && <LinearProgress aria-label="Updating appointment settings" />}
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, p: 1, borderRadius: 1.5, bgcolor: 'action.hover' }}>
             <Box sx={{ minWidth: 0 }}>
               <Typography variant="body2" sx={{ fontWeight: 750 }}>Online booking</Typography>
@@ -168,7 +193,7 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, hom
             </Box>
             <FormControlLabel
               sx={{ mr: 0, ml: 0.5, flexShrink: 0 }}
-              control={<Switch checked={enabled} onChange={(event) => handleToggle(event.target.checked)} slotProps={{ input: { 'aria-label': 'Enable online appointments' } }} />}
+              control={<Switch checked={enabled} disabled={isLoading || isTogglingAppointments || isSaving} onChange={(event) => handleToggle(event.target.checked)} slotProps={{ input: { 'aria-label': 'Enable online appointments' } }} />}
               label=""
             />
           </Box>
@@ -200,6 +225,7 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, hom
             <Button
               size="small"
               startIcon={<Plus size={15} />}
+              disabled={isLoading || isSaving}
               onClick={() => setServices((current) => [...current, newService()])}
               sx={{ flexShrink: 0, textTransform: 'none' }}
             >
@@ -267,11 +293,12 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, hom
           <Button
             variant="contained"
             startIcon={<Save size={16} />}
+            loading={isSaving}
             onClick={handleSave}
             disabled={isLoading || isSaving}
             sx={{ alignSelf: 'flex-start', textTransform: 'none', fontWeight: 700 }}
           >
-            {isSaving ? 'Saving…' : 'Save services'}
+            Save services
           </Button>
         </Stack>
       </CardContent>

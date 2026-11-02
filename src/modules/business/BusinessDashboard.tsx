@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Box, Button, Container, Paper, Stack, Typography } from '@mui/material'
+import { Alert, Box, Button, Container, Drawer, Paper, Snackbar, Stack, Typography } from '@mui/material'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { AppointmentDetailDialog } from '../../components/AppointmentDetailDialog'
@@ -12,6 +12,7 @@ import {
   searchCustomers,
   setBusinessAppointmentsEnabled,
   setBusinessMembershipsEnabled,
+  setBusinessPayslipsEnabled,
   setBusinessHomeServicesEnabled,
   setBusinessHomeVisitCharge,
   updateAppointmentStaff,
@@ -45,6 +46,7 @@ import { InvoiceListPanel } from './components/InvoiceListPanel'
 import { MembershipWorkspace } from './components/MembershipWorkspace'
 import { CustomerRetentionWorkspace } from './components/CustomerRetentionWorkspace'
 import { CallbackRequestsWorkspace } from './components/CallbackRequestsWorkspace'
+import { PayslipsWorkspace } from './components/PayslipsWorkspace'
 import { BusinessInsightsWorkspace } from './components/BusinessInsightsWorkspace'
 import { GlobalSearchWorkspace } from './components/GlobalSearchWorkspace'
 import { LoyaltyWorkspace } from './components/LoyaltyWorkspace'
@@ -56,7 +58,7 @@ import type { DashboardTab } from '../types'
 import { normalizeBusinessType } from '../../constants/businessTypes'
 import { v4 as uuidv4 } from 'uuid'
 
-const businessDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'customers', 'appointments', 'memberships', 'loyalty', 'offers', 'retention', 'callbacks', 'insights', 'search', 'profile']
+const businessDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'customers', 'appointments', 'memberships', 'loyalty', 'offers', 'retention', 'callbacks', 'payslips', 'insights', 'search', 'profile']
 
 function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
@@ -99,13 +101,13 @@ export function BusinessDashboard() {
   const appointmentsEnabled = selectedBusiness?.appointmentsEnabled ?? false
   const membershipsEnabled = selectedBusiness?.membershipsEnabled ?? true
   const homeServicesEnabled = selectedBusiness?.homeServicesEnabled ?? false
-
+  const payslipsEnabled = selectedBusiness?.payslipsEnabled ?? false
   useEffect(() => {
     if (!selectedBusiness) return
-    if ((activeTab === 'appointments' && !appointmentsEnabled) || (activeTab === 'memberships' && !membershipsEnabled)) {
+    if ((activeTab === 'memberships' && !membershipsEnabled) || (activeTab === 'payslips' && !payslipsEnabled)) {
       changeTab('overview', true)
     }
-  }, [activeTab, appointmentsEnabled, changeTab, membershipsEnabled, selectedBusiness])
+  }, [activeTab, appointmentsEnabled, changeTab, membershipsEnabled, payslipsEnabled, selectedBusiness])
 
   const createInvoiceItem = (): InvoiceLineItemForm => ({
     id: uuidv4(),
@@ -122,6 +124,7 @@ export function BusinessDashboard() {
     items: [createInvoiceItem()],
   }))
   const [invoiceMessage, setInvoiceMessage] = useState('')
+  const [invoiceToast, setInvoiceToast] = useState('')
   const [invoiceMessageSeverity, setInvoiceMessageSeverity] = useState<'error' | 'success'>('success')
   const [isInvoiceSubmitting, setIsInvoiceSubmitting] = useState(false)
   const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false)
@@ -302,7 +305,9 @@ export function BusinessDashboard() {
       ? await setBusinessAppointmentsEnabled(selectedBusiness.id, enabled)
       : feature === 'homeServices'
         ? await setBusinessHomeServicesEnabled(selectedBusiness.id, enabled)
-        : await setBusinessMembershipsEnabled(selectedBusiness.id, enabled)
+        : feature === 'payslips'
+          ? await setBusinessPayslipsEnabled(selectedBusiness.id, enabled)
+          : await setBusinessMembershipsEnabled(selectedBusiness.id, enabled)
     if (!result.ok || !result.business) {
       return { ok: false, message: result.message ?? 'Could not update this feature.' }
     }
@@ -311,6 +316,7 @@ export function BusinessDashboard() {
       appointmentsEnabled: result.business.appointmentsEnabled ?? false,
       membershipsEnabled: result.business.membershipsEnabled ?? true,
       homeServicesEnabled: result.business.homeServicesEnabled ?? false,
+      payslipsEnabled: result.business.payslipsEnabled ?? false,
     }))
     return { ok: true }
   }
@@ -444,52 +450,56 @@ export function BusinessDashboard() {
     setIsCreatingBusiness(true)
     setBusinessMessage('')
 
-    const result = await createBusiness({
-      name,
-      legalName: businessForm.legalName || name,
-      businessType: businessForm.businessType,
-      email: email || undefined,
-      phone: businessForm.phone || undefined,
-      address: [businessLocation.city, businessLocation.region, businessLocation.country].join(', '),
-      country: businessLocation.country,
-      region: businessLocation.region,
-      city: businessLocation.city,
-      latitude: businessLocation.latitude,
-      longitude: businessLocation.longitude,
-      status: 'ACTIVE',
-      tenantId: currentUser?.tenantId ?? 1,
-    })
+    try {
+      const result = await createBusiness({
+        name,
+        legalName: businessForm.legalName || name,
+        businessType: businessForm.businessType,
+        email: email || undefined,
+        phone: businessForm.phone || undefined,
+        address: [businessLocation.city, businessLocation.region, businessLocation.country].join(', '),
+        country: businessLocation.country,
+        region: businessLocation.region,
+        city: businessLocation.city,
+        latitude: businessLocation.latitude,
+        longitude: businessLocation.longitude,
+        status: 'ACTIVE',
+        tenantId: currentUser?.tenantId ?? 1,
+      })
 
-    if (!result.ok || !result.business) {
-      setBusinessMessage(result.message ?? 'Could not save business details.')
+      if (!result.ok || !result.business) {
+        setBusinessMessage(result.message ?? 'Could not save business details.')
+        return
+      }
+
+      const savedBusiness = result.business
+      const fixedEmail = authUser?.email ?? savedBusiness.email ?? email
+      setBusinessForm({
+        name: savedBusiness.businessName ?? savedBusiness.name ?? name,
+        legalName: savedBusiness.name ?? (businessForm.legalName || name),
+        email: fixedEmail,
+        phone: businessForm.phone,
+        address: businessForm.address,
+        businessType: normalizeBusinessType(savedBusiness.businessType ?? businessForm.businessType),
+      })
+      setBusinessLocation({
+        locationAddress: savedBusiness.address ?? businessForm.address,
+        latitude: savedBusiness.latitude ?? null,
+        longitude: savedBusiness.longitude ?? null,
+      })
+
+      if (savedBusiness.id) {
+        dispatch(setSelectedBusinessId(savedBusiness.id))
+      }
+
+      setBusinessMessage('Business profile saved successfully.')
+      await dispatch(fetchBusinessDashboard(savedBusiness.id ?? undefined))
+      changeTab('overview')
+    } catch (error) {
+      setBusinessMessage(error instanceof Error ? error.message : 'Could not save business details.')
+    } finally {
       setIsCreatingBusiness(false)
-      return
     }
-
-    const savedBusiness = result.business
-    const fixedEmail = authUser?.email ?? savedBusiness.email ?? email
-    setBusinessForm({
-      name: savedBusiness.businessName ?? savedBusiness.name ?? name,
-      legalName: savedBusiness.name ?? (businessForm.legalName || name),
-      email: fixedEmail,
-      phone: businessForm.phone,
-      address: businessForm.address,
-      businessType: normalizeBusinessType(savedBusiness.businessType ?? businessForm.businessType),
-    })
-    setBusinessLocation({
-      locationAddress: savedBusiness.address ?? businessForm.address,
-      latitude: savedBusiness.latitude ?? null,
-      longitude: savedBusiness.longitude ?? null,
-    })
-
-    if (savedBusiness.id) {
-      dispatch(setSelectedBusinessId(savedBusiness.id))
-    }
-
-    setBusinessMessage('Business profile saved successfully.')
-    setIsCreatingBusiness(false)
-    dispatch(fetchBusinessDashboard(savedBusiness.id ?? undefined))
-    dispatch(setActiveTab('overview'))
   }
 
   const handleCreateInvoice = async (status: 'DRAFT' | 'SENT' | 'PAID') => {
@@ -566,15 +576,14 @@ export function BusinessDashboard() {
   return
 }
 
-      if (status === 'SENT') {
-        setInvoiceMessage('')
-        setIsInvoiceFormOpen(false)
-      } else {
-        setInvoiceMessageSeverity('success')
-        setInvoiceMessage(
-          `Invoice ${result.invoice?.invoiceNumber ?? 'draft'} saved as a draft.`
-        )
-      }
+      setInvoiceMessage('')
+      setIsInvoiceFormOpen(false)
+      const invoiceLabel = result.invoice?.invoiceNumber ?? 'Invoice'
+      setInvoiceToast(
+        status === 'DRAFT' ? `${invoiceLabel} saved as a draft.`
+          : status === 'PAID' ? `${invoiceLabel} created and marked as paid.`
+            : `${invoiceLabel} created and sent.`
+      )
 
       setInvoiceForm((current) => ({
         ...current,
@@ -644,47 +653,6 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
       badge: initials,
     }
   })
-
-  if (isProfilePageOpen) {
-    return (
-      <BusinessProfileMenuPage
-        authUser={authUser}
-        currentRole={authUser?.role ?? 'BUSINESS'}
-        availableAccounts={availableAccounts}
-        missingProfileRoles={missingProfileRoles}
-        appointmentsEnabled={appointmentsEnabled}
-        membershipsEnabled={membershipsEnabled}
-        onBack={() => setIsProfilePageOpen(false)}
-        onNavigateTab={(tab) => {
-          setIsProfilePageOpen(false)
-          changeTab(tab)
-        }}
-        onSwitchAccount={(role) => {
-          const updated = switchAccount(role)
-          if (updated) {
-            dispatch(setAuthUser(updated))
-            navigate(getDashboardPath(updated.role))
-            window.location.reload()
-          }
-        }}
-        onAddProfile={(role) => {
-          const updated = addProfile(role)
-          if (updated) {
-            dispatch(setAuthUser(updated))
-            navigate(getDashboardPath(updated.role))
-            window.location.reload()
-          }
-        }}
-        onLogout={() => {
-          logoutUser()
-          navigate('/')
-        }}
-        onProfilePictureUpdated={(user) => dispatch(setAuthUser(user))}
-        business={selectedBusiness}
-        onBannerUploaded={(updated) => dispatch(fetchBusinessDashboard(updated.id))}
-      />
-    )
-  }
 
   return (
     <Box
@@ -891,6 +859,10 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
               />
             )}
 
+            {activeTab === 'payslips' && payslipsEnabled && selectedBusiness && (
+              <PayslipsWorkspace key={selectedBusiness.id} businessId={selectedBusiness.id} />
+            )}
+
             {activeTab === 'insights' && selectedBusiness && <BusinessInsightsWorkspace key={selectedBusiness.id} businessId={selectedBusiness.id} appointmentsEnabled={appointmentsEnabled} membershipsEnabled={membershipsEnabled} />}
 
             {activeTab === 'search' && (
@@ -913,7 +885,7 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
               />
             )}
 
-            {activeTab === 'appointments' && appointmentsEnabled && (
+            {activeTab === 'appointments' && (
               <Stack spacing={1.6}>
                 {selectedBusiness && (
                   <AppointmentServiceManager
@@ -927,14 +899,16 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
                     onConfigurationChanged={() => dispatch(fetchBusinessDashboard(selectedBusiness.id))}
                   />
                 )}
-                <AppointmentListCard
-                  businessId={selectedBusinessId ?? selectedBusiness?.id ?? 0}
-                  appointments={data.appointments}
-                  customers={data.customers}
-                  selectedAppointmentId={selectedAppointmentForDetails?.id}
-                  onSelectAppointment={setSelectedAppointmentForDetails}
-                  onUpdated={() => dispatch(fetchBusinessDashboard(selectedBusinessId ?? undefined))}
-                />
+                {appointmentsEnabled && (
+                  <AppointmentListCard
+                    businessId={selectedBusinessId ?? selectedBusiness?.id ?? 0}
+                    appointments={data.appointments}
+                    customers={data.customers}
+                    selectedAppointmentId={selectedAppointmentForDetails?.id}
+                    onSelectAppointment={setSelectedAppointmentForDetails}
+                    onUpdated={() => dispatch(fetchBusinessDashboard(selectedBusinessId ?? undefined))}
+                  />
+                )}
               </Stack>
             )}
 
@@ -948,10 +922,12 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
                 businessMessage={businessMessage}
                   appointmentsEnabled={appointmentsEnabled}
                   membershipsEnabled={membershipsEnabled}
+                  payslipsEnabled={payslipsEnabled}
                   onBusinessFieldChange={handleBusinessFieldChange}
                   onLocationChange={handleBusinessLocationChange}
                 onSave={handleSaveBusinessProfile}
                 onManageProducts={() => setIsProductsViewOpen(true)}
+                onManageAppointments={() => changeTab('appointments')}
                 activeProductCount={activeProductCount}
                 onFeatureToggle={handleFeatureToggle}
               />
@@ -998,6 +974,67 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
         />
       </Paper>
     </Container>
+    <Drawer
+      anchor="right"
+      open={isProfilePageOpen}
+      onClose={() => setIsProfilePageOpen(false)}
+      slotProps={{
+        paper: {
+          sx: {
+            width: { xs: '100%', sm: 444 },
+            maxWidth: '100vw',
+            bgcolor: 'background.default',
+            overflow: 'hidden',
+          },
+        },
+      }}
+    >
+      <BusinessProfileMenuPage
+        authUser={authUser}
+        currentRole={authUser?.role ?? 'BUSINESS'}
+        availableAccounts={availableAccounts}
+        missingProfileRoles={missingProfileRoles}
+        appointmentsEnabled={appointmentsEnabled}
+        membershipsEnabled={membershipsEnabled}
+        payslipsEnabled={payslipsEnabled}
+        onBack={() => setIsProfilePageOpen(false)}
+        onNavigateTab={(tab) => {
+          setIsProfilePageOpen(false)
+          changeTab(tab)
+        }}
+        onSwitchAccount={(role) => {
+          const updated = switchAccount(role)
+          if (updated) {
+            dispatch(setAuthUser(updated))
+            navigate(getDashboardPath(updated.role))
+            window.location.reload()
+          }
+        }}
+        onAddProfile={(role) => {
+          const updated = addProfile(role)
+          if (updated) {
+            dispatch(setAuthUser(updated))
+            navigate(getDashboardPath(updated.role))
+            window.location.reload()
+          }
+        }}
+        onLogout={() => {
+          logoutUser()
+          navigate('/')
+        }}
+        onProfilePictureUpdated={(user) => dispatch(setAuthUser(user))}
+        business={selectedBusiness}
+        onBannerUploaded={(updated) => dispatch(fetchBusinessDashboard(updated.id))}
+      />
+    </Drawer>
+    <Snackbar
+      open={Boolean(invoiceToast)}
+      autoHideDuration={4000}
+      onClose={() => setInvoiceToast('')}
+      anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+    >
+      <Alert severity="success" variant="filled" onClose={() => setInvoiceToast('')} sx={{ width: '100%' }}>{invoiceToast}</Alert>
+    </Snackbar>
   </Box>
   )
 }

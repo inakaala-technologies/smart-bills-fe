@@ -7,6 +7,7 @@ import {
   CalendarCheck2,
   ChartColumnIncreasing,
   ChevronRight,
+  Compass,
   FileText,
   Home,
   LayoutGrid,
@@ -16,10 +17,12 @@ import {
   UserPlus,
   UserRound,
   UsersRound,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react'
 import { ProfileManagerDialog } from '../../../components/ProfileManagerDialog'
 import { ProfilePictureUpload } from '../../../components/ProfilePictureUpload'
+import { startWalkthrough } from '../../../components/appWalkthroughState'
 import type { AuthUser, Role } from '../../../services/auth'
 import type { DashboardTab } from '../../types'
 
@@ -67,7 +70,9 @@ export function CustomerProfileMenuPage({
         { label: 'Invite family member', icon: UserPlus, onClick: onInviteFamily },
         { label: 'Manage profiles', icon: UsersRound, onClick: () => setManagerOpen(true) },
         { label: 'Rewards', icon: Award, onClick: () => onNavigateTab('rewards') },
+        { label: 'Payslips', icon: Wallet, onClick: () => onNavigateTab('payslips') },
         { label: 'Spending insights', icon: ChartColumnIncreasing, onClick: () => onNavigateTab('insights') },
+        { label: 'Take a tour', icon: Compass, onClick: startWalkthrough },
       ],
     },
     {

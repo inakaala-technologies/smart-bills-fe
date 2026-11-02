@@ -29,6 +29,7 @@ import { ProfileManagerDialog } from '../../components/ProfileManagerDialog'
 import { CustomerLocationCard } from './components/CustomerLocationCard'
 import { HeroBanner, SummaryCards } from './components/CustomerDashboardOverview'
 import { CustomerProfileMenuPage } from './components/CustomerProfileMenuPage'
+import { CustomerPayslipsPage } from './components/CustomerPayslipsPage'
 import { CustomerInsights } from './components/CustomerInsights'
 import { CustomerLoyaltyPanel } from './components/CustomerLoyaltyPanel'
 import { CustomerBottomNavBar } from './components/CustomerBottomNavBar'
@@ -57,8 +58,10 @@ const customerDashboardTabs: DashboardTab[] = [
   'memberships',
   'bills',
   'insights',
+  'payslips',
   'profile',
 ]
+
 
 function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
@@ -971,6 +974,7 @@ export function CustomerDashboard() {
 
             {activeTab === 'invoices' && <CustomerInvoicesList invoices={data.invoices} businesses={data.businesses} />}
             {activeTab === 'rewards' && <CustomerLoyaltyPanel customerId={customerProfileId} businesses={data.businesses} />}
+            {activeTab === 'payslips' && <CustomerPayslipsPage />}
             {activeTab === 'insights' && <CustomerInsights invoices={data.invoices} businesses={data.businesses} customerId={customerProfileId} />}
             {activeTab === 'appointments' && (
               <CustomerAppointmentsPanel

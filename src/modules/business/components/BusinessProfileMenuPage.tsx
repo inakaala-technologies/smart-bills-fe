@@ -9,6 +9,7 @@ import {
   CalendarCheck2,
   ChartColumnIncreasing,
   ChevronRight,
+  Compass,
   Home,
   LogOut,
   Megaphone,
@@ -18,10 +19,12 @@ import {
   Sun,
   UserRound,
   UsersRound,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react'
 import { ProfileManagerDialog } from '../../../components/ProfileManagerDialog'
 import { ProfilePictureUpload } from '../../../components/ProfilePictureUpload'
+import { startWalkthrough } from '../../../components/appWalkthroughState'
 import { BusinessBannerUpload } from '../../../components/BusinessBannerUpload'
 import type { BusinessSummary } from '../../../services/api/types'
 import type { AuthUser, Role } from '../../../services/auth'
@@ -34,6 +37,7 @@ type BusinessProfileMenuPageProps = {
   missingProfileRoles: Role[]
   appointmentsEnabled: boolean
   membershipsEnabled: boolean
+  payslipsEnabled?: boolean
   onBack: () => void
   onNavigateTab: (tab: DashboardTab) => void
   onSwitchAccount: (role: Role) => void
@@ -55,8 +59,8 @@ export function BusinessProfileMenuPage({
   currentRole,
   availableAccounts,
   missingProfileRoles,
-  appointmentsEnabled,
   membershipsEnabled,
+  payslipsEnabled = false,
   onBack,
   onNavigateTab,
   onSwitchAccount,
@@ -75,6 +79,7 @@ export function BusinessProfileMenuPage({
         { label: 'Profile', icon: UserRound, onClick: () => onNavigateTab('profile') },
         { label: 'Manage profiles', icon: UsersRound, onClick: () => setManagerOpen(true) },
         { label: 'Business', icon: Building2, onClick: () => onNavigateTab('businesses') },
+        { label: 'Take a tour', icon: Compass, onClick: startWalkthrough },
       ],
     },
     {
@@ -83,6 +88,7 @@ export function BusinessProfileMenuPage({
         { label: 'Loyalty points', icon: Award, onClick: () => onNavigateTab('loyalty') },
         { label: 'Retention', icon: UsersRound, onClick: () => onNavigateTab('retention') },
         { label: 'Callback requests', icon: PhoneCall, onClick: () => onNavigateTab('callbacks') },
+        ...(payslipsEnabled ? [{ label: 'Payslips', icon: Wallet, onClick: () => onNavigateTab('payslips') }] : []),
         { label: 'Insights', icon: ChartColumnIncreasing, onClick: () => onNavigateTab('insights') },
         { label: 'Offers', icon: Megaphone, onClick: () => onNavigateTab('offers') },
       ],
@@ -92,7 +98,7 @@ export function BusinessProfileMenuPage({
       items: [
         { label: 'Home', icon: Home, onClick: () => onNavigateTab('overview') },
         { label: 'Invoices', icon: ReceiptText, onClick: () => onNavigateTab('invoices') },
-        ...(appointmentsEnabled ? [{ label: 'Appointments', icon: CalendarCheck2, onClick: () => onNavigateTab('appointments') }] : []),
+        { label: 'Appointments', icon: CalendarCheck2, onClick: () => onNavigateTab('appointments') },
         ...(membershipsEnabled ? [{ label: 'Memberships', icon: BadgeCheck, onClick: () => onNavigateTab('memberships') }] : []),
       ],
     },
@@ -101,27 +107,22 @@ export function BusinessProfileMenuPage({
   return (
     <Box
       sx={{
-        position: 'fixed',
-        inset: 0,
         width: '100%',
         height: '100dvh',
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'flex-start',
         bgcolor: 'background.default',
-        py: { xs: 0, sm: 4 },
       }}
     >
-      <Container maxWidth="xs" disableGutters sx={{ width: '100%', height: '100%', px: 0 }}>
+      <Container maxWidth={false} disableGutters sx={{ width: '100%', height: '100%', px: 0 }}>
         <Paper
           elevation={0}
           sx={{
             width: '100%',
-            maxWidth: 412,
-            mx: 'auto',
-            height: { xs: '100dvh', sm: 'calc(100dvh - 64px)' },
-            maxHeight: { xs: '100dvh', sm: 'calc(100dvh - 64px)' },
-            borderRadius: { xs: 0, sm: '24px' },
+            height: '100%',
+            maxHeight: '100%',
+            borderRadius: 0,
             bgcolor: 'background.paper',
             overflowY: 'auto',
             boxShadow: '0 18px 46px rgba(0, 0, 0, 0.12)',
