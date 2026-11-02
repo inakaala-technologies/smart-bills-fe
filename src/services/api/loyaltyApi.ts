@@ -20,7 +20,12 @@ export async function fetchLoyaltySettings(businessId: number): Promise<LoyaltyP
 
 export async function saveLoyaltySettings(
   businessId: number,
-  settings: { pointsPerCurrencyUnit: number; maxRedemptionPercent: number },
+  settings: {
+    pointsPerCurrencyUnit: number
+    maxRedemptionPercent: number
+    invoiceEarningMode: 'FIXED_POINTS' | 'PERCENTAGE' | null
+    invoiceEarningValue: number | null
+  },
 ): Promise<{ ok: boolean; settings?: LoyaltyProgramSettings; message?: string }> {
   try {
     const { data } = await apiClient.put<LoyaltyProgramSettings>(`/api/v1/businesses/${businessId}/loyalty/settings`, settings)

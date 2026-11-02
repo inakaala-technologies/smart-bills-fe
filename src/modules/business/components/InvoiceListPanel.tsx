@@ -15,6 +15,9 @@ export type InvoiceListRow = {
   subtotal?: number
   gstAmount?: number
   totalAmount?: number
+  invoiceDiscountAmount?: number
+  invoiceDiscountType?: 'PERCENTAGE' | 'AMOUNT'
+  invoiceDiscountValue?: number
   amount: string
   loyaltyDetails?: string
   date: string
@@ -223,6 +226,11 @@ export function InvoiceListPanel({ invoiceRows, onBack, onCreateInvoice, onUpdat
                     </IconButton>
                   </Tooltip>
                 </Box>
+                {(row.invoiceDiscountAmount ?? 0) > 0 && (
+                  <Typography variant="caption" sx={{ display: 'block', mt: 0.4, color: 'success.main', fontWeight: 700 }}>
+                    Invoice discount{row.invoiceDiscountType === 'PERCENTAGE' ? ` (${row.invoiceDiscountValue}%)` : ''}: −{formatMoney(row.invoiceDiscountAmount)}
+                  </Typography>
+                )}
                 {row.loyaltyDetails && (
                   <Typography variant="caption" sx={{ display: 'block', mt: 0.4, color: 'success.main', fontWeight: 700 }}>
                     {row.loyaltyDetails}
@@ -333,6 +341,14 @@ export function InvoiceListPanel({ invoiceRows, onBack, onCreateInvoice, onUpdat
                         <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
                           <Typography variant="body2" color="text.secondary">GST</Typography>
                           <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatMoney(displayedPreview.gstAmount)}</Typography>
+                        </Stack>
+                      )}
+                      {(displayedPreview.invoiceDiscountAmount ?? 0) > 0 && (
+                        <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
+                          <Typography variant="body2" color="success.main">
+                            Discount{displayedPreview.invoiceDiscountType === 'PERCENTAGE' ? ` (${displayedPreview.invoiceDiscountValue}%)` : ''}
+                          </Typography>
+                          <Typography variant="body2" color="success.main" sx={{ fontWeight: 700 }}>−{formatMoney(displayedPreview.invoiceDiscountAmount)}</Typography>
                         </Stack>
                       )}
                       <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'baseline', gap: 1, pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>

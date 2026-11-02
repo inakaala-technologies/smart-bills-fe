@@ -18,7 +18,8 @@ export type InvoiceLineItemForm = {
 export type BusinessInvoiceForm = {
   customerId: number | string
   dueDate: string
-  loyaltyPointsToRedeem: string
+  discountType: 'PERCENTAGE' | 'AMOUNT'
+  discountValue: string
   items: InvoiceLineItemForm[]
 }
 
@@ -39,7 +40,7 @@ export type InvoiceGeneratorCardProps = {
   onClose: () => void
   onCustomerSearchChange: (value: string) => void
   onCustomerSelection: (customer: DashboardData['customers'][number] | null) => void
-  onInvoiceFieldChange: (field: 'customerId' | 'dueDate' | 'loyaltyPointsToRedeem', value: string) => void
+  onInvoiceFieldChange: (field: 'customerId' | 'dueDate' | 'discountType' | 'discountValue', value: string) => void
   onInvoiceItemChange: (id: string, field: InvoiceLineItemField, value: string) => void
   onAddItem: () => void
   onRemoveItem: (id: string) => void
@@ -188,7 +189,6 @@ export function InvoiceGeneratorCard({
     setInvoiceModeOverride(null)
     setSelectedMembershipId('')
     setPreviewError('')
-    onInvoiceFieldChange('loyaltyPointsToRedeem', '0')
     onClose()
   }
 
@@ -251,6 +251,12 @@ const handleAddCustomer = async () => {
     }
   }, { subtotal: 0, tax: 0 })
   const formatMoney = (amount: number) => `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const grossTotal = Number((totals.subtotal + totals.tax).toFixed(2))
+  const discountInput = Number(invoiceForm.discountValue)
+  const invoiceDiscount = invoiceForm.discountValue.trim() && Number.isFinite(discountInput) && discountInput > 0
+    ? Number((invoiceForm.discountType === 'PERCENTAGE' ? grossTotal * discountInput / 100 : discountInput).toFixed(2))
+    : 0
+  const discountedTotal = Math.max(0, Number((grossTotal - invoiceDiscount).toFixed(2)))
   
   const handleContinueToPreview = () => {
     if (!selectedCustomer) {
@@ -271,6 +277,19 @@ const handleAddCustomer = async () => {
       )
     ) {
       setPreviewError('Complete each item with a name, quantity, price, and valid GST rate.')
+      return
+    }
+
+    if (
+      invoiceForm.discountValue.trim()
+      && (!Number.isFinite(discountInput)
+        || discountInput < 0
+        || (invoiceForm.discountType === 'PERCENTAGE' && discountInput > 100)
+        || invoiceDiscount > grossTotal)
+    ) {
+      setPreviewError(invoiceForm.discountType === 'PERCENTAGE'
+        ? 'Enter a discount percentage from 0 to 100.'
+        : 'Enter a discount amount no greater than the invoice total.')
       return
     }
 
@@ -298,14 +317,12 @@ const handleAddCustomer = async () => {
   const currentLoyaltyError = selectedCustomer && loyaltyError?.customerId === selectedCustomer.id
     ? loyaltyError.message
     : ''
-  const loyaltyPoints = Math.max(0, Math.floor(Number(invoiceForm.loyaltyPointsToRedeem) || 0))
   const loyaltySettings = currentLoyaltyState?.settings
-  const loyaltyDiscount = loyaltySettings?.configured && loyaltySettings.pointsPerCurrencyUnit
-    ? Math.min(
-      loyaltyPoints / loyaltySettings.pointsPerCurrencyUnit,
-      (totals.subtotal + totals.tax) * (Number(loyaltySettings.maxRedemptionPercent) / 100),
-    )
-    : 0
+  const invoiceEarningPoints = loyaltySettings?.invoiceEarningMode === 'FIXED_POINTS'
+    ? Number(loyaltySettings.invoiceEarningValue ?? 0)
+    : loyaltySettings?.invoiceEarningMode === 'PERCENTAGE'
+      ? Math.floor(discountedTotal * Number(loyaltySettings.invoiceEarningValue ?? 0) / 100)
+      : 0
 
   const handleMembershipSelection = (membershipId: string) => {
     setSelectedMembershipId(membershipId)
@@ -321,7 +338,6 @@ const handleAddCustomer = async () => {
 
     onCustomerSelection(customer)
     onInvoiceFieldChange('customerId', String(membership.customerId))
-    onInvoiceFieldChange('loyaltyPointsToRedeem', '0')
     onCustomerSearchChange('')
     onInvoiceItemChange(invoiceForm.items[0].id, 'productName', itemName)
     if (savedPrice != null) onInvoiceItemChange(invoiceForm.items[0].id, 'unitPrice', String(savedPrice))
@@ -400,7 +416,6 @@ const handleAddCustomer = async () => {
                   onClick={() => {
                     onCustomerSelection(null)
                     onInvoiceFieldChange('customerId', '')
-                    onInvoiceFieldChange('loyaltyPointsToRedeem', '0')
                     onCustomerSearchChange('')
                   }}
                   sx={{ minWidth: 'auto', color: 'text.secondary', textTransform: 'none', fontWeight: 700, alignSelf: 'flex-start' }}
@@ -422,7 +437,6 @@ const handleAddCustomer = async () => {
                   if (!customer) {
                     onCustomerSelection(null)
                     onInvoiceFieldChange('customerId', '')
-                    onInvoiceFieldChange('loyaltyPointsToRedeem', '0')
                     onCustomerSearchChange('')
                     return
                   }
@@ -498,20 +512,18 @@ const handleAddCustomer = async () => {
                 <>
                   <Alert severity="info">
                     {selectedCustomer.fullName ?? 'Customer'} has {currentLoyaltyState.balance.toLocaleString('en-IN')} points with this business.
-                    {' '}Rate: {currentLoyaltyState.settings.pointsPerCurrencyUnit} points = ₹1; cap: {currentLoyaltyState.settings.maxRedemptionPercent}% per purchase.
                   </Alert>
-                  <TextField
-                    size="small"
-                    label="Loyalty points to redeem"
-                    type="number"
-                    value={invoiceForm.loyaltyPointsToRedeem}
-                    onChange={(event) => onInvoiceFieldChange('loyaltyPointsToRedeem', event.target.value)}
-                    slotProps={{ htmlInput: { min: 0, max: currentLoyaltyState.balance, step: 1 } }}
-                    helperText={`Available: ${currentLoyaltyState.balance.toLocaleString('en-IN')} points`}
-                  />
+                  <Alert severity="info">
+                    Points are not redeemed on this invoice. Service rewards take priority and are redeemed through the service flow.
+                  </Alert>
+                  {invoiceEarningPoints > 0 && (
+                    <Alert severity="info">
+                      This invoice will earn {invoiceEarningPoints.toLocaleString('en-IN')} points when it is marked paid.
+                    </Alert>
+                  )}
                 </>
               ) : !currentLoyaltyError && (
-                <Alert severity="info">This business has not enabled point redemption for this customer.</Alert>
+                <Alert severity="info">Configure loyalty settings to enable invoice rewards.</Alert>
               )}
             </Stack>
           )}
@@ -628,6 +640,45 @@ const handleAddCustomer = async () => {
             })}
           </Stack>
 
+          <Paper variant="outlined" sx={{ p: { xs: 1.4, sm: 1.8 }, borderRadius: 2.2 }}>
+            <Stack spacing={1}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>Optional discount</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Apply a percentage to the full bill including GST, or enter a fixed amount.
+              </Typography>
+              <ToggleButtonGroup
+                exclusive
+                fullWidth
+                size="small"
+                value={invoiceForm.discountType}
+                onChange={(_, value: 'PERCENTAGE' | 'AMOUNT' | null) => {
+                  if (value) onInvoiceFieldChange('discountType', value)
+                }}
+                aria-label="Discount type"
+              >
+                <ToggleButton value="PERCENTAGE">Percentage</ToggleButton>
+                <ToggleButton value="AMOUNT">Fixed amount</ToggleButton>
+              </ToggleButtonGroup>
+              <TextField
+                size="small"
+                label={invoiceForm.discountType === 'PERCENTAGE' ? 'Discount percentage' : 'Discount amount'}
+                type="number"
+                value={invoiceForm.discountValue}
+                onChange={(event) => onInvoiceFieldChange('discountValue', event.target.value)}
+                slotProps={{ htmlInput: { min: 0, max: invoiceForm.discountType === 'PERCENTAGE' ? 100 : undefined, step: 0.01 } }}
+                helperText={invoiceForm.discountType === 'PERCENTAGE' ? 'Calculated on subtotal plus GST.' : 'Leave blank if no discount applies.'}
+              />
+              {invoiceDiscount > 0 && (
+                <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
+                  <Typography variant="body2" color="success.main">
+                    Discount{invoiceForm.discountType === 'PERCENTAGE' ? ` (${discountInput}%)` : ''}
+                  </Typography>
+                  <Typography variant="body2" color="success.main" sx={{ fontWeight: 750 }}>−{formatMoney(invoiceDiscount)}</Typography>
+                </Stack>
+              )}
+            </Stack>
+          </Paper>
+
           <Paper variant="outlined" sx={{ p: { xs: 1.4, sm: 1.8 }, borderRadius: 2.2, borderColor: 'rgba(32, 54, 56, 0.12)', boxShadow: '0 4px 14px rgba(20, 54, 48, 0.045)' }}>
             <Stack spacing={1}>
               <Stack direction="row" spacing={0.8} sx={{ alignItems: 'center', mb: 0.3 }}>
@@ -640,10 +691,10 @@ const handleAddCustomer = async () => {
               <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
                 <Typography variant="body2" color="text.secondary">GST</Typography><Typography variant="body2" sx={{ fontWeight: 700 }}>{formatMoney(totals.tax)}</Typography>
               </Stack>
-              {loyaltyDiscount > 0 && (
+              {invoiceDiscount > 0 && (
                 <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
-                  <Typography variant="body2" color="success.main">Loyalty discount ({loyaltyPoints} points)</Typography>
-                  <Typography variant="body2" color="success.main" sx={{ fontWeight: 750 }}>−{formatMoney(loyaltyDiscount)}</Typography>
+                  <Typography variant="body2" color="success.main">Discount</Typography>
+                  <Typography variant="body2" color="success.main" sx={{ fontWeight: 750 }}>−{formatMoney(invoiceDiscount)}</Typography>
                 </Stack>
               )}
               <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', gap: 1, mt: 0.4, pt: 1.1, borderTop: '1px solid', borderColor: 'divider' }}>
@@ -651,7 +702,7 @@ const handleAddCustomer = async () => {
                   <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>{invoiceForm.dueDate ? 'Amount due' : 'Amount paid'}</Typography>
                   <Typography variant="caption" color="text.secondary">Including applicable taxes</Typography>
                 </Box>
-                <Typography variant="h5" color="primary.main" sx={{ fontWeight: 900, letterSpacing: '-0.04em' }}>{formatMoney(totals.subtotal + totals.tax - loyaltyDiscount)}</Typography>
+                <Typography variant="h5" color="primary.main" sx={{ fontWeight: 900, letterSpacing: '-0.04em' }}>{formatMoney(discountedTotal)}</Typography>
               </Stack>
             </Stack>
           </Paper>
@@ -850,11 +901,18 @@ const handleAddCustomer = async () => {
               {formatMoney(totals.tax)}
             </Typography>
 
+            {invoiceDiscount > 0 && (
+              <>
+                <Typography variant="body2" color="success.main">Discount</Typography>
+                <Typography variant="body2" color="success.main">−{formatMoney(invoiceDiscount)}</Typography>
+              </>
+            )}
+
             <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
               Total
             </Typography>
             <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
-              {formatMoney(totals.subtotal + totals.tax)}
+              {formatMoney(discountedTotal)}
             </Typography>
           </Box>
         </Paper>

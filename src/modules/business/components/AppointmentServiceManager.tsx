@@ -6,14 +6,43 @@ import { fetchAppointmentServices, saveAppointmentServices, setBusinessAppointme
 type AppointmentServiceManagerProps = {
   businessId: number
   appointmentsEnabled: boolean
+  homeServicesEnabled?: boolean
+  homeVisitCharge?: number
+  onToggleHomeServices?: (enabled: boolean) => Promise<{ ok: boolean; message?: string }>
+  onSaveHomeVisitCharge?: (charge: number) => Promise<{ ok: boolean; message?: string }>
   onConfigurationChanged: () => void
+}
+
+function HomeVisitChargeField({ charge, onSave }: { charge: number; onSave: (charge: number) => Promise<{ ok: boolean; message?: string }> }) {
+  const [value, setValue] = useState(String(charge))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const parsed = Number(value)
+  const invalid = value.trim() === '' || !Number.isFinite(parsed) || parsed < 0
+  const handleSave = async () => {
+    setSaving(true)
+    setError('')
+    const result = await onSave(parsed)
+    setSaving(false)
+    if (!result.ok) setError(result.message ?? 'Could not save the visiting charge.')
+  }
+  return (
+    <Box sx={{ p: 1, borderRadius: 1.5, bgcolor: 'action.hover' }}>
+      <Typography variant="body2" sx={{ fontWeight: 750 }}>Home visit charge</Typography>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', mt: 1 }}>
+        <TextField size="small" type="number" label="Visiting charge (₹)" value={value} onChange={(event) => setValue(event.target.value)} error={invalid} helperText="Added to the booking when a customer chooses a home visit." slotProps={{ htmlInput: { min: 0, step: '0.01' } }} sx={{ flex: 1 }} />
+        <Button variant="outlined" size="small" disabled={invalid || saving || parsed === charge} onClick={() => void handleSave()} sx={{ mt: 0.3, textTransform: 'none' }}>{saving ? 'Saving…' : 'Save'}</Button>
+      </Stack>
+      {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
+    </Box>
+  )
 }
 
 function newService(): AppointmentServiceRequest {
   return { name: '', description: '', price: 0, durationMinutes: 30, enabled: true }
 }
 
-export function AppointmentServiceManager({ businessId, appointmentsEnabled, onConfigurationChanged }: AppointmentServiceManagerProps) {
+export function AppointmentServiceManager({ businessId, appointmentsEnabled, homeServicesEnabled = false, homeVisitCharge = 0, onSaveHomeVisitCharge, onToggleHomeServices, onConfigurationChanged }: AppointmentServiceManagerProps) {
   const [enabled, setEnabled] = useState(appointmentsEnabled)
   const [services, setServices] = useState<AppointmentServiceRequest[]>([])
   const [message, setMessage] = useState('')
@@ -41,6 +70,20 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, onC
       isActive = false
     }
   }, [businessId])
+
+  const [isTogglingHome, setIsTogglingHome] = useState(false)
+
+  const handleHomeServicesToggle = async (next: boolean) => {
+    if (!onToggleHomeServices) return
+    setIsTogglingHome(true)
+    setMessage('')
+    const result = await onToggleHomeServices(next)
+    setIsTogglingHome(false)
+    if (!result.ok) {
+      setMessage(result.message ?? 'Could not update home services.')
+      setMessageSeverity('error')
+    }
+  }
 
   const handleToggle = async (nextEnabled: boolean) => {
     if (nextEnabled && !services.some((service) => service.enabled)) {
@@ -130,6 +173,24 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, onC
             />
           </Box>
           {message && <Alert severity={messageSeverity}>{message}</Alert>}
+
+          {onToggleHomeServices && (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, p: 1, borderRadius: 1.5, bgcolor: 'action.hover' }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="body2" sx={{ fontWeight: 750 }}>Home services</Typography>
+                <Typography variant="caption" color="text.secondary">{enabled ? 'Let customers know you visit them at home.' : 'Turn on online booking to offer home services.'}</Typography>
+              </Box>
+              <Switch
+                checked={enabled && homeServicesEnabled}
+                disabled={!enabled || isTogglingHome}
+                onChange={(event) => void handleHomeServicesToggle(event.target.checked)}
+                slotProps={{ input: { 'aria-label': 'Enable home services' } }}
+              />
+            </Box>
+          )}
+          {homeServicesEnabled && onSaveHomeVisitCharge && (
+            <HomeVisitChargeField key={homeVisitCharge} charge={homeVisitCharge} onSave={onSaveHomeVisitCharge} />
+          )}
 
           <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
             <Box>

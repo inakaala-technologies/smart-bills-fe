@@ -244,7 +244,7 @@ export function CustomerBusinessDetailPage({
                 <DetailActionRow
                   icon={CalendarDays}
                   title="Appointments"
-                  subtitle={nextAppointment}
+                  subtitle={business.homeServicesEnabled ? `Home services available · ${nextAppointment}` : nextAppointment}
                   onClick={() => goToDashboardTab('appointments')}
                 />
               )}

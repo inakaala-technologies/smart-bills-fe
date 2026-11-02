@@ -260,10 +260,24 @@ export function BusinessInsightsWorkspace({ businessId, appointmentsEnabled, mem
   const appointments = dashboardData.appointments.filter((item) => item.businessId == null || item.businessId === businessId)
   const invoices = dashboardData.invoices.filter((item) => item.businessId == null || item.businessId === businessId)
   const payments = dashboardData.payments.filter((item) => item.businessId == null || item.businessId === businessId)
+  const verifiedPaymentsByInvoice = new Map<number, number>()
+  for (const payment of payments) {
+    if (payment.status?.toUpperCase() !== 'VERIFIED' || payment.invoiceId == null) continue
+    verifiedPaymentsByInvoice.set(
+      payment.invoiceId,
+      (verifiedPaymentsByInvoice.get(payment.invoiceId) ?? 0) + Number(payment.amount ?? 0),
+    )
+  }
   const memberships = dashboardData.memberships.filter((item) => item.businessId == null || item.businessId === businessId)
   const invoicesInWindow = invoices.filter((invoice) => inRange(invoice.issueDate, rangeStart, rangeEnd))
   const issuedInvoices = invoicesInWindow.filter((invoice) => !['DRAFT', 'CANCELLED'].includes(invoice.status?.toUpperCase() ?? ''))
   const billedTotal = issuedInvoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount ?? 0), 0)
+  const invoiceDiscountTotal = issuedInvoices.reduce((sum, invoice) => sum + Number(invoice.invoiceDiscountAmount ?? 0), 0)
+  const loyaltyDiscountTotal = issuedInvoices.reduce((sum, invoice) => sum + Number(invoice.loyaltyDiscountAmount ?? 0), 0)
+  const grossBilledTotal = billedTotal + invoiceDiscountTotal + loyaltyDiscountTotal
+  const totalDiscounts = invoiceDiscountTotal + loyaltyDiscountTotal
+  const invoiceDiscountCount = issuedInvoices.filter((invoice) => Number(invoice.invoiceDiscountAmount ?? 0) > 0).length
+  const discountRate = grossBilledTotal > 0 ? totalDiscounts / grossBilledTotal : 0
   const recentAppointments = appointments.filter((appointment) => inRange(appointment.scheduledAt, rangeStart, rangeEnd))
   const validVisitAppointments = recentAppointments.filter((appointment) => !['CANCELLED', 'NO_SHOW'].includes(appointment.status?.toUpperCase() ?? ''))
   const appointmentsToday = appointments.filter((appointment) => appointment.scheduledAt?.slice(0, 10) === today)
@@ -305,13 +319,28 @@ export function BusinessInsightsWorkspace({ businessId, appointmentsEnabled, mem
       .filter((invoice) => inRange(invoice.issueDate, bucket.start, bucket.end))
       .reduce((sum, invoice) => sum + Number(invoice.totalAmount ?? 0), 0),
   }))
+  const discountTrend = trendBuckets.map((bucket) => ({
+    key: bucket.key,
+    label: bucket.label,
+    amount: issuedInvoices
+      .filter((invoice) => inRange(invoice.issueDate, bucket.start, bucket.end))
+      .reduce((sum, invoice) => sum + Number(invoice.invoiceDiscountAmount ?? 0) + Number(invoice.loyaltyDiscountAmount ?? 0), 0),
+  }))
   const collectedTrend = trendBuckets.map((bucket) => ({
     key: bucket.key,
     label: bucket.label,
     amount: payments
       .filter((payment) => payment.status?.toUpperCase() === 'VERIFIED' && inRange(payment.paymentDate, bucket.start, bucket.end))
       .reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0),
-  }))
+  })).map((point, index) => {
+    const bucket = trendBuckets[index]
+    const paidInvoiceAmountsWithoutPaymentRecords = issuedInvoices
+      .filter((invoice) => invoice.status?.toUpperCase() === 'PAID' && inRange(invoice.issueDate, bucket.start, bucket.end))
+      .reduce((sum, invoice) => (
+        sum + Math.max(0, Number(invoice.totalAmount ?? 0) - (verifiedPaymentsByInvoice.get(invoice.id) ?? 0))
+      ), 0)
+    return { ...point, amount: point.amount + paidInvoiceAmountsWithoutPaymentRecords }
+  })
   const appointmentTrend = trendBuckets.map((bucket) => ({
     key: bucket.key,
     label: bucket.label,
@@ -357,8 +386,9 @@ export function BusinessInsightsWorkspace({ businessId, appointmentsEnabled, mem
   const apiError = currentResult?.error
   const selectedPeriodLabel = periodLabel(period)
   const invoiceMetrics = [
-    { label: `Billed · ${selectedPeriodLabel.toLowerCase()}`, value: money(billedTotal), detail: `${issuedInvoices.length} issued invoices`, icon: ReceiptText, color: '#0b8b70' },
-    { label: `Collected · ${selectedPeriodLabel.toLowerCase()}`, value: money(verifiedRevenue), detail: 'Verified payments', icon: CircleDollarSign, color: '#1877a8' },
+    { label: `Net billed · ${selectedPeriodLabel.toLowerCase()}`, value: money(billedTotal), detail: `${issuedInvoices.length} issued invoices`, icon: ReceiptText, color: '#0b8b70' },
+    { label: `Discounts · ${selectedPeriodLabel.toLowerCase()}`, value: money(totalDiscounts), detail: `${Math.round(discountRate * 100)}% of gross · ${invoiceDiscountCount} invoice discounts + loyalty`, icon: CircleDollarSign, color: '#9b5b16' },
+    { label: `Collected · ${selectedPeriodLabel.toLowerCase()}`, value: money(verifiedRevenue), detail: 'Verified payments + paid invoices', icon: CircleDollarSign, color: '#1877a8' },
     { label: 'Open invoices', value: String(openInvoiceCount), detail: `${money(agingBuckets.reduce((sum, bucket) => sum + Number(bucket.amount ?? 0), 0))} outstanding`, icon: FileText, color: '#c47a1a' },
   ]
   const featureMetrics = [
@@ -409,12 +439,14 @@ export function BusinessInsightsWorkspace({ businessId, appointmentsEnabled, mem
             </Box>
             <Chip size="small" icon={<Activity size={13} />} label={loading ? 'Updating' : selectedPeriodLabel} sx={{ color: '#fff', bgcolor: 'rgba(255,255,255,0.13)', fontWeight: 750, '& .MuiChip-icon': { color: '#fff' } }} />
           </Stack>
-          <Typography sx={{ mt: 2.1, fontSize: 11, fontWeight: 650, color: 'rgba(255,255,255,0.76)' }}>Total billed revenue</Typography>
+          <Typography sx={{ mt: 2.1, fontSize: 11, fontWeight: 650, color: 'rgba(255,255,255,0.76)' }}>Net billed revenue</Typography>
           <Typography sx={{ mt: 0.2, fontSize: 32, fontWeight: 900, letterSpacing: '-0.055em', lineHeight: 1.05 }}>{money(billedTotal)}</Typography>
           <Stack direction="row" spacing={1} sx={{ mt: 1.2, alignItems: 'center', flexWrap: 'wrap' }}>
             <Typography sx={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.85)' }}>{issuedInvoices.length} invoices</Typography>
             <Box sx={{ width: 3, height: 3, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.55)' }} />
             <Typography sx={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.85)' }}>{money(verifiedRevenue)} collected</Typography>
+            <Box sx={{ width: 3, height: 3, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.55)' }} />
+            <Typography sx={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.85)' }}>{money(totalDiscounts)} discounts from {money(grossBilledTotal)} gross</Typography>
           </Stack>
           <Stack direction="row" spacing={0.65} sx={{ mt: 1.5, flexWrap: 'wrap', rowGap: 0.65 }}>
             {headerFeatures.map((feature) => <Chip key={feature} size="small" label={feature} sx={{ height: 22, color: '#fff', border: '1px solid rgba(255,255,255,0.24)', bgcolor: 'rgba(255,255,255,0.08)', fontSize: 9, fontWeight: 750 }} />)}
@@ -514,9 +546,37 @@ export function BusinessInsightsWorkspace({ businessId, appointmentsEnabled, mem
       )}
 
       <SummaryCard>
-        <SectionHeading eyebrow="Invoices" title="Billing performance" detail={`Billed and collected totals for ${rangeText}, plus current invoice health.`} icon={ReceiptText} />
-        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 750 }}>Billed vs collected · {selectedPeriodLabel.toLowerCase()}</Typography>
+        <SectionHeading eyebrow="Invoices" title="Billing performance" detail={`Gross sales, discounts, net billed and collections for ${rangeText}, plus current invoice health.`} icon={ReceiptText} />
+        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 750 }}>Net billed vs collected · {selectedPeriodLabel.toLowerCase()}</Typography>
         <Box sx={{ mt: 0.4 }}><TrendBars points={billedTrend} comparison={collectedTrend} /></Box>
+        <Box sx={{ mt: 1.1 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 750 }}>Discounts granted · {selectedPeriodLabel.toLowerCase()}</Typography>
+          <TrendBars points={discountTrend} />
+        </Box>
+        <Box sx={{ mt: 1.5, pt: 1.3, borderTop: '1px solid', borderColor: 'divider' }}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 750 }}>Revenue breakdown · {selectedPeriodLabel.toLowerCase()}</Typography>
+          <Stack spacing={0.75} sx={{ mt: 1 }}>
+            <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
+              <Typography variant="body2" color="text.secondary">Gross billed before discounts</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 750 }}>{money(grossBilledTotal)}</Typography>
+            </Stack>
+            <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
+              <Typography variant="body2" color="success.main">Invoice discounts ({invoiceDiscountCount} invoices)</Typography>
+              <Typography variant="body2" color="success.main" sx={{ fontWeight: 750 }}>−{money(invoiceDiscountTotal)}</Typography>
+            </Stack>
+            <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
+              <Typography variant="body2" color="success.main">Loyalty discounts</Typography>
+              <Typography variant="body2" color="success.main" sx={{ fontWeight: 750 }}>−{money(loyaltyDiscountTotal)}</Typography>
+            </Stack>
+            <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1, pt: 0.7, borderTop: '1px solid', borderColor: 'divider' }}>
+              <Typography variant="body2" sx={{ fontWeight: 800 }}>Net billed</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 800 }}>{money(billedTotal)}</Typography>
+            </Stack>
+            <Typography variant="caption" color="text.secondary">
+              Discounts are {Math.round(discountRate * 100)}% of gross billed revenue.
+            </Typography>
+          </Stack>
+        </Box>
         <Box sx={{ mt: 1.6, pt: 1.3, borderTop: '1px solid', borderColor: 'divider' }}>
           <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'baseline', gap: 1 }}>
             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 750 }}>Invoice status</Typography>

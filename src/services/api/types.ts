@@ -20,6 +20,8 @@ export type BusinessSummary = {
   status?: string
   appointmentsEnabled?: boolean
   membershipsEnabled?: boolean
+  homeServicesEnabled?: boolean
+  homeVisitCharge?: number
 }
 
 export type CustomerSummary = {
@@ -45,6 +47,8 @@ export type NearbyBusinessSummary = {
   latitude: number
   longitude: number
   distanceKm: number
+  appointmentsEnabled?: boolean
+  homeServicesEnabled?: boolean
 }
 
 export type BusinessOffer = {
@@ -96,6 +100,9 @@ export type InvoiceSummary = {
   subtotal?: number
   gstAmount?: number
   totalAmount?: number
+  invoiceDiscountAmount?: number
+  invoiceDiscountType?: 'PERCENTAGE' | 'AMOUNT'
+  invoiceDiscountValue?: number
   loyaltyPointsRedeemed?: number
   loyaltyDiscountAmount?: number
   status?: string
@@ -123,6 +130,9 @@ export type AppointmentSummary = {
   servicePrice?: number
   loyaltyPointsRedeemed?: number
   loyaltyDiscountAmount?: number
+  homeVisit?: boolean
+  visitingCharge?: number
+  visitAddress?: string
   scheduledAt?: string
   durationMinutes?: number
   status?: string
@@ -215,6 +225,8 @@ export type LoyaltyProgramSettings = {
   configured: boolean
   pointsPerCurrencyUnit: number | null
   maxRedemptionPercent: number | null
+  invoiceEarningMode: 'FIXED_POINTS' | 'PERCENTAGE' | null
+  invoiceEarningValue: number | null
 }
 
 export type MembershipNotificationSummary = {
@@ -316,8 +328,10 @@ export type InvoiceCreateRequest = {
   subtotal: number
   gstAmount: number
   totalAmount: number
+  invoiceDiscountAmount?: number
+  invoiceDiscountType?: 'PERCENTAGE' | 'AMOUNT'
+  invoiceDiscountValue?: number
   status?: 'DRAFT' | 'SENT' | 'PAID'
-  loyaltyPointsToRedeem?: number
 }
 
 export type AppointmentCreateRequest = {
@@ -327,6 +341,8 @@ export type AppointmentCreateRequest = {
   staffUserId?: number
   notes?: string
   loyaltyPointsToRedeem?: number
+  homeVisit?: boolean
+  visitAddress?: string
 }
 
 export type AppointmentServiceRequest = Omit<AppointmentServiceSummary, 'id' | 'businessId'> & {

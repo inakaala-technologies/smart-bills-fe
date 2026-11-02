@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Alert, Box, Button, Chip, MenuItem, Skeleton, Stack, TextField, Typography } from '@mui/material'
+import { Alert, Box, Button, Chip, FormControlLabel, MenuItem, Skeleton, Stack, Switch, TextField, Typography } from '@mui/material'
 import { CalendarCheck2, CalendarDays, CalendarPlus, Clock3, X } from 'lucide-react'
 import { EmptyState } from '../../../components/EmptyState'
 import {
@@ -63,8 +63,15 @@ export function CustomerAppointmentsPanel({
   const [loyaltyInfo, setLoyaltyInfo] = useState<{ customerId: number; businessId: number; balance: number; settings: LoyaltyProgramSettings } | null>(null)
   const [loyaltyError, setLoyaltyError] = useState<{ customerId: number; businessId: number; message: string } | null>(null)
 
-  const appointmentBusinesses = businesses.filter((business) => business.appointmentsEnabled)
+  const [homeServicesOnly, setHomeServicesOnly] = useState(false)
+  const [homeVisit, setHomeVisit] = useState(false)
+  const [visitAddress, setVisitAddress] = useState('')
+  const appointmentBusinesses = businesses.filter((business) => business.appointmentsEnabled && (!homeServicesOnly || business.homeServicesEnabled === true))
   const selectedBusinessId = Number(businessId) || appointmentBusinesses[0]?.id || 0
+  const selectedBusiness = appointmentBusinesses.find((business) => business.id === selectedBusinessId)
+  const canVisitHome = selectedBusiness?.homeServicesEnabled === true
+  const isHomeVisit = homeVisit && canVisitHome
+  const visitingCharge = isHomeVisit ? selectedBusiness?.homeVisitCharge ?? 0 : 0
   const services = servicesState.businessId === selectedBusinessId ? servicesState.services : []
   const selectedService = services.find((service) => service.id === Number(serviceId))
   const currentLoyaltyInfo = loyaltyInfo
@@ -156,6 +163,12 @@ export function CustomerAppointmentsPanel({
       return
     }
 
+    if (isHomeVisit && !visitAddress.trim()) {
+      setMessage('Enter the address for the home visit.')
+      setMessageSeverity('error')
+      return
+    }
+
     setIsSaving(true)
     setMessage('')
     const result = await createAppointment({
@@ -165,6 +178,8 @@ export function CustomerAppointmentsPanel({
       staffUserId: Number(staffUserId) || undefined,
       notes: notes.trim() || undefined,
       loyaltyPointsToRedeem: requestedPoints,
+      homeVisit: isHomeVisit,
+      visitAddress: isHomeVisit ? visitAddress.trim() : undefined,
     })
     setIsSaving(false)
 
@@ -185,11 +200,16 @@ export function CustomerAppointmentsPanel({
       scheduledAt: selectedSlot,
       status: 'BOOKED',
       notes: notes.trim() || undefined,
+      homeVisit: isHomeVisit,
+      visitingCharge,
+      visitAddress: isHomeVisit ? visitAddress.trim() : undefined,
       createdAt: new Date().toISOString(),
     }
     notifyAppointmentBooked(bookedAppointment, business?.businessName ?? business?.name)
 
     setNotes('')
+    setVisitAddress('')
+    setHomeVisit(false)
     setLoyaltyPointsToRedeem('0')
     setMessage('Appointment request sent.')
     setMessageSeverity('success')
@@ -251,9 +271,10 @@ export function CustomerAppointmentsPanel({
             </Box>
             {availability?.availableSlots.length ? <Chip size="small" color="success" variant="outlined" label={`${availability.availableSlots.length} times`} /> : null}
           </Stack>
-          {appointmentBusinesses.length === 0 && <Alert severity="info" sx={{ borderRadius: 2 }}>None of your businesses are currently accepting appointment requests.</Alert>}
+          <Chip label="Home services only" size="small" clickable color={homeServicesOnly ? 'success' : 'default'} variant={homeServicesOnly ? 'filled' : 'outlined'} onClick={() => setHomeServicesOnly((current) => !current)} aria-pressed={homeServicesOnly} sx={{ alignSelf: 'flex-start' }} />
+          {appointmentBusinesses.length === 0 && <Alert severity="info" sx={{ borderRadius: 2 }}>{homeServicesOnly ? 'No businesses offering home services are available.' : 'None of your businesses are currently accepting appointment requests.'}</Alert>}
           <TextField select label="Business" value={selectedBusinessId ? String(selectedBusinessId) : ''} onChange={(event) => { setBusinessId(event.target.value); setServiceId(''); setLoyaltyPointsToRedeem('0') }} disabled={appointmentBusinesses.length === 0} size="small" fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}>
-            {appointmentBusinesses.map((business) => <MenuItem key={business.id} value={String(business.id)}>{business.businessName ?? business.name ?? `Business ${business.id}`}</MenuItem>)}
+            {appointmentBusinesses.map((business) => <MenuItem key={business.id} value={String(business.id)}>{business.businessName ?? business.name ?? `Business ${business.id}`}{business.homeServicesEnabled ? ' · 🏠 Home services' : ''}</MenuItem>)}
           </TextField>
           <TextField select label="Service" value={serviceId} onChange={(event) => setServiceId(event.target.value)} disabled={!services.length} size="small" required fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}>
             {services.map((service) => <MenuItem key={service.id} value={String(service.id)}>{service.name} · ₹{service.price.toLocaleString('en-IN')} · {service.durationMinutes} min</MenuItem>)}
@@ -269,6 +290,24 @@ export function CustomerAppointmentsPanel({
                 </Stack>
               </Box>
               <Typography sx={{ color: 'primary.main', fontWeight: 900, fontSize: 17, whiteSpace: 'nowrap' }}>₹{selectedService.price.toLocaleString('en-IN')}</Typography>
+            </Box>
+          )}
+          {canVisitHome && selectedService && (
+            <Box sx={{ p: 1.25, borderRadius: 2, border: '1px solid var(--mui-palette-divider)' }}>
+              <FormControlLabel
+                label={<Box><Typography variant="body2" sx={{ fontWeight: 750 }}>Home visit</Typography><Typography variant="caption" color="text.secondary">{(selectedBusiness?.homeVisitCharge ?? 0) > 0 ? `Visiting charge ₹${(selectedBusiness?.homeVisitCharge ?? 0).toLocaleString('en-IN')} applies.` : 'No visiting charge.'}</Typography></Box>}
+                control={<Switch checked={homeVisit} onChange={(event) => setHomeVisit(event.target.checked)} slotProps={{ input: { 'aria-label': 'Book as home visit' } }} />}
+                labelPlacement="start"
+                sx={{ m: 0, justifyContent: 'space-between', width: '100%', '& .MuiFormControlLabel-label': { flex: 1 } }}
+              />
+              {isHomeVisit && (
+                <Stack spacing={0.8} sx={{ mt: 1 }}>
+                  <TextField label="Visit address" value={visitAddress} onChange={(event) => setVisitAddress(event.target.value)} size="small" required multiline minRows={2} fullWidth slotProps={{ htmlInput: { maxLength: 500 } }} />
+                  <Typography variant="body2" sx={{ textAlign: 'right', fontWeight: 750 }}>
+                    Service ₹{selectedService.price.toLocaleString('en-IN')} + Visiting charge ₹{visitingCharge.toLocaleString('en-IN')} = ₹{(selectedService.price + visitingCharge).toLocaleString('en-IN')}
+                  </Typography>
+                </Stack>
+              )}
             </Box>
           )}
           {selectedService && currentLoyaltyInfo?.settings.configured && (
@@ -373,7 +412,7 @@ export function CustomerAppointmentsPanel({
                   </Stack>
                   <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mt: 0.65, gap: 1 }}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-                      {[appointment.durationMinutes ? `${appointment.durationMinutes} min` : '', appointment.servicePrice !== undefined ? `₹${(appointment.servicePrice - (appointment.loyaltyDiscountAmount ?? 0)).toLocaleString('en-IN')}` : ''].filter(Boolean).join(' · ')}
+                      {[appointment.durationMinutes ? `${appointment.durationMinutes} min` : '', appointment.servicePrice !== undefined ? `₹${(appointment.servicePrice + (appointment.visitingCharge ?? 0) - (appointment.loyaltyDiscountAmount ?? 0)).toLocaleString('en-IN')}` : '', appointment.homeVisit ? `Home visit${appointment.visitingCharge ? ` (+₹${appointment.visitingCharge.toLocaleString('en-IN')})` : ''}` : ''].filter(Boolean).join(' · ')}
                     </Typography>
                     <Stack direction="row" spacing={1}>
                       {onSelectAppointment && (

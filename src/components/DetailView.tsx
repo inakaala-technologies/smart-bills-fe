@@ -52,7 +52,13 @@ export function DetailView() {
   const [invoiceMessageSeverity] =
   useState<'success' | 'error'>('success')
   const [isInvoiceSubmitting, setIsInvoiceSubmitting] = useState(false)
-  const [invoiceForm, setInvoiceForm] = useState<BusinessInvoiceForm>(() => ({ customerId: '', dueDate: '', loyaltyPointsToRedeem: '0', items: [createInvoiceItem()] }))
+  const [invoiceForm, setInvoiceForm] = useState<BusinessInvoiceForm>(() => ({
+    customerId: '',
+    dueDate: '',
+    discountType: 'AMOUNT',
+    discountValue: '',
+    items: [createInvoiceItem()],
+  }))
   const memberships = dashboard.data.memberships
     .filter((membership) => membership.customerId === customerDetail)
     .sort((first, second) => new Date(second.updatedAt ?? second.startDate ?? 0).getTime() - new Date(first.updatedAt ?? first.startDate ?? 0).getTime())
@@ -90,14 +96,25 @@ export function DetailView() {
   const formatCurrency = (value?: number) => typeof value === 'number' ? `₹${value.toLocaleString('en-IN')}` : '—'
 
   const openInvoiceDialog = () => {
-    setInvoiceForm({ customerId: detail.id, dueDate: '', loyaltyPointsToRedeem: '0', items: [createInvoiceItem()] })
+    setInvoiceForm({
+      customerId: detail.id,
+      dueDate: '',
+      discountType: 'AMOUNT',
+      discountValue: '',
+      items: [createInvoiceItem()],
+    })
     setInvoiceCustomer(detail)
     setInvoiceSearchText('')
     setInvoiceMessage('')
     setInvoiceDialogOpen(true)
   }
 
-  const handleInvoiceFieldChange = (field: 'customerId' | 'dueDate' | 'loyaltyPointsToRedeem', value: string) => {
+  const handleInvoiceFieldChange = (field: 'customerId' | 'dueDate' | 'discountType' | 'discountValue', value: string) => {
+    if (field === 'discountType') {
+      if (value !== 'PERCENTAGE' && value !== 'AMOUNT') return
+      setInvoiceForm((current) => ({ ...current, discountType: value }))
+      return
+    }
     setInvoiceForm((current) => ({ ...current, [field]: value }))
   }
 
@@ -125,6 +142,26 @@ export function DetailView() {
 
     const subtotal = Number(items.reduce((total, item) => total + item.quantity * item.unitPrice, 0).toFixed(2))
     const gstAmount = Number(items.reduce((total, item) => total + item.quantity * item.unitPrice * (item.gstRate / 100), 0).toFixed(2))
+    const grossAmount = Number((subtotal + gstAmount).toFixed(2))
+    const discountValue = Number(invoiceForm.discountValue)
+    if (
+      invoiceForm.discountValue.trim()
+      && (!Number.isFinite(discountValue)
+        || discountValue < 0
+        || (invoiceForm.discountType === 'PERCENTAGE' && discountValue > 100))
+    ) {
+      setInvoiceMessage(invoiceForm.discountType === 'PERCENTAGE'
+        ? 'Enter a discount percentage from 0 to 100.'
+        : 'Enter a valid discount amount.')
+      return
+    }
+    const invoiceDiscountAmount = invoiceForm.discountValue.trim()
+      ? Number((invoiceForm.discountType === 'PERCENTAGE' ? grossAmount * discountValue / 100 : discountValue).toFixed(2))
+      : 0
+    if (invoiceDiscountAmount > grossAmount) {
+      setInvoiceMessage('Discount amount cannot be greater than the invoice total.')
+      return
+    }
     const invoiceStatus = status === 'DRAFT' ? 'DRAFT' : invoiceForm.dueDate ? 'SENT' : 'PAID'
     setIsInvoiceSubmitting(true)
     try {
@@ -136,9 +173,13 @@ export function DetailView() {
         dueDate: invoiceForm.dueDate || undefined,
         subtotal,
         gstAmount,
-        totalAmount: Number((subtotal + gstAmount).toFixed(2)),
+        totalAmount: Number((grossAmount - invoiceDiscountAmount).toFixed(2)),
+        invoiceDiscountAmount,
+        ...(invoiceForm.discountValue.trim() ? {
+          invoiceDiscountType: invoiceForm.discountType,
+          invoiceDiscountValue: discountValue,
+        } : {}),
         status: invoiceStatus,
-        loyaltyPointsToRedeem: Math.max(0, Math.floor(Number(invoiceForm.loyaltyPointsToRedeem) || 0)),
       })
       if (!result.ok) {
         setInvoiceMessage(result.message ?? 'Invoice generation failed.')
@@ -150,7 +191,14 @@ export function DetailView() {
         : invoiceStatus === 'PAID'
           ? `Invoice ${result.invoice?.invoiceNumber ?? 'generated'} created and marked as paid.`
           : `Invoice ${result.invoice?.invoiceNumber ?? 'generated'} sent as pending to the selected customer.`)
-      setInvoiceForm((current) => ({ ...current, customerId: '', dueDate: '', loyaltyPointsToRedeem: '0', items: [createInvoiceItem()] }))
+      setInvoiceForm((current) => ({
+        ...current,
+        customerId: '',
+        dueDate: '',
+        discountType: 'AMOUNT',
+        discountValue: '',
+        items: [createInvoiceItem()],
+      }))
       setInvoiceCustomer(null)
       setInvoiceSearchText('')
       dispatch(fetchBusinessDashboard(businessId))
@@ -528,7 +576,6 @@ const handleBack = () => {
               setInvoiceCustomer(customer)
               if (customer) {
                 handleInvoiceFieldChange('customerId', String(customer.id))
-                handleInvoiceFieldChange('loyaltyPointsToRedeem', '0')
               }
             }}
             onInvoiceFieldChange={handleInvoiceFieldChange}
