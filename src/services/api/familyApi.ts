@@ -8,6 +8,7 @@ export type FamilyMember = {
     id: number
     familyId: number
     userId: number
+    name?: string
     status: FamilyMemberStatus
     invitedBy?: number | null
     joinedAt?: string | null
@@ -61,4 +62,8 @@ export async function fetchFamilyInvoices(): Promise<InvoiceSummary[]> {
         '/api/v1/billing/invoices/family',
     )
     return Array.isArray(data) ? data.map(normalizeInvoice) : []
+}
+
+export async function removeFamilyMember(memberUserId: number): Promise<void> {
+    await apiClient.delete(`/api/v1/families/members/${memberUserId}`)
 }

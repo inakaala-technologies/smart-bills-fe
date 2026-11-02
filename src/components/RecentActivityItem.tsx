@@ -8,6 +8,7 @@ type RecentActivityItemProps = {
   date?: string
   time?: string
   accent?: string
+  onClick?: () => void
 }
 
 export function RecentActivityItem({
@@ -18,11 +19,22 @@ export function RecentActivityItem({
   date,
   time,
   accent = 'var(--mui-palette-primary-main)',
+  onClick,
 }: RecentActivityItemProps) {
   const displayBadge = badge?.trim() || 'B'
 
   return (
     <Box
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-label={onClick ? `View details for ${title}` : undefined}
+      onClick={onClick}
+      onKeyDown={onClick ? (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onClick()
+        }
+      } : undefined}
       sx={{
         display: 'flex',
         alignItems: 'center',
@@ -33,6 +45,11 @@ export function RecentActivityItem({
         borderRadius: 1.25,
         backgroundColor: 'background.paper',
         border: '1px solid var(--mui-palette-divider)',
+        ...(onClick && {
+          cursor: 'pointer',
+          '&:hover': { borderColor: 'primary.main', backgroundColor: 'action.hover' },
+          '&:focus-visible': { outline: '2px solid var(--mui-palette-primary-main)', outlineOffset: 2 },
+        }),
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.1, minWidth: 0, flex: 1 }}>

@@ -221,6 +221,7 @@ export function CustomerInsights({ invoices, businesses, customerId }: CustomerI
             { label: 'Saved with points', value: formatCurrency(loyaltySaved) },
             { label: 'Saved with discounts', value: formatCurrency(discountSaved) },
             { label: 'Total saved', value: formatCurrency(saved) },
+            { label: 'Available points', value: availablePoints.toLocaleString('en-IN') },
           ].map((item) => (
             <Box key={item.label}>
               <Typography sx={{ fontSize: 11, color: 'text.secondary', fontWeight: 600 }}>{item.label}</Typography>

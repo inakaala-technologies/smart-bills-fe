@@ -1,1 +1,1 @@
-export type DashboardTab = 'overview' | 'businesses' | 'invoices' | 'customers' | 'appointments' | 'memberships' | 'loyalty' | 'rewards' | 'offers' | 'bills' | 'retention' | 'insights' | 'search' | 'profile' | 'create-business'
+export type DashboardTab = 'overview' | 'businesses' | 'invoices' | 'customers' | 'appointments' | 'memberships' | 'loyalty' | 'rewards' | 'offers' | 'bills' | 'retention' | 'callbacks' | 'insights' | 'search' | 'profile' | 'create-business'

@@ -19,7 +19,7 @@ import {
   UserRound,
   type LucideIcon,
 } from 'lucide-react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { AppointmentDetailDialog } from '../../components/AppointmentDetailDialog'
 import { EmptyState } from '../../components/EmptyState'
@@ -32,6 +32,7 @@ import type { DashboardTab } from '../types'
 import { AdminSummaryCards, AdminOverviewSection } from './components/AdminDashboardOverview'
 import { AdminListCard, AdminProfileCard } from './components/AdminDashboardPanels'
 import { AdminInvoiceGeneratorCard, type AdminInvoiceForm } from './components/AdminInvoiceGeneratorCard'
+import { getDashboardPath } from '../../routes/dashboardPaths'
 
 const roleNav: Array<{ key: DashboardTab; label: string; icon: LucideIcon }> = [
   { key: 'overview', label: 'Home', icon: Home },
@@ -39,6 +40,7 @@ const roleNav: Array<{ key: DashboardTab; label: string; icon: LucideIcon }> = [
   { key: 'invoices', label: 'Documents', icon: FileText },
   { key: 'profile', label: 'Profile', icon: UserRound },
 ]
+const adminDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'customers', 'appointments', 'profile']
 
 type DashboardMenuProps = {
   activeTab: DashboardTab
@@ -111,6 +113,7 @@ function formatCurrency(value?: number) {
 
 export function AdminDashboard() {
   const navigate = useNavigate()
+  const { tab: routeTab } = useParams()
   const dispatch = useAppDispatch()
   const authUser = getCurrentUser()
   const { data, activeTab, selectedBusinessId } = useAppSelector((state) => state.adminDashboard)
@@ -143,13 +146,8 @@ export function AdminDashboard() {
 
   const handleChangeTab = useCallback((tab: DashboardTab) => {
     dispatch(setActiveTab(tab))
-    if (searchParams.has('appointmentId') || searchParams.has('tab')) {
-      const nextParams = new URLSearchParams(searchParams)
-      nextParams.delete('appointmentId')
-      nextParams.delete('tab')
-      setSearchParams(nextParams, { replace: true })
-    }
-  }, [dispatch, searchParams, setSearchParams])
+    navigate(getDashboardPath('ADMIN', tab))
+  }, [dispatch, navigate])
 
   const clearAppointmentUrlParam = () => {
     setExplicitAppointment(null)
@@ -162,9 +160,14 @@ export function AdminDashboard() {
   }
 
   useEffect(() => {
-    const tabParam = searchParams.get('tab')
-    if (tabParam === 'appointments') {
-      dispatch(setActiveTab('appointments'))
+    const requestedTab = routeTab ?? searchParams.get('tab')
+    const matchingTab = adminDashboardTabs.find((tab) => tab === requestedTab)
+    if (routeTab && !matchingTab) {
+      navigate(getDashboardPath('ADMIN', 'overview'), { replace: true })
+      return
+    }
+    if (matchingTab) {
+      dispatch(setActiveTab(matchingTab))
     }
 
     if (appointmentIdFromUrl && !data.appointments.some((item) => item.id === appointmentIdFromUrl) && explicitAppointment?.id !== appointmentIdFromUrl) {
@@ -178,7 +181,7 @@ export function AdminDashboard() {
         isCurrent = false
       }
     }
-  }, [searchParams, appointmentIdFromUrl, data.appointments, explicitAppointment, dispatch])
+  }, [searchParams, routeTab, appointmentIdFromUrl, data.appointments, explicitAppointment, dispatch, navigate])
 
   useEffect(() => {
     const handleOpen = (e: Event) => {

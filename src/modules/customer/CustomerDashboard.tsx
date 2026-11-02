@@ -44,6 +44,7 @@ import { setActiveTab, setSelectedBusinessId } from '../../store/customerDashboa
 import type { DashboardTab } from '../types'
 import { FamilyManagementDialog } from './components/FamilyManagementDialog'
 import { CustomerBillsPage } from './components/CustomerBillsPage'
+import { getDashboardPath } from '../../routes/dashboardPaths'
 
 // 'offers' is added so /dashboard/offers is a valid route.
 const customerDashboardTabs: DashboardTab[] = [
@@ -81,16 +82,22 @@ export function CustomerDashboard() {
   const setSelectedAppointment = setExplicitAppointment
   const [selectedInvoice, setSelectedInvoice] = useState<DashboardData['invoices'][number] | null>(null)
   const isMenuOpen = isProfilePageOpen
+  // Loyalty endpoints expect the customer profile id, which differs from the login user id.
+  const customerProfileEmail = authUser?.email?.trim().toLowerCase()
+  const customerProfileId = (
+    data.customers.find((customer) => customerProfileEmail && customer.email?.trim().toLowerCase() === customerProfileEmail)
+    ?? data.customers[0]
+  )?.id ?? null
   const customerLatitude = data.customers[0]?.latitude
   const customerLongitude = data.customers[0]?.longitude
-  const [familyDialogOpen, setFamilyDialogOpen] = useState(false)
+  const [familyDialogMode, setFamilyDialogMode] = useState<'closed' | 'manage' | 'invite'>('closed')
 
   useEffect(() => {
     const matchingTab = customerDashboardTabs.find((tab) => tab === routeTab)
     if (matchingTab) {
       dispatch(setActiveTab(matchingTab))
     } else {
-      navigate('/dashboard/overview', { replace: true })
+      navigate(getDashboardPath('CUSTOMER', 'overview'), { replace: true })
     }
   }, [dispatch, navigate, routeTab])
 
@@ -117,7 +124,7 @@ export function CustomerDashboard() {
 
   const handleChangeTab = (tab: DashboardTab) => {
     dispatch(setActiveTab(tab))
-    navigate(`/dashboard/${tab}`)
+    navigate(getDashboardPath('CUSTOMER', tab))
   }
 
   const upcomingAppointmentActivities = data.appointments
@@ -200,13 +207,13 @@ export function CustomerDashboard() {
       subtitle: `Invoice #${invoice.invoiceNumber ?? invoice.id}`,
       date: invoice.issueDate
         ? new Date(invoice.issueDate).toLocaleDateString(
-            'en-IN',
-            {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            },
-          )
+          'en-IN',
+          {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          },
+        )
         : '—',
       amount: formatCurrency(invoice.totalAmount),
       icon: ShoppingCart,
@@ -236,7 +243,7 @@ export function CustomerDashboard() {
           const updated = switchAccount(role)
           if (updated) {
             dispatch(setAuthUser(updated))
-            navigate('/dashboard')
+            navigate(getDashboardPath(updated.role))
             window.location.reload()
           }
         }}
@@ -244,7 +251,7 @@ export function CustomerDashboard() {
           const updated = addProfile(role)
           if (updated) {
             dispatch(setAuthUser(updated))
-            navigate('/dashboard')
+            navigate(getDashboardPath(updated.role))
             window.location.reload()
           }
         }}
@@ -252,6 +259,7 @@ export function CustomerDashboard() {
           logoutUser()
           navigate('/')
         }}
+        onProfilePictureUpdated={(user) => dispatch(setAuthUser(user))}
       />
     )
   }
@@ -306,7 +314,38 @@ export function CustomerDashboard() {
 
           {/* Main Content Area */}
           <Box sx={{ px: { xs: 2, sm: 2.2 }, pt: { xs: 2, sm: 2.2 }, pb: 'calc(96px + env(safe-area-inset-bottom))', flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehaviorY: 'contain' }}>
-            {/* Profile Dialog */}
+            {/* <CustomerDashboardMenu
+              tabs={roleNav}
+              activeTab={activeTab}
+              onChangeTab={handleChangeTab}
+              anchorEl={menuAnchorEl}
+              isOpen={isMenuOpen}
+              onClose={() => setMenuAnchorEl(null)}
+              currentRole={authUser?.role ?? 'CUSTOMER'}
+              availableAccounts={availableAccounts}
+              missingProfileRoles={missingProfileRoles}
+              onSwitchAccount={(role: Role) => {
+                const updated = switchAccount(role)
+                if (updated) {
+                  dispatch(setAuthUser(updated))
+                  setMenuAnchorEl(null)
+                  navigate(getDashboardPath(updated.role))
+                  window.location.reload()
+                }
+              }}
+              onAddProfile={(role: Role) => {
+                const updated = addProfile(role)
+                if (updated) {
+                  dispatch(setAuthUser(updated))
+                  setMenuAnchorEl(null)
+                  navigate(getDashboardPath(updated.role))
+                  window.location.reload()
+                }
+              }}
+              onInviteFamily={() => setFamilyDialogMode('invite')}
+            /> */}
+
+            {/* Profile Dialog for easy profile switching */}
             <ProfileManagerDialog
               open={managerOpen}
               onClose={() => setManagerOpen(false)}
@@ -319,7 +358,7 @@ export function CustomerDashboard() {
                 if (updated) {
                   dispatch(setAuthUser(updated))
                   setManagerOpen(false)
-                  navigate('/dashboard')
+                  navigate(getDashboardPath(updated.role))
                   window.location.reload()
                 }
               }}
@@ -329,15 +368,16 @@ export function CustomerDashboard() {
                 if (updated) {
                   dispatch(setAuthUser(updated))
                   setManagerOpen(false)
-                  navigate('/dashboard')
+                  navigate(getDashboardPath(updated.role))
                   window.location.reload()
                 }
               }}
             />
 
             <FamilyManagementDialog
-              open={familyDialogOpen}
-              onClose={() => setFamilyDialogOpen(false)}
+              open={familyDialogMode !== 'closed'}
+              mode={familyDialogMode === 'closed' ? 'manage' : familyDialogMode}
+              onClose={() => setFamilyDialogMode('closed')}
               currentUserId={Number(authUser?.id)}
             />
 
@@ -472,10 +512,9 @@ export function CustomerDashboard() {
                             }
                             aria-label={
                               entry.invoice
-                                ? `View invoice details for ${
-                                    entry.invoice.invoiceNumber ??
-                                    entry.invoice.id
-                                  }`
+                                ? `View invoice details for ${entry.invoice.invoiceNumber ??
+                                entry.invoice.id
+                                }`
                                 : entry.appointment
                                   ? `View appointment details for ${entry.title}`
                                   : undefined
@@ -483,34 +522,34 @@ export function CustomerDashboard() {
                             onClick={
                               entry.invoice
                                 ? () =>
-                                    setSelectedInvoice(entry.invoice)
+                                  setSelectedInvoice(entry.invoice)
                                 : entry.appointment
                                   ? () =>
-                                      setSelectedAppointment(
-                                        entry.appointment,
-                                      )
+                                    setSelectedAppointment(
+                                      entry.appointment,
+                                    )
                                   : undefined
                             }
                             onKeyDown={
                               entry.appointment || entry.invoice
                                 ? (event) => {
-                                    if (
-                                      event.key === 'Enter' ||
-                                      event.key === ' '
-                                    ) {
-                                      event.preventDefault()
+                                  if (
+                                    event.key === 'Enter' ||
+                                    event.key === ' '
+                                  ) {
+                                    event.preventDefault()
 
-                                      if (entry.invoice) {
-                                        setSelectedInvoice(
-                                          entry.invoice,
-                                        )
-                                      } else if (entry.appointment) {
-                                        setSelectedAppointment(
-                                          entry.appointment,
-                                        )
-                                      }
+                                    if (entry.invoice) {
+                                      setSelectedInvoice(
+                                        entry.invoice,
+                                      )
+                                    } else if (entry.appointment) {
+                                      setSelectedAppointment(
+                                        entry.appointment,
+                                      )
                                     }
                                   }
+                                }
                                 : undefined
                             }
                             sx={{
@@ -537,10 +576,10 @@ export function CustomerDashboard() {
                               '&:focus-visible':
                                 entry.appointment || entry.invoice
                                   ? {
-                                      outline:
-                                        '3px solid var(--mui-palette-primary-main)',
-                                      outlineOffset: 2,
-                                    }
+                                    outline:
+                                      '3px solid var(--mui-palette-primary-main)',
+                                    outlineOffset: 2,
+                                  }
                                   : undefined,
                             }}
                           >
@@ -729,7 +768,13 @@ export function CustomerDashboard() {
 
                           <Box>
                             <Chip
-                              label={selectedInvoice.status ?? 'SENT'}
+                              label={
+                                ['SENT', 'PENDING', 'UNPAID'].includes(
+                                  String(selectedInvoice.status ?? 'SENT').toUpperCase(),
+                                )
+                                  ? 'Unpaid'
+                                  : selectedInvoice.status ?? 'SENT'
+                              }
                               size="small"
                               color="success"
                               sx={{ mt: 0.4, fontWeight: 800 }}
@@ -758,10 +803,10 @@ export function CustomerDashboard() {
                             <Typography sx={{ color: 'text.primary' }}>
                               {selectedInvoice.issueDate
                                 ? new Date(
-                                    `${selectedInvoice.issueDate}T00:00:00`,
-                                  ).toLocaleDateString('en-IN', {
-                                    dateStyle: 'medium',
-                                  })
+                                  `${selectedInvoice.issueDate}T00:00:00`,
+                                ).toLocaleDateString('en-IN', {
+                                  dateStyle: 'medium',
+                                })
                                 : 'Not provided'}
                             </Typography>
                           </Box>
@@ -780,10 +825,10 @@ export function CustomerDashboard() {
                             <Typography sx={{ color: 'text.primary' }}>
                               {selectedInvoice.dueDate
                                 ? new Date(
-                                    `${selectedInvoice.dueDate}T00:00:00`,
-                                  ).toLocaleDateString('en-IN', {
-                                    dateStyle: 'medium',
-                                  })
+                                  `${selectedInvoice.dueDate}T00:00:00`,
+                                ).toLocaleDateString('en-IN', {
+                                  dateStyle: 'medium',
+                                })
                                 : 'Not provided'}
                             </Typography>
                           </Box>
@@ -917,13 +962,13 @@ export function CustomerDashboard() {
             )}
 
             {activeTab === 'invoices' && <CustomerInvoicesList invoices={data.invoices} businesses={data.businesses} />}
-            {activeTab === 'rewards' && <CustomerLoyaltyPanel customerId={authUser?.id ? Number(authUser.id) : null} businesses={data.businesses} />}
-            {activeTab === 'insights' && <CustomerInsights invoices={data.invoices} businesses={data.businesses} customerId={authUser?.id ? Number(authUser.id) : null} />}
+            {activeTab === 'rewards' && <CustomerLoyaltyPanel customerId={customerProfileId} businesses={data.businesses} />}
+            {activeTab === 'insights' && <CustomerInsights invoices={data.invoices} businesses={data.businesses} customerId={customerProfileId} />}
             {activeTab === 'appointments' && (
               <CustomerAppointmentsPanel
                 appointments={data.appointments}
                 businesses={data.businesses}
-                customerId={Number(authUser?.id ?? 0)}
+                customerId={customerProfileId ?? Number(authUser?.id ?? 0)}
                 selectedAppointmentId={explicitAppointment?.id}
                 onSelectAppointment={setSelectedAppointment}
               />
@@ -959,12 +1004,12 @@ export function CustomerDashboard() {
 
                   const daysRemaining = membership.endDate
                     ? Math.ceil(
-                        (
-                          new Date(
-                            `${membership.endDate}T23:59:59`,
-                          ).getTime() - activityNow
-                        ) / 86400000,
-                      )
+                      (
+                        new Date(
+                          `${membership.endDate}T23:59:59`,
+                        ).getTime() - activityNow
+                      ) / 86400000,
+                    )
                     : null
 
                   const membershipMessages =
@@ -1062,9 +1107,8 @@ export function CustomerDashboard() {
                             >
                               {daysRemaining < 0
                                 ? 'Expired'
-                                : `Expires in ${daysRemaining} day${
-                                    daysRemaining === 1 ? '' : 's'
-                                  }`}
+                                : `Expires in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'
+                                }`}
                             </Typography>
                           )}
 
@@ -1110,9 +1154,9 @@ export function CustomerDashboard() {
                 data={data}
                 onProfileUpdated={(user) => dispatch(setAuthUser(user))}
                 onOpenManageDialog={() => setManagerOpen(true)}
-                onOpenBusinesses={() => handleChangeTab('businesses')}
-                onOpenDocuments={() => handleChangeTab('invoices')}
-                onOpenFamily={() => setFamilyDialogOpen(true)}
+                onOpenBusinesses={() => dispatch(setActiveTab('businesses'))}
+                onOpenDocuments={() => dispatch(setActiveTab('invoices'))}
+                onOpenFamily={() => setFamilyDialogMode('manage')}
                 onOpenBusiness={(businessId) => {
                   dispatch(setSelectedBusinessId(businessId))
                   navigate(`/business/${businessId}`)

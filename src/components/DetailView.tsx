@@ -18,6 +18,7 @@ import { setAuthUser } from '../store/authSlice'
 import { fetchBusinessDashboard, setActiveTab as setBusinessTab } from '../store/businessDashboardSlice'
 import { setActiveTab as setCustomerTab, setSelectedCustomerId } from '../store/customerDashboardSlice'
 import type { DashboardTab } from '../modules/types'
+import { getDashboardPath } from '../routes/dashboardPaths'
 import { v4 as uuidv4 } from 'uuid';
 
 function createInvoiceItem(): InvoiceLineItemForm {
@@ -83,7 +84,7 @@ export function DetailView() {
   }
 
   if (!detail) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to={getDashboardPath(role)} replace />
   }
 
   const title = detail.fullName ?? 'Customer'
@@ -258,7 +259,7 @@ const handleBack = () => {
   if (window.history.length > 1) {
     navigate(-1)
   } else {
-    navigate('/dashboard')
+    navigate(getDashboardPath(role))
   }
 }
   const handleNavigateTab = (tab: DashboardTab) => {
@@ -269,7 +270,7 @@ const handleBack = () => {
     } else {
       dispatch(setBusinessTab(tab))
     }
-    navigate('/dashboard')
+    navigate(getDashboardPath(role))
   }
 
   const handleSwitchAccount = (accountRole: Role) => {
@@ -277,7 +278,7 @@ const handleBack = () => {
     if (!updated) return
     dispatch(setAuthUser(updated))
     setMenuAnchorEl(null)
-    navigate('/dashboard')
+    navigate(getDashboardPath(role))
     window.location.reload()
   }
 
@@ -286,7 +287,7 @@ const handleBack = () => {
     if (!updated) return
     dispatch(setAuthUser(updated))
     setMenuAnchorEl(null)
-    navigate('/dashboard')
+    navigate(getDashboardPath(role))
     window.location.reload()
   }
 

@@ -16,6 +16,7 @@ import type { Theme } from '@mui/material'
 import { Ambulance, ArrowLeft, Bike, Car, ChevronRight, HeartPulse, Home, Lock, Plane, Truck, Umbrella } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { getDashboardPath } from '../routes/dashboardPaths'
 import {
   deleteSavedPolicy,
   fetchPolicy,
@@ -511,7 +512,7 @@ export function InsuranceHomePage() {
   const navigate = useNavigate()
 
   return (
-    <PhoneShell title="Insurance" onBack={() => navigate('/dashboard')}>
+    <PhoneShell title="Insurance" onBack={() => navigate(getDashboardPath('CUSTOMER'))}>
       <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
         Choose what you want to cover.
       </Typography>

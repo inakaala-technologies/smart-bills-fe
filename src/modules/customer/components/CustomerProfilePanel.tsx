@@ -108,7 +108,7 @@ export function CustomerProfilePanel({ authUser, data, onProfileUpdated, onOpenM
   return (
     <Stack spacing={1.35}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.3, px: 0.4, py: 0.4 }}>
-        <Avatar sx={{ width: 62, height: 62, flexShrink: 0, bgcolor: 'success.light', color: 'success.dark', border: '2px solid var(--mui-palette-background-paper)', boxShadow: '0 2px 8px rgba(0,0,0,0.18)', fontSize: 18, fontWeight: 800 }}>
+        <Avatar src={authUser?.profilePictureUrl || undefined} alt={authUser?.name ? `${authUser.name} profile picture` : 'Profile picture'} sx={{ width: 62, height: 62, flexShrink: 0, bgcolor: 'success.light', color: 'success.dark', border: '2px solid var(--mui-palette-background-paper)', boxShadow: '0 2px 8px rgba(0,0,0,0.18)', fontSize: 18, fontWeight: 800 }}>
           {initials || 'C'}
         </Avatar>
         <Box sx={{ flex: 1, minWidth: 0 }}>
