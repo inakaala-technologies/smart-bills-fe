@@ -13,6 +13,7 @@ import {
   LogOut,
   Moon,
   Sun,
+  UserPlus,
   UserRound,
   UsersRound,
   type LucideIcon,
@@ -29,6 +30,8 @@ type CustomerProfileMenuPageProps = {
   missingProfileRoles: Role[]
   onBack: () => void
   onNavigateTab: (tab: DashboardTab) => void
+  onOpenFamily: () => void
+  onInviteFamily: () => void
   onSwitchAccount: (role: Role) => void
   onAddProfile: (role: Role) => void
   onLogout: () => void
@@ -52,6 +55,7 @@ export function CustomerProfileMenuPage({
   onAddProfile,
   onLogout,
   onProfilePictureUpdated,
+  onInviteFamily,
 }: CustomerProfileMenuPageProps) {
   const { mode, setMode } = useColorScheme()
   const [managerOpen, setManagerOpen] = useState(false)
@@ -60,6 +64,7 @@ export function CustomerProfileMenuPage({
       title: 'Account',
       items: [
         { label: 'Profile', icon: UserRound, onClick: () => onNavigateTab('profile') },
+        { label: 'Invite family member', icon: UserPlus, onClick: onInviteFamily },
         { label: 'Manage profiles', icon: UsersRound, onClick: () => setManagerOpen(true) },
         { label: 'Rewards', icon: Award, onClick: () => onNavigateTab('rewards') },
         { label: 'Spending insights', icon: ChartColumnIncreasing, onClick: () => onNavigateTab('insights') },

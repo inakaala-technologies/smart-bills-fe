@@ -227,6 +227,14 @@ export function CustomerDashboard() {
           setIsProfilePageOpen(false)
           handleChangeTab(tab)
         }}
+        onOpenFamily={() => {
+          setIsProfilePageOpen(false)
+          setFamilyDialogMode('manage')
+        }}
+        onInviteFamily={() => {
+          setIsProfilePageOpen(false)
+          setFamilyDialogMode('invite')
+        }}
         onSwitchAccount={(role: Role) => {
           const updated = switchAccount(role)
           if (updated) {
