@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import {
   Alert,
   Box,
@@ -21,6 +21,7 @@ import {
   type BusinessOffer,
   type CustomerSegment,
 } from '../../../services/api'
+import { isPdfOffer, resolveAssetUrl } from '../../../utils/offerAsset'
 
 type BusinessOffersWorkspaceProps = {
   businessId: number
@@ -37,6 +38,15 @@ type OfferForm = {
   endsOn: string
   targetSegment: CustomerSegment
 }
+
+const ALLOWED_FILE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+]
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024
 
 function toDateInputValue(date: Date) {
   const year = date.getFullYear()
@@ -73,10 +83,13 @@ export function BusinessOffersWorkspace({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [removingId, setRemovingId] = useState<number | null>(null)
-    const [message, setMessage] = useState('')
+  const [message, setMessage] = useState('')
   const [error, setError] = useState(false)
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState('')
+
+  // Hidden file input opened by the "Upload image" button.
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Release the temporary preview URL when it changes or on unmount.
   useEffect(() => {
@@ -84,6 +97,7 @@ export function BusinessOffersWorkspace({
       if (imagePreview) URL.revokeObjectURL(imagePreview)
     }
   }, [imagePreview])
+
   // Load offers for the selected business.
   useEffect(() => {
     let isCurrent = true
@@ -125,7 +139,12 @@ export function BusinessOffersWorkspace({
     )
   }
 
-  // Select an offer image and create a local preview.
+  // Open the device file picker.
+  const openFilePicker = () => {
+    fileInputRef.current?.click()
+  }
+
+  // Select an offer image/PDF and create a local preview.
   const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
 
@@ -134,15 +153,13 @@ export function BusinessOffersWorkspace({
 
     if (!file) return
 
-        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
-
-    if (!allowedTypes.includes(file.type)) {
+    if (!ALLOWED_FILE_TYPES.includes(file.type)) {
       setMessage('Please select a JPG, PNG, WEBP, or PDF file.')
       setError(true)
       return
     }
 
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > MAX_FILE_SIZE) {
       setMessage('The file size must be 5 MB or less.')
       setError(true)
       return
@@ -181,7 +198,7 @@ export function BusinessOffersWorkspace({
     setMessage('')
 
     try {
-            const offer = await createBusinessOffer(
+      const offer = await createBusinessOffer(
         businessId,
         {
           title: form.title.trim(),
@@ -221,9 +238,7 @@ export function BusinessOffersWorkspace({
 
       setOffers((current) =>
         current.map((offer) =>
-          offer.id === offerId
-            ? { ...offer, active: false }
-            : offer,
+          offer.id === offerId ? { ...offer, active: false } : offer,
         ),
       )
 
@@ -378,7 +393,7 @@ export function BusinessOffersWorkspace({
                 fullWidth
                 slotProps={{ inputLabel: { shrink: true } }}
               />
-                        </Box>
+            </Box>
 
             {/* Offer banner image */}
             <Box>
@@ -391,9 +406,18 @@ export function BusinessOffersWorkspace({
                 color="text.secondary"
                 sx={{ display: 'block', mb: 1 }}
               >
-                                Landscape banner (16:9) or a PDF flyer shown to customers.
+                Landscape banner (16:9) or a PDF flyer shown to customers.
                 JPG, PNG, WEBP, or PDF · Max 5 MB
               </Typography>
+
+              {/* Hidden file input opened by the Upload button */}
+              <input
+                ref={fileInputRef}
+                hidden
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                onChange={handleImageChange}
+              />
 
               {imagePreview ? (
                 <>
@@ -410,7 +434,7 @@ export function BusinessOffersWorkspace({
                       bgcolor: 'action.hover',
                     }}
                   >
-                                        {selectedImage?.type === 'application/pdf' ? (
+                    {selectedImage?.type === 'application/pdf' ? (
                       <Box
                         sx={{
                           display: 'flex',
@@ -469,22 +493,7 @@ export function BusinessOffersWorkspace({
 
                   <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
                     <Button
-                      component="label"
-                      variant="outlined"
-                      size="small"
-                      startIcon={<ImagePlus size={16} />}
-                      sx={{ textTransform: 'none' }}
-                    >
-                      Replace image
-                      <input
-                        hidden
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,application/pdf"
-                        onChange={handleImageChange}
-                      />
-                    </Button>
-
-                    <Button
+                      type="button"
                       variant="text"
                       color="error"
                       size="small"
@@ -521,24 +530,20 @@ export function BusinessOffersWorkspace({
                   </Typography>
 
                   <Button
-                    component="label"
+                    type="button"
                     variant="outlined"
                     startIcon={<ImagePlus size={17} />}
+                    onClick={openFilePicker}
                     sx={{ textTransform: 'none', fontWeight: 700 }}
                   >
                     Upload image
-                    <input
-                      hidden
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      onChange={handleImageChange}
-                    />
                   </Button>
                 </Box>
               )}
             </Box>
 
             <Button
+              type="button"
               variant="contained"
               startIcon={<Megaphone size={16} />}
               onClick={() => void publishOffer()}
@@ -640,10 +645,42 @@ export function BusinessOffersWorkspace({
                   />
                 </Stack>
 
+                {/* Offer image or PDF flyer uploaded by the business */}
+                {offer.imageUrl &&
+                  (isPdfOffer(offer) ? (
+                    <Button
+                      href={resolveAssetUrl(offer.imageUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      startIcon={<FileText size={16} />}
+                      size="small"
+                      variant="outlined"
+                      sx={{ mt: 0.8, textTransform: 'none' }}
+                    >
+                      View flyer (PDF)
+                    </Button>
+                  ) : (
+                    <Box
+                      component="img"
+                      src={resolveAssetUrl(offer.imageUrl)}
+                      alt={offer.title}
+                      loading="lazy"
+                      sx={{
+                        display: 'block',
+                        width: '100%',
+                        aspectRatio: '16 / 9',
+                        objectFit: 'cover',
+                        borderRadius: 2,
+                        mt: 0.8,
+                        bgcolor: 'action.hover',
+                      }}
+                    />
+                  ))}
+
                 {/* Offer discount */}
                 <Typography
                   sx={{
-                    mt: 0.25,
+                    mt: 0.8,
                     color: 'primary.main',
                     fontWeight: 800,
                   }}
@@ -651,7 +688,7 @@ export function BusinessOffersWorkspace({
                   {offer.discountLabel}
                 </Typography>
 
-                {/* NEW: Associated business name and location */}
+                {/* Associated business name and location */}
                 <Stack
                   spacing={0.25}
                   sx={{

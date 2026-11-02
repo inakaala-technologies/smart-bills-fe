@@ -46,7 +46,19 @@ import { FamilyManagementDialog } from './components/FamilyManagementDialog'
 import { CustomerBillsPage } from './components/CustomerBillsPage'
 import { getDashboardPath } from '../../routes/dashboardPaths'
 
-const customerDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'appointments', 'rewards', 'memberships', 'bills', 'insights', 'profile']
+// 'offers' is added so /dashboard/offers is a valid route.
+const customerDashboardTabs: DashboardTab[] = [
+  'overview',
+  'businesses',
+  'offers',
+  'invoices',
+  'appointments',
+  'rewards',
+  'memberships',
+  'bills',
+  'insights',
+  'profile',
+]
 
 function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
@@ -377,14 +389,13 @@ export function CustomerDashboard() {
               currentUserId={Number(authUser?.id)}
             />
 
-            {activeTab === 'bills' && (
-              <CustomerBillsPage />
-            )}
+            {activeTab === 'bills' && <CustomerBillsPage />}
 
             {activeTab === 'overview' && (
               <Box>
                 <HeroBanner />
 
+                {/* The Offers tile in SummaryCards is the single entry to offers. */}
                 <SummaryCards
                   data={data}
                   loading={loading}
@@ -693,6 +704,7 @@ export function CustomerDashboard() {
                     />
                   )}
                 </Box>
+
                 <Dialog open={Boolean(selectedInvoice)} onClose={() => setSelectedInvoice(null)} fullWidth maxWidth="xs">
                   <DialogTitle sx={{ color: 'text.primary', fontWeight: 800 }}>Invoice details</DialogTitle>
                   {selectedInvoice && (
@@ -924,13 +936,35 @@ export function CustomerDashboard() {
                 }}
               >
                 <CustomerLocationCard
-                  key={`${data.customers[0]?.locationAddress ?? ''}:${data.customers[0]?.latitude ?? ''}:${data.customers[0]?.longitude ?? ''}`}
+                  key={`businesses:${data.customers[0]?.locationAddress ?? ''}:${data.customers[0]?.latitude ?? ''}:${data.customers[0]?.longitude ?? ''}`}
                   locationAddress={
                     data.customers[0]?.locationAddress
                   }
                   latitude={data.customers[0]?.latitude}
                   longitude={data.customers[0]?.longitude}
                   view="businesses"
+                />
+              </Box>
+            )}
+
+            {/* Offers Tab: nearby offers from businesses */}
+            {activeTab === 'offers' && (
+              <Box
+                sx={{
+                  backgroundColor: 'action.hover',
+                  borderRadius: '24px',
+                  p: 2,
+                  border: '1px solid var(--mui-palette-divider)',
+                }}
+              >
+                <CustomerLocationCard
+                  key={`offers:${data.customers[0]?.locationAddress ?? ''}:${data.customers[0]?.latitude ?? ''}:${data.customers[0]?.longitude ?? ''}`}
+                  locationAddress={
+                    data.customers[0]?.locationAddress
+                  }
+                  latitude={data.customers[0]?.latitude}
+                  longitude={data.customers[0]?.longitude}
+                  view="offers"
                 />
               </Box>
             )}
@@ -949,7 +983,6 @@ export function CustomerDashboard() {
             )}
 
             {/* Memberships Tab */}
-
             {activeTab === 'memberships' && (
               <Stack spacing={1.2}>
                 <Box>

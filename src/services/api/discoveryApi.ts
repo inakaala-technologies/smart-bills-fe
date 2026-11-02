@@ -1,4 +1,5 @@
 import { apiClient } from './httpClient'
+import { normalizeOfferAsset } from './offerNormalizers'
 import type { NearbyBusinessSummary, NearbyOfferSummary } from './types'
 
 export async function fetchNearbyBusinesses(latitude: number, longitude: number, radiusKm = 25): Promise<NearbyBusinessSummary[]> {
@@ -17,7 +18,9 @@ export async function fetchNearbyBusinesses(latitude: number, longitude: number,
 }
 
 export async function fetchNearbyOffers(latitude: number, longitude: number, radiusKm = 25): Promise<NearbyOfferSummary[]> {
-  return (await apiClient.get<NearbyOfferSummary[]>('/api/v1/businesses/offers/nearby', {
+  const { data } = await apiClient.get<NearbyOfferSummary[]>('/api/v1/businesses/offers/nearby', {
     params: { latitude, longitude, radiusKm },
-  })).data
+  })
+  // The backend sends the file as `attachmentUrl`; map it to `imageUrl`.
+  return data.map(normalizeOfferAsset)
 }
