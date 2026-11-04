@@ -21,6 +21,7 @@ export type BusinessSummary = {
   status?: string
   appointmentsEnabled?: boolean
   membershipsEnabled?: boolean
+  payslipsEnabled?: boolean
   homeServicesEnabled?: boolean
   homeVisitCharge?: number
 }

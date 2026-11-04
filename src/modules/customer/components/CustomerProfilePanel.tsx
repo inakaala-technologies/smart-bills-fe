@@ -140,8 +140,8 @@ export function CustomerProfilePanel({ authUser, data, onProfileUpdated, onOpenM
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setEditOpen(false)} disabled={savingProfile} sx={{ color: 'text.secondary', textTransform: 'none' }}>Cancel</Button>
-          <Button variant="contained" startIcon={<Save size={16} />} onClick={() => void saveProfile()} disabled={savingProfile || !editName.trim() || !editLocation.country || !editLocation.region || !editLocation.city}>
-            {savingProfile ? 'Saving…' : 'Save changes'}
+          <Button variant="contained" startIcon={<Save size={16} />} onClick={() => void saveProfile()} loading={savingProfile} disabled={!editName.trim() || !editLocation.country || !editLocation.region || !editLocation.city}>
+            Save changes
           </Button>
         </DialogActions>
       </Dialog>

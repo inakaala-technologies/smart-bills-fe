@@ -7,18 +7,22 @@ import {
   CalendarCheck2,
   ChartColumnIncreasing,
   ChevronRight,
+  Compass,
   FileText,
   Home,
   LayoutGrid,
   LogOut,
   Moon,
   Sun,
+  UserPlus,
   UserRound,
   UsersRound,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react'
 import { ProfileManagerDialog } from '../../../components/ProfileManagerDialog'
 import { ProfilePictureUpload } from '../../../components/ProfilePictureUpload'
+import { startWalkthrough } from '../../../components/appWalkthroughState'
 import type { AuthUser, Role } from '../../../services/auth'
 import type { DashboardTab } from '../../types'
 
@@ -29,6 +33,8 @@ type CustomerProfileMenuPageProps = {
   missingProfileRoles: Role[]
   onBack: () => void
   onNavigateTab: (tab: DashboardTab) => void
+  onOpenFamily: () => void
+  onInviteFamily: () => void
   onSwitchAccount: (role: Role) => void
   onAddProfile: (role: Role) => void
   onLogout: () => void
@@ -52,6 +58,7 @@ export function CustomerProfileMenuPage({
   onAddProfile,
   onLogout,
   onProfilePictureUpdated,
+  onInviteFamily,
 }: CustomerProfileMenuPageProps) {
   const { mode, setMode } = useColorScheme()
   const [managerOpen, setManagerOpen] = useState(false)
@@ -60,9 +67,12 @@ export function CustomerProfileMenuPage({
       title: 'Account',
       items: [
         { label: 'Profile', icon: UserRound, onClick: () => onNavigateTab('profile') },
+        { label: 'Invite family member', icon: UserPlus, onClick: onInviteFamily },
         { label: 'Manage profiles', icon: UsersRound, onClick: () => setManagerOpen(true) },
         { label: 'Rewards', icon: Award, onClick: () => onNavigateTab('rewards') },
+        { label: 'Payslips', icon: Wallet, onClick: () => onNavigateTab('payslips') },
         { label: 'Spending insights', icon: ChartColumnIncreasing, onClick: () => onNavigateTab('insights') },
+        { label: 'Take a tour', icon: Compass, onClick: startWalkthrough },
       ],
     },
     {

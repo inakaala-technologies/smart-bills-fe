@@ -214,8 +214,8 @@ export function CustomerMembershipManager({ open, businessId, customer, membersh
           {formMode ? (
             <>
               <Button onClick={resetForm} color="inherit">Back</Button>
-              <Button variant="contained" onClick={() => void saveMembership()} disabled={saving || !plans.some((plan) => plan.active || plan.id === editingMembership?.planId)}>
-                {saving ? 'Saving…' : formMode === 'add' ? 'Add membership' : 'Save changes'}
+              <Button variant="contained" onClick={() => void saveMembership()} loading={saving} disabled={!plans.some((plan) => plan.active || plan.id === editingMembership?.planId)}>
+                {formMode === 'add' ? 'Add membership' : 'Save changes'}
               </Button>
             </>
           ) : <Button onClick={onClose}>Close</Button>}
@@ -228,7 +228,7 @@ export function CustomerMembershipManager({ open, businessId, customer, membersh
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setRemovingMembership(null)} disabled={saving}>Keep membership</Button>
-          <Button color="error" variant="contained" onClick={() => void removeMembership()} disabled={saving}>{saving ? 'Removing…' : 'Remove'}</Button>
+          <Button color="error" variant="contained" onClick={() => void removeMembership()} loading={saving}>Remove</Button>
         </DialogActions>
       </Dialog>
     </>

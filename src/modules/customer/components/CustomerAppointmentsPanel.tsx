@@ -42,7 +42,7 @@ export function CustomerAppointmentsPanel({
   const [now] = useState(Date.now)
   const [businessId, setBusinessId] = useState('')
   const [serviceId, setServiceId] = useState('')
-  const [servicesState, setServicesState] = useState<{ businessId: number; services: AppointmentServiceSummary[] }>({ businessId: 0, services: [] })
+  const [servicesState, setServicesState] = useState<{ businessId: number; services: AppointmentServiceSummary[]; error?: string }>({ businessId: 0, services: [] })
   const [appointmentDate, setAppointmentDate] = useState(() => getDefaultAppointmentDateTime().slice(0, 10))
   const [selectedSlot, setSelectedSlot] = useState('')
   const [staffUserId, setStaffUserId] = useState('')
@@ -73,6 +73,8 @@ export function CustomerAppointmentsPanel({
   const isHomeVisit = homeVisit && canVisitHome
   const visitingCharge = isHomeVisit ? selectedBusiness?.homeVisitCharge ?? 0 : 0
   const services = servicesState.businessId === selectedBusinessId ? servicesState.services : []
+  const servicesLoading = selectedBusinessId > 0 && servicesState.businessId !== selectedBusinessId
+  const servicesError = servicesState.businessId === selectedBusinessId ? servicesState.error ?? '' : ''
   const selectedService = services.find((service) => service.id === Number(serviceId))
   const currentLoyaltyInfo = loyaltyInfo
     && loyaltyInfo.customerId === customerId
@@ -111,6 +113,13 @@ export function CustomerAppointmentsPanel({
       const available = records.filter((service) => service.enabled)
       setServicesState({ businessId: selectedBusinessId, services: available })
       setServiceId(available[0] ? String(available[0].id) : '')
+    }).catch((error: unknown) => {
+      if (!isActive) return
+      setServicesState({
+        businessId: selectedBusinessId,
+        services: [],
+        error: error instanceof Error ? error.message : 'Could not load appointment services.',
+      })
     })
 
     return () => {
@@ -171,17 +180,25 @@ export function CustomerAppointmentsPanel({
 
     setIsSaving(true)
     setMessage('')
-    const result = await createAppointment({
-      businessId: selectedBusinessId,
-      appointmentServiceId: selectedService.id,
-      scheduledAt: selectedSlot,
-      staffUserId: Number(staffUserId) || undefined,
-      notes: notes.trim() || undefined,
-      loyaltyPointsToRedeem: requestedPoints,
-      homeVisit: isHomeVisit,
-      visitAddress: isHomeVisit ? visitAddress.trim() : undefined,
-    })
-    setIsSaving(false)
+    let result: Awaited<ReturnType<typeof createAppointment>>
+    try {
+      result = await createAppointment({
+        businessId: selectedBusinessId,
+        appointmentServiceId: selectedService.id,
+        scheduledAt: selectedSlot,
+        staffUserId: Number(staffUserId) || undefined,
+        notes: notes.trim() || undefined,
+        loyaltyPointsToRedeem: requestedPoints,
+        homeVisit: isHomeVisit,
+        visitAddress: isHomeVisit ? visitAddress.trim() : undefined,
+      })
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not book this appointment.')
+      setMessageSeverity('error')
+      return
+    } finally {
+      setIsSaving(false)
+    }
 
     if (!result.ok) {
       setMessage(result.message ?? 'Could not book this appointment.')
@@ -191,7 +208,7 @@ export function CustomerAppointmentsPanel({
 
     const business = businesses.find((b) => b.id === selectedBusinessId)
     const bookedAppointment: AppointmentSummary = result.appointment ?? {
-      id: Date.now(),
+      id: now,
       businessId: selectedBusinessId,
       appointmentServiceId: selectedService.id,
       serviceName: selectedService.name,
@@ -276,9 +293,14 @@ export function CustomerAppointmentsPanel({
           <TextField select label="Business" value={selectedBusinessId ? String(selectedBusinessId) : ''} onChange={(event) => { setBusinessId(event.target.value); setServiceId(''); setLoyaltyPointsToRedeem('0') }} disabled={appointmentBusinesses.length === 0} size="small" fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}>
             {appointmentBusinesses.map((business) => <MenuItem key={business.id} value={String(business.id)}>{business.businessName ?? business.name ?? `Business ${business.id}`}{business.homeServicesEnabled ? ' · 🏠 Home services' : ''}</MenuItem>)}
           </TextField>
-          <TextField select label="Service" value={serviceId} onChange={(event) => setServiceId(event.target.value)} disabled={!services.length} size="small" required fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}>
-            {services.map((service) => <MenuItem key={service.id} value={String(service.id)}>{service.name} · ₹{service.price.toLocaleString('en-IN')} · {service.durationMinutes} min</MenuItem>)}
-          </TextField>
+          {servicesLoading ? (
+            <Skeleton variant="rounded" height={40} />
+          ) : (
+            <TextField select label="Service" value={serviceId} onChange={(event) => setServiceId(event.target.value)} disabled={!services.length} size="small" required fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}>
+              {services.map((service) => <MenuItem key={service.id} value={String(service.id)}>{service.name} · ₹{service.price.toLocaleString('en-IN')} · {service.durationMinutes} min</MenuItem>)}
+            </TextField>
+          )}
+          {servicesError && <Alert severity="error">{servicesError}</Alert>}
           {selectedService && (
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1, p: 1.25, borderRadius: 2, bgcolor: 'action.hover', border: '1px solid var(--mui-palette-divider)' }}>
               <Box sx={{ minWidth: 0 }}>
@@ -333,7 +355,7 @@ export function CustomerAppointmentsPanel({
             </Stack>
           )}
           {currentLoyaltyError && <Alert severity="error">{currentLoyaltyError}</Alert>}
-          {selectedBusinessId > 0 && services.length === 0 && appointmentBusinesses.length > 0 && <Alert severity="info" sx={{ borderRadius: 2 }}>This business has not added any bookable services yet.</Alert>}
+          {!servicesLoading && !servicesError && selectedBusinessId > 0 && services.length === 0 && appointmentBusinesses.length > 0 && <Alert severity="info" sx={{ borderRadius: 2 }}>This business has not added any bookable services yet.</Alert>}
           <TextField label="Date" type="date" value={appointmentDate} onChange={(event) => { setAppointmentDate(event.target.value); setSelectedSlot('') }} size="small" required fullWidth slotProps={{ inputLabel: { shrink: true } }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }} />
           {availability && availability.staff.length > 0 && (
             <TextField select label="Staff or resource" value={staffUserId} onChange={(event) => { setStaffUserId(event.target.value); setSelectedSlot('') }} size="small" fullWidth>
@@ -361,7 +383,7 @@ export function CustomerAppointmentsPanel({
             ) : <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>No available times for this day.</Typography>}
           </Box>
           <TextField label="Note (optional)" value={notes} onChange={(event) => setNotes(event.target.value)} size="small" multiline minRows={2} fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }} />
-          <Button variant="contained" startIcon={<CalendarPlus size={17} />} onClick={handleBookAppointment} disabled={!selectedService || !selectedSlot || isSaving} fullWidth sx={{ minHeight: 46, borderRadius: 2, textTransform: 'none', fontWeight: 800 }}>
+          <Button variant="contained" startIcon={<CalendarPlus size={17} />} loading={isSaving} onClick={handleBookAppointment} disabled={!selectedService || !selectedSlot || servicesLoading} fullWidth sx={{ minHeight: 46, borderRadius: 2, textTransform: 'none', fontWeight: 800 }}>
             {isSaving ? 'Sending request…' : 'Request appointment'}
           </Button>
         </Stack>

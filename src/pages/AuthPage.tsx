@@ -2,6 +2,7 @@ import { Alert, Box, Button, Container, Paper, Stack, TextField, Typography } fr
 import { ArrowRight, Building2, UserRound } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { markWalkthroughPending } from '../components/appWalkthroughState'
 import { LocationPicker, type LocationValue } from '../components/LocationPicker'
 import { ThemeModeToggle } from '../components/ThemeModeToggle'
 import { loginUser, signUpUser, type Role } from '../services/auth'
@@ -74,6 +75,7 @@ export function AuthPage() {
       }
 
       dispatch(clearAuthError())
+      markWalkthroughPending(result.user.id)
       dispatch(setAuthUser(result.user))
       dispatch(resetAuthForms())
       navigate(getDashboardPath(result.user.role))
@@ -148,8 +150,8 @@ export function AuthPage() {
 
               {authError ? <Alert severity="error" sx={{ borderRadius: 2 }}>{authError}</Alert> : null}
 
-              <Button variant="contained" size="large" endIcon={<ArrowRight size={18} />} onClick={handleLogin} disabled={isSubmitting} sx={{ borderRadius: 1.25, textTransform: 'none', fontWeight: 700, py: 1.2 }}>
-                Continue
+              <Button variant="contained" size="large" endIcon={<ArrowRight size={18} />} loading={isSubmitting} loadingPosition="end" onClick={handleLogin} sx={{ borderRadius: 1.25, textTransform: 'none', fontWeight: 700, py: 1.2 }}>
+                {isSubmitting ? 'Signing in…' : 'Continue'}
               </Button>
             </Stack>
 
@@ -244,7 +246,7 @@ export function AuthPage() {
                   sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.25, backgroundColor: 'background.paper' } }}
                 />
                 {authError ? <Alert severity="error" sx={{ borderRadius: 2 }}>{authError}</Alert> : null}
-                <Button variant="outlined" onClick={handleSignup} disabled={isSubmitting} sx={(theme) => ({ borderRadius: 1.25, borderColor: theme.palette.divider, color: theme.palette.text.primary, textTransform: 'none', fontWeight: 700, py: 1.15 })}>
+                <Button variant="outlined" onClick={handleSignup} loading={isSubmitting} loadingPosition="start" sx={(theme) => ({ borderRadius: 1.25, borderColor: theme.palette.divider, color: theme.palette.text.primary, textTransform: 'none', fontWeight: 700, py: 1.15 })}>
                   {isSubmitting ? 'Creating account…' : 'Create account'}
                 </Button>
               </Stack>

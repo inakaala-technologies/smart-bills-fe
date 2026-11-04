@@ -1,13 +1,9 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Box } from '@mui/material'
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
-import { DetailView } from '../components/DetailView'
-import { BusinessDetailPage } from '../components/BusinessDetailPage'
-import { CustomerBusinessDetailPage } from '../components/CustomerBusinessDetailPage'
+import { PageLoader, TopProgressBar } from '../components/PageLoader'
 import { AuthPage } from '../pages/AuthPage'
-import { AdminDashboard } from '../modules/admin/AdminDashboard'
-import { BusinessDashboard } from '../modules/business/BusinessDashboard'
-import { CustomerDashboard } from '../modules/customer/CustomerDashboard'
+import { AppWalkthrough } from '../components/AppWalkthrough'
 import { fetchBusinessById, fetchDashboardData, type BusinessSummary, type MembershipSummary, type PaymentSummary } from '../services/api'
 import { fetchLoyaltyBalance } from '../services/api/loyaltyApi'
 import { getCurrentUser, getCurrentUserProfile, type Role } from '../services/auth'
@@ -18,9 +14,17 @@ import { fetchBusinessDashboard, fetchBusinessSummary } from '../store/businessD
 import { fetchCustomerDashboard } from '../store/customerDashboardSlice'
 import { appStyles } from '../theme/styles'
 import { setAuthUser } from '../store/authSlice'
-import { InsuranceHomePage, InsuranceCategoryPage } from '../pages/InsurancePages'
 import { getDashboardPath, isDashboardPathname } from './dashboardPaths'
 import { isDashboardFresh } from '../store/dashboardFreshness'
+
+const DetailView = lazy(() => import('../components/DetailView').then((m) => ({ default: m.DetailView })))
+const BusinessDetailPage = lazy(() => import('../components/BusinessDetailPage').then((m) => ({ default: m.BusinessDetailPage })))
+const CustomerBusinessDetailPage = lazy(() => import('../components/CustomerBusinessDetailPage').then((m) => ({ default: m.CustomerBusinessDetailPage })))
+const AdminDashboard = lazy(() => import('../modules/admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard })))
+const BusinessDashboard = lazy(() => import('../modules/business/BusinessDashboard').then((m) => ({ default: m.BusinessDashboard })))
+const CustomerDashboard = lazy(() => import('../modules/customer/CustomerDashboard').then((m) => ({ default: m.CustomerDashboard })))
+const InsuranceHomePage = lazy(() => import('../pages/InsurancePages').then((m) => ({ default: m.InsuranceHomePage })))
+const InsuranceCategoryPage = lazy(() => import('../pages/InsurancePages').then((m) => ({ default: m.InsuranceCategoryPage })))
 
 function AuthenticatedRoute({ children }: { children: ReactNode }) {
   const authUser = useAppSelector((state: RootState) => state.auth.authUser)
@@ -146,7 +150,7 @@ function BusinessDetailRoute({
   }
 
   if (loadedBusinessId !== businessId) {
-    return <Box sx={{ minHeight: '50vh' }} />
+    return <PageLoader label="Loading business…" />
   }
 
   if (!business) {
@@ -278,8 +282,17 @@ export default function AppRoutes() {
     [data.businesses, selectedBusinessId],
   )
 
+  const dashboardLoading = onDashboardPath && (
+    dashboardRole === 'ADMIN' ? adminState.loading : dashboardRole === 'CUSTOMER' ? customerState.loading : businessState.loading
+  )
+  const isFirstDashboardLoad = dashboardLoading && data.businesses.length === 0
+
   return (
     <Box sx={appStyles.shell}>
+      <TopProgressBar active={dashboardLoading} />
+      {isFirstDashboardLoad && <PageLoader fullScreen label="Loading your workspace…" />}
+      {authUser?.id && onDashboardPath && <AppWalkthrough key={`${authUser.id}:${dashboardRole}`} userId={authUser.id} role={dashboardRole} />}
+      <Suspense fallback={<PageLoader fullScreen />}>
       <Routes>
         <Route
           path="/"
@@ -391,6 +404,7 @@ export default function AppRoutes() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </Box>
   )
 }

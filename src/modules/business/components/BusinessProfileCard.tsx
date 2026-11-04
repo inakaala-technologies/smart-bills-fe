@@ -1,11 +1,11 @@
 import { Plus, Package, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
-import { Alert, Button, Card, CardContent, FormControlLabel, MenuItem, Switch, TextField, Typography, Box, Stack } from '@mui/material'
+import { Alert, Button, Card, CardContent, FormControlLabel, LinearProgress, MenuItem, Switch, TextField, Typography, Box, Stack } from '@mui/material'
 import type { Role } from '../../../services/auth'
 import { LocationPicker, type LocationValue } from '../../../components/LocationPicker'
 import { BUSINESS_TYPES } from '../../../constants/businessTypes'
 
-export type BusinessFeature = 'appointments' | 'memberships' | 'homeServices'
+export type BusinessFeature = 'appointments' | 'memberships' | 'homeServices' | 'payslips'
 
 export type BusinessProfileCardProps = {
   authUser: { id: string; name: string; email: string; phone?: string; role: Role } | null
@@ -16,15 +16,17 @@ export type BusinessProfileCardProps = {
   businessMessage: string
   appointmentsEnabled: boolean
   membershipsEnabled: boolean
+  payslipsEnabled?: boolean
   onBusinessFieldChange: (field: 'name' | 'legalName' | 'phone' | 'address' | 'businessType', value: string) => void
   onLocationChange: (value: LocationValue) => void
   onFeatureToggle: (feature: BusinessFeature, enabled: boolean) => Promise<{ ok: boolean; message?: string }>
   onSave: () => void
   onManageProducts: () => void
+  onManageAppointments?: () => void
   activeProductCount?: number
 }
 
-export function BusinessProfileCard({ authUser, businessForm, location, profileId, isCreatingBusiness, businessMessage, appointmentsEnabled, membershipsEnabled, onBusinessFieldChange, onLocationChange, onFeatureToggle, onSave ,onManageProducts, activeProductCount = 0 }: BusinessProfileCardProps) {
+export function BusinessProfileCard({ authUser, businessForm, location, profileId, isCreatingBusiness, businessMessage, appointmentsEnabled, membershipsEnabled, payslipsEnabled = false, onBusinessFieldChange, onLocationChange, onFeatureToggle, onSave ,onManageProducts, onManageAppointments, activeProductCount = 0 }: BusinessProfileCardProps) {
   const [savingFeature, setSavingFeature] = useState<BusinessFeature | null>(null)
   const [featureMessage, setFeatureMessage] = useState('')
 
@@ -123,6 +125,7 @@ export function BusinessProfileCard({ authUser, businessForm, location, profileI
           <Box sx={{ p: 1.3, borderRadius: 2.4, border: '1px solid var(--mui-palette-divider)' }}>
             <Typography sx={{ fontWeight: 850 }}>Business features</Typography>
             <Typography variant="caption" color="text.secondary">Choose which features appear in your workspace.</Typography>
+            {savingFeature !== null && <LinearProgress aria-label="Updating business feature" sx={{ mt: 0.8 }} />}
             <Stack spacing={0.5} sx={{ mt: 0.8 }}>
               <FormControlLabel
                 label={<Box><Typography variant="body2" sx={{ fontWeight: 750 }}>Appointments</Typography><Typography variant="caption" color="text.secondary">Show booking tools and appointment options.</Typography></Box>}
@@ -136,11 +139,21 @@ export function BusinessProfileCard({ authUser, businessForm, location, profileI
                 labelPlacement="start"
                 sx={{ m: 0, justifyContent: 'space-between', '& .MuiFormControlLabel-label': { flex: 1 } }}
               />
+              <FormControlLabel
+                label={<Box><Typography variant="body2" sx={{ fontWeight: 750 }}>Payslips</Typography><Typography variant="caption" color="text.secondary">Manage employees and send them payslips.</Typography></Box>}
+                control={<Switch checked={payslipsEnabled} disabled={savingFeature !== null} onChange={(event) => void handleFeatureToggle('payslips', event.target.checked)} slotProps={{ input: { 'aria-label': 'Enable payslips feature' } }} />}
+                labelPlacement="start"
+                sx={{ m: 0, justifyContent: 'space-between', '& .MuiFormControlLabel-label': { flex: 1 } }}
+              />
             </Stack>
-            {featureMessage && <Alert severity="error" sx={{ mt: 1 }}>{featureMessage}</Alert>}
+            {featureMessage && (
+              <Alert severity="error" sx={{ mt: 1 }} action={onManageAppointments ? (
+                <Button color="inherit" size="small" onClick={onManageAppointments} sx={{ textTransform: 'none', fontWeight: 800, whiteSpace: 'nowrap' }}>Add services</Button>
+              ) : undefined}>{featureMessage}</Alert>
+            )}
           </Box>
 
-          <Button variant="contained" disabled={isCreatingBusiness} onClick={onSave} startIcon={<Plus size={15} />} sx={{ borderRadius: 2.8, textTransform: 'none', fontWeight: 800 }}>
+          <Button variant="contained" loading={isCreatingBusiness} onClick={onSave} startIcon={<Plus size={15} />} sx={{ borderRadius: 2.8, textTransform: 'none', fontWeight: 800 }}>
             {isCreatingBusiness ? 'Saving...' : 'Save business profile'}
           </Button>
 

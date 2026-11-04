@@ -319,6 +319,7 @@ export function CustomerLocationCard({
           >
             <Button
               variant="contained"
+              loading={saving}
               onClick={() => void saveLocation()}
               disabled={
                 saving || !location.locationAddress.trim()
@@ -328,7 +329,7 @@ export function CustomerLocationCard({
                 fontWeight: 800,
               }}
             >
-              {saving ? 'Saving…' : 'Save location'}
+              Save location
             </Button>
 
             {feedback && (

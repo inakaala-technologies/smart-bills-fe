@@ -36,6 +36,7 @@ export function normalizeBusiness(raw: Partial<BusinessSummary> & Record<string,
     status: typeof raw.status === 'string' ? raw.status : 'active',
     appointmentsEnabled: raw.appointmentsEnabled === true,
     membershipsEnabled: raw.membershipsEnabled !== false,
+    payslipsEnabled: raw.payslipsEnabled === true,
     homeServicesEnabled: raw.homeServicesEnabled === true,
     homeVisitCharge: Number(raw.homeVisitCharge ?? 0),
   }

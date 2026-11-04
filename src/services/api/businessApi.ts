@@ -91,6 +91,15 @@ export async function setBusinessMembershipsEnabled(businessId: number, enabled:
   }
 }
 
+export async function setBusinessPayslipsEnabled(businessId: number, enabled: boolean): Promise<{ ok: boolean; business?: BusinessSummary; message?: string }> {
+  try {
+    const { data } = await apiClient.put<Record<string, unknown>>(`/api/v1/businesses/${businessId}/payslips-enabled`, undefined, { params: { enabled } })
+    return { ok: true, business: normalizeBusiness(data) }
+  } catch (error) {
+    return { ok: false, message: getErrorMessage(error, 'Could not update payslips.') }
+  }
+}
+
 export async function setBusinessHomeServicesEnabled(businessId: number, enabled: boolean): Promise<{ ok: boolean; business?: BusinessSummary; message?: string }> {
   try {
     const { data } = await apiClient.put<Record<string, unknown>>(`/api/v1/businesses/${businessId}/home-services-enabled`, undefined, { params: { enabled } })
