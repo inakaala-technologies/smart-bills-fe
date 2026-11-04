@@ -9,7 +9,9 @@ import {
   CalendarCheck2,
   ChartColumnIncreasing,
   ChevronRight,
+  CircleHelp,
   Home,
+  Info,
   LogOut,
   Megaphone,
   Moon,
@@ -42,6 +44,9 @@ type BusinessProfileMenuPageProps = {
   onProfilePictureUpdated: (user: AuthUser) => void
   business?: { id: number; bannerImageUrl?: string } | null
   onBannerUploaded?: (business: BusinessSummary) => void
+  /** Optional: the Help and About pages are built later; until then these rows are inert. */
+  onOpenHelp?: () => void
+  onOpenAbout?: () => void
 }
 
 type ProfileMenuItem = {
@@ -49,6 +54,26 @@ type ProfileMenuItem = {
   icon: LucideIcon
   onClick: () => void
 }
+
+const LIME = '#CDF27E'
+const INK = '#0F032D'
+
+const sectionLabelSx = {
+  mb: 0.8,
+  ml: 0.5,
+  color: 'text.secondary',
+  fontSize: 10,
+  fontWeight: 400,
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+} as const
+
+const groupCardSx = {
+  overflow: 'hidden',
+  borderRadius: '10px',
+  border: 'none',
+  boxShadow: '0 2px 12px rgba(78, 43, 204, 0.07)',
+} as const
 
 export function BusinessProfileMenuPage({
   authUser,
@@ -65,6 +90,8 @@ export function BusinessProfileMenuPage({
   onProfilePictureUpdated,
   business,
   onBannerUploaded,
+  onOpenHelp,
+  onOpenAbout,
 }: BusinessProfileMenuPageProps) {
   const { mode, setMode } = useColorScheme()
   const [managerOpen, setManagerOpen] = useState(false)
@@ -96,6 +123,13 @@ export function BusinessProfileMenuPage({
         ...(membershipsEnabled ? [{ label: 'Memberships', icon: BadgeCheck, onClick: () => onNavigateTab('memberships') }] : []),
       ],
     },
+    {
+      title: 'More info and support',
+      items: [
+        { label: 'Help', icon: CircleHelp, onClick: () => onOpenHelp?.() },
+        { label: 'About', icon: Info, onClick: () => onOpenAbout?.() },
+      ],
+    },
   ]
 
   return (
@@ -122,58 +156,62 @@ export function BusinessProfileMenuPage({
             height: { xs: '100dvh', sm: 'calc(100dvh - 64px)' },
             maxHeight: { xs: '100dvh', sm: 'calc(100dvh - 64px)' },
             borderRadius: { xs: 0, sm: '24px' },
-            bgcolor: 'background.paper',
+            bgcolor: 'background.default',
             overflowY: 'auto',
             boxShadow: '0 18px 46px rgba(0, 0, 0, 0.12)',
           }}
         >
+          {/* Figma: violet -> ink gradient header, 35px bottom radius */}
           <Box
             sx={{
-              px: 1.5,
-              pt: 'calc(env(safe-area-inset-top) + 12px)',
-              pb: 2.4,
+              px: 2,
+              pt: 'calc(env(safe-area-inset-top) + 40px)',
+              pb: 3,
               color: '#ffffff',
-              background: 'linear-gradient(180deg, #C39AF3 0%, #905BF4 42%, #4E2BCC 76%, #0F032D 125%)',
-              borderRadius: '0 0 24px 24px',
+              background: 'linear-gradient(180deg, #F1EBFC 0%, #CDBAF1 8%, #AE89F2 20%, #8C59F2 36%, #5B34D4 58%, #331A88 80%, #0F032D 100%)',
+              borderRadius: '0 0 35px 35px',
             }}
           >
-            <Stack direction="row" spacing={1.1} sx={{ alignItems: 'center' }}>
+            <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', minHeight: 40 }}>
               <ButtonBase
                 type="button"
                 aria-label="Back to dashboard"
                 onClick={onBack}
                 sx={{
-                  width: 34,
-                  height: 34,
+                  width: 40,
+                  height: 40,
                   flexShrink: 0,
                   display: 'grid',
                   placeItems: 'center',
                   borderRadius: '50%',
-                  bgcolor: 'rgba(255,255,255,0.72)',
-                  color: '#32128E',
-                  '&:hover': { bgcolor: '#ffffff' },
+                  bgcolor: '#ffffff',
+                  color: '#4E2BCC',
+                  zIndex: 1,
+                  '&:hover': { bgcolor: '#F1EBFC' },
                 }}
               >
-                <ArrowLeft size={19} />
+                <ArrowLeft size={20} />
               </ButtonBase>
-              <Typography sx={{ fontSize: 17, fontWeight: 700 }}>My Profile</Typography>
-            </Stack>
+              <Typography sx={{ position: 'absolute', left: 0, right: 0, textAlign: 'center', fontSize: 18, fontWeight: 400 }}>
+                My Profile
+              </Typography>
+            </Box>
 
-            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', mt: 1.5, px: 0.6 }}>
+            <Stack direction="row" spacing={1.8} sx={{ alignItems: 'center', mt: 2.2, px: 0.5 }}>
               <ProfilePictureUpload
                 authUser={authUser}
                 onUploaded={onProfilePictureUpdated}
-                size={66}
+                size={80}
                 inverted
               />
               <Box sx={{ minWidth: 0 }}>
-                <Typography noWrap sx={{ fontSize: 19, fontWeight: 600 }}>{authUser?.name ?? 'User'}</Typography>
-                <Typography noWrap sx={{ fontSize: 11, color: 'rgba(255,255,255,0.88)' }}>{authUser?.email ?? ''}</Typography>
+                <Typography noWrap sx={{ fontSize: 20, fontWeight: 400, lineHeight: 1.2 }}>{authUser?.name ?? 'User'}</Typography>
+                <Typography noWrap sx={{ mt: 0.3, fontSize: 12, fontWeight: 300, color: 'rgba(255,255,255,0.88)' }}>{authUser?.email ?? ''}</Typography>
               </Box>
             </Stack>
           </Box>
 
-          <Stack spacing={1.7} sx={{ px: 1.5, pt: 1.7, pb: 'calc(24px + env(safe-area-inset-bottom))' }}>
+          <Stack spacing={2} sx={{ px: 2, pt: 2.2, pb: 'calc(28px + env(safe-area-inset-bottom))' }}>
             {business && onBannerUploaded && (
               <BusinessBannerUpload
                 businessId={business.id}
@@ -183,18 +221,8 @@ export function BusinessProfileMenuPage({
             )}
             {sections.map(({ title, items }) => (
               <Box component="section" key={title}>
-                <Typography sx={{ mb: 0.7, ml: 0.6, color: 'text.secondary', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                  {title}
-                </Typography>
-                <Paper
-                  variant="outlined"
-                  sx={{
-                    overflow: 'hidden',
-                    borderRadius: 2.2,
-                    borderColor: 'rgba(15,3,45,0.06)',
-                    boxShadow: '0 4px 12px rgba(15,3,45,0.06)',
-                  }}
-                >
+                <Typography sx={sectionLabelSx}>{title}</Typography>
+                <Paper variant="outlined" sx={groupCardSx}>
                   {items.map(({ label, icon: Icon, onClick }, index) => (
                     <ButtonBase
                       key={label}
@@ -202,19 +230,19 @@ export function BusinessProfileMenuPage({
                       onClick={onClick}
                       sx={{
                         width: '100%',
-                        minHeight: 39,
-                        px: 1.4,
+                        minHeight: 44,
+                        px: 1.6,
                         display: 'flex',
                         justifyContent: 'flex-start',
-                        gap: 1.3,
+                        gap: 1.4,
                         color: 'text.primary',
                         '&:hover': { bgcolor: 'action.hover' },
-                        ...(index < items.length - 1 ? { borderBottom: '1px solid', borderColor: 'divider' } : {}),
+                        ...(index < items.length - 1 ? { borderBottom: '1px solid', borderColor: 'rgba(15, 3, 45, 0.06)' } : {}),
                       }}
                     >
-                      <Icon size={16} strokeWidth={1.8} />
-                      <Typography sx={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 500 }}>{label}</Typography>
-                      <ChevronRight size={16} />
+                      <Icon size={17} strokeWidth={1.6} />
+                      <Typography sx={{ flex: 1, textAlign: 'left', fontSize: 13, fontWeight: 400 }}>{label}</Typography>
+                      <ChevronRight size={16} color={INK} />
                     </ButtonBase>
                   ))}
                 </Paper>
@@ -222,14 +250,9 @@ export function BusinessProfileMenuPage({
             ))}
 
             <Box component="section">
-              <Typography sx={{ mb: 0.7, ml: 0.6, color: 'text.secondary', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                Appearance
-              </Typography>
-              <Paper
-                variant="outlined"
-                sx={{ p: 0.7, borderRadius: 2.2, borderColor: 'rgba(15,3,45,0.06)', boxShadow: '0 4px 12px rgba(15,3,45,0.06)' }}
-              >
-                <Stack direction="row" sx={{ p: 0.35, borderRadius: 1.6, bgcolor: 'action.hover' }}>
+              <Typography sx={sectionLabelSx}>Appearance</Typography>
+              <Paper variant="outlined" sx={{ ...groupCardSx, p: 0.6 }}>
+                <Stack direction="row" sx={{ p: 0.4, borderRadius: '8px', bgcolor: 'action.hover' }}>
                   <Button
                     fullWidth
                     startIcon={<Sun size={14} />}
@@ -237,15 +260,16 @@ export function BusinessProfileMenuPage({
                     onClick={() => setMode('light')}
                     sx={{
                       minHeight: 34,
-                      borderRadius: 1.2,
-                      color: 'text.primary',
-                      bgcolor: mode !== 'dark' ? '#C8F36A' : 'transparent',
+                      borderRadius: '8px',
+                      color: mode !== 'dark' ? INK : 'text.primary',
+                      bgcolor: mode !== 'dark' ? LIME : 'transparent',
                       fontSize: 10,
-                      fontWeight: 700,
-                      '&:hover': { bgcolor: mode !== 'dark' ? '#C8F36A' : 'action.selected' },
+                      fontWeight: 500,
+                      letterSpacing: '0.04em',
+                      '&:hover': { bgcolor: mode !== 'dark' ? LIME : 'action.selected' },
                     }}
                   >
-                    Light
+                    LIGHT
                   </Button>
                   <Button
                     fullWidth
@@ -254,15 +278,16 @@ export function BusinessProfileMenuPage({
                     onClick={() => setMode('dark')}
                     sx={{
                       minHeight: 34,
-                      borderRadius: 1.2,
-                      color: 'text.primary',
-                      bgcolor: mode === 'dark' ? '#C8F36A' : 'transparent',
+                      borderRadius: '8px',
+                      color: mode === 'dark' ? INK : 'text.primary',
+                      bgcolor: mode === 'dark' ? LIME : 'transparent',
                       fontSize: 10,
-                      fontWeight: 700,
-                      '&:hover': { bgcolor: mode === 'dark' ? '#C8F36A' : 'action.selected' },
+                      fontWeight: 500,
+                      letterSpacing: '0.04em',
+                      '&:hover': { bgcolor: mode === 'dark' ? LIME : 'action.selected' },
                     }}
                   >
-                    Dark
+                    DARK
                   </Button>
                 </Stack>
               </Paper>
@@ -273,16 +298,17 @@ export function BusinessProfileMenuPage({
               startIcon={<LogOut size={16} />}
               onClick={onLogout}
               sx={{
-                minHeight: 42,
-                borderRadius: 999,
-                bgcolor: 'rgba(255,80,80,0.12)',
+                minHeight: 44,
+                borderRadius: '10px',
+                bgcolor: '#FCE3E3',
                 color: '#D52222',
                 fontSize: 11,
-                fontWeight: 800,
-                '&:hover': { bgcolor: 'rgba(255,80,80,0.2)' },
+                fontWeight: 500,
+                letterSpacing: '0.06em',
+                '&:hover': { bgcolor: '#F9D2D2' },
               }}
             >
-              Logout
+              LOGOUT
             </Button>
           </Stack>
         </Paper>

@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Alert, Box, ButtonBase, Chip, Dialog, DialogContent, DialogTitle, IconButton, Menu, MenuItem, Stack, Typography } from '@mui/material'
-import { ArrowUpRight, BellRing, CalendarCheck2, ChevronDown, FilePlus2, LockKeyhole, MoreVertical, UserRoundPlus, UsersRound, X, type LucideIcon } from 'lucide-react'
-import { ActivityPanel } from './ActivityPanel'
+import { ArrowUpRight, BellRing, CalendarCheck2, ChevronDown, FilePlus2, LockKeyhole, MoreVertical, Plus, UserRoundPlus, UsersRound, X, type LucideIcon } from 'lucide-react'
 import { QuickActionGrid, type QuickActionId } from './QuickActionGrid'
 import { RevenueTrendChart } from './RevenueTrendChart'
 import { useAppSelector } from '../../../store/hooks'
@@ -12,6 +11,32 @@ function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
   return `₹${value.toLocaleString('en-IN')}`
 }
+
+function formatLongDate(value?: string) {
+  if (!value) return '—'
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
+  if (!match) return value
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function formatInvoiceStatus(status?: string) {
+  const value = (status ?? '').toUpperCase()
+  if (value === 'PAID') return 'Paid'
+  if (value === 'SENT') return 'Unpaid'
+  if (!value) return 'Unpaid'
+  return value.charAt(0) + value.slice(1).toLowerCase()
+}
+
+function formatEventTime(value?: string) {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
+const EVENT_BAR_COLORS = ['#B9A4F8', '#E8A317', '#34D399']
 
 function calculateInvoiceCollectionProgress(
   invoices: Array<{ id: number; totalAmount?: number; status?: string }>,
@@ -111,7 +136,7 @@ function buildSalesTrend(
   }))
 }
 
-export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpenInvoice, onOpenInvoices, onOpenCustomers, hasBusiness, appointmentsEnabled, membershipsEnabled }: { onQuickAction: (action: QuickActionId) => void; onOpenInsights: () => void; onOpenInvoice: (invoiceId: number) => void; onOpenInvoices: () => void; onOpenCustomers: () => void; hasBusiness: boolean; appointmentsEnabled: boolean; membershipsEnabled: boolean }) {
+export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpenInvoice, onOpenInvoices, onOpenCustomers, hasBusiness, appointmentsEnabled, membershipsEnabled, topSlot }: { topSlot?: ReactNode; onQuickAction: (action: QuickActionId) => void; onOpenInsights: () => void; onOpenInvoice: (invoiceId: number) => void; onOpenInvoices: () => void; onOpenCustomers: () => void; hasBusiness: boolean; appointmentsEnabled: boolean; membershipsEnabled: boolean }) {
   const { data, loading, summary, selectedBusinessId } = useAppSelector((state) => state.businessDashboard)
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<number | null>(null)
   const [salesInterval, setSalesInterval] = useState<BusinessInsightsInterval>('MONTHLY')
@@ -167,8 +192,8 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
   const completedPercentage = collectionTotal > 0 ? completedRevenueAmount / collectionTotal * 100 : 0
   const remainingPercentage = collectionTotal > 0 ? 100 - completedPercentage : 0
   const revenueProgress = [
-    { label: 'Completed', amount: completedRevenueAmount, percentage: completedPercentage, color: '#4E2BCC' },
-    { label: 'Remaining', amount: remainingRevenueAmount, percentage: remainingPercentage, color: '#E8A23A' },
+    { label: 'Completed', amount: completedRevenueAmount, percentage: completedPercentage, color: '#0F032D' },
+    { label: 'Remaining', amount: remainingRevenueAmount, percentage: remainingPercentage, color: '#D9D9DC' },
   ]
   const summaryCards: Array<{ title: string; value: string; detail: string; icon: LucideIcon; tone: 'amber' | 'purple'; onClick: () => void }> = [
     {
@@ -190,19 +215,18 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
   ]
   const recentActivity = (summary?.recentTransactions?.length
     ? summary.recentTransactions
-    : data.invoices.slice(0, 3).map((invoice) => ({
+    : data.invoices.slice(0, 4).map((invoice) => ({
         id: invoice.id,
         name: invoice.invoiceNumber ?? `INV-${invoice.id}`,
         amount: Number(invoice.totalAmount ?? 0),
         meta: invoice.status ?? 'SENT',
-        date: invoice.issueDate
-          ? new Date(invoice.issueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-          : '—',
+        date: invoice.issueDate ?? '',
       })))
+    .slice(0, 4)
     .map((entry) => ({
       id: entry.id,
       label: entry.name,
-      detail: `${entry.meta} • ${entry.date}`,
+      detail: `${formatLongDate(entry.date)} · ${formatInvoiceStatus(entry.meta)}`,
       value: formatCurrency(entry.amount),
     }))
   const upcomingAppointments = data.appointments
@@ -214,6 +238,10 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
     })
     .sort((first, second) => new Date(first.scheduledAt ?? '').getTime() - new Date(second.scheduledAt ?? '').getTime())
     .slice(0, 3)
+  const todayEvents = [...appointmentsToday].sort((first, second) => new Date(first.scheduledAt ?? '').getTime() - new Date(second.scheduledAt ?? '').getTime())
+  const showingToday = todayEvents.length > 0
+  const eventsToShow = (showingToday ? todayEvents : upcomingAppointments).slice(0, 3)
+  const eventsCount = showingToday ? todayEvents.length : upcomingAppointments.length
   const selectedAppointment = data.appointments.find((appointment) => appointment.id === selectedAppointmentId)
   const selectedAppointmentCustomer = data.customers.find((customer) => customer.id === selectedAppointment?.customerId)
   const salesIntervalLabel = salesInterval.charAt(0) + salesInterval.slice(1).toLowerCase()
@@ -233,79 +261,79 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
 
   return (
     <>
-      <Box sx={{
-        px: 2,
-        pt: 1.4,
-        pb: 1.5,
-        background: 'linear-gradient(180deg, #4E2BCC 0%, #32128E 70%, #0F032D 100%)',
-        borderRadius: '0 0 24px 24px',
-      }}>
-        <ButtonBase
+      {/* Header: Figma "Rectangle 31" - one gradient behind greeting + revenue + actions, 35px bottom radius.
+          The first ~110px is the pale status-bar zone from the Figma swatch (pixel stops), the rest scales with height.
+          data-overview-hero lets the dashboard know when this block has fully scrolled away (pinned header). */}
+      <Box
+        data-overview-hero
+        sx={{
+          background: 'linear-gradient(180deg, #F1EBFC 0px, #CDBAF1 24px, #AE89F2 64px, #8C59F2 110px, #7648E4 36%, #5B34D4 52%, #4727BB 68%, #331A88 82%, #230F5E 92%, #0F032D 100%)',
+          borderRadius: '0 0 35px 35px',
+          pb: 2.2,
+        }}
+      >
+        {topSlot}
+        <Box sx={{ px: 2.2 }}>
+          <ButtonBase
             type="button"
             aria-label="Open business insights"
             onClick={onOpenInsights}
             disabled={!hasBusiness}
             sx={{
-              display: 'grid',
+              display: 'block',
               width: '100%',
-              gridTemplateColumns: secondaryMetrics.length > 0
-                ? 'minmax(0, 1.2fr) minmax(0, 0.8fr) 36px'
-                : 'minmax(0, 1fr) 36px',
-              alignItems: 'center',
               color: '#ffffff',
               textAlign: 'left',
-              mb: 1.8,
-              '&:hover': { opacity: 0.9 },
+              mt: 1.6,
+              mb: 2,
+              '&:hover': { opacity: 0.92 },
               '&.Mui-disabled': { color: '#ffffff', opacity: 0.7 },
             }}
           >
-            <Box sx={{ minWidth: 0, pr: 0.8 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
-                <Typography sx={{ fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.92)' }}>Total Revenue</Typography>
-                <ChevronDown size={15} />
-              </Box>
-              <Typography noWrap sx={{ mt: 0.25, fontSize: 28, fontWeight: 500, lineHeight: 1.08, letterSpacing: '-1.1px', color: '#ffffff' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'rgba(255,255,255,0.9)' }}>
+              <Typography sx={{ fontSize: 14, fontWeight: 300 }}>Total Revenue</Typography>
+              <ChevronDown size={14} />
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 0.4 }}>
+              <Typography noWrap sx={{ fontSize: 42, fontWeight: 400, lineHeight: 1.1, letterSpacing: '-1px', color: '#ffffff' }}>
                 {loading ? '…' : totalRevenue}
               </Typography>
-              <Typography sx={{ mt: 0.5, fontSize: 12, fontWeight: 600, color: '#d5ffc4' }}>
-                {data.invoices.length} {data.invoices.length === 1 ? 'invoice' : 'invoices'}
-              </Typography>
+              <Box sx={{ width: 42, height: 42, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: '50%', bgcolor: '#EFEFEF', color: '#0F032D' }}>
+                <ArrowUpRight size={20} />
+              </Box>
             </Box>
-          {secondaryMetrics.length > 0 && (
-            <Box sx={{ minWidth: 0, pl: 1.2, ml: 0.3, borderLeft: '1px solid rgba(255,255,255,0.2)', display: 'flex', flexDirection: 'column', justifyContent: 'space-around', gap: 0.6 }}>
-              {secondaryMetrics.map(({ label, value, icon: Icon }) => (
-                <Box key={label} sx={{ minWidth: 0 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.55, color: 'rgba(255,255,255,0.82)' }}>
-                    <Icon size={14} />
-                    <Typography noWrap sx={{ minWidth: 0, fontSize: 9.5, lineHeight: 1.2 }}>{label}</Typography>
+            <Typography sx={{ mt: 0.6, fontSize: 12, fontWeight: 400, color: '#CDF27E' }}>
+              {data.invoices.length} {data.invoices.length === 1 ? 'invoice' : 'invoices'}
+            </Typography>
+            {secondaryMetrics.length > 0 && (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.6, mt: 0.8 }}>
+                {secondaryMetrics.map(({ label, value, icon: Icon }) => (
+                  <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'rgba(255,255,255,0.85)' }}>
+                    <Icon size={12} />
+                    <Typography sx={{ fontSize: 10.5 }}>{label}</Typography>
+                    <Typography sx={{ fontSize: 12, fontWeight: 600, color: '#ffffff' }}>{value}</Typography>
                   </Box>
-                  <Typography sx={{ mt: 0.2, fontSize: 18, lineHeight: 1.1, fontWeight: 750, color: '#ffffff' }}>{value}</Typography>
-                </Box>
-              ))}
-            </Box>
-          )}
-          <Box sx={{ width: 36, height: 36, justifySelf: 'end', display: 'grid', placeItems: 'center', borderRadius: '50%', bgcolor: '#ffffff', color: '#34413a' }}>
-            <ArrowUpRight size={18} />
-          </Box>
-        </ButtonBase>
-        <QuickActionGrid actions={[
-          { id: 'invoice', label: 'Create Invoice', icon: FilePlus2, onClick: () => onQuickAction('invoice'), disabled: !hasBusiness },
-          { id: 'customer', label: 'Add Customer', icon: UserRoundPlus, onClick: () => onQuickAction('customer'), disabled: !hasBusiness },
-          { id: 'notification', label: 'Send Reminders', icon: BellRing, onClick: () => onQuickAction('notification'), disabled: !hasBusiness },
-        ]} />
+                ))}
+              </Box>
+            )}
+          </ButtonBase>
+          <QuickActionGrid actions={[
+            { id: 'invoice', label: 'Create Invoice', icon: FilePlus2, onClick: () => onQuickAction('invoice'), disabled: !hasBusiness },
+            { id: 'customer', label: 'Add Customer', icon: UserRoundPlus, onClick: () => onQuickAction('customer'), disabled: !hasBusiness },
+            { id: 'notification', label: 'Send Reminders', icon: BellRing, onClick: () => onQuickAction('notification'), disabled: !hasBusiness },
+          ]} />
+        </Box>
       </Box>
 
       <Stack spacing={1.6} sx={{ px: 2, pt: 1.7 }}>
+        {/* Completed / Remaining */}
         <Stack direction="row" spacing={1.5} sx={{ px: 0.5 }}>
-          {revenueProgress.map(({ label, amount, percentage }) => (
+          {revenueProgress.map(({ label, amount }) => (
             <Box key={label} sx={{ flex: 1, minWidth: 0 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 0.5 }}>
-                <Typography sx={{ color: 'text.secondary', fontSize: 10, lineHeight: 1.2 }}>{label}</Typography>
-                <Typography sx={{ color: 'text.secondary', fontSize: 10, lineHeight: 1.2, fontWeight: 700 }}>
-                  {collectionTotal > 0 ? `${Math.round(percentage)}%` : '—'}
-                </Typography>
-              </Box>
-              <Typography sx={{ mt: 0.25, color: 'text.primary', fontSize: 21, fontWeight: 500, letterSpacing: '-0.7px' }}>{formatCurrency(amount)}</Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: 12, lineHeight: 1.2 }}>{label}</Typography>
+              <Typography sx={{ mt: 0.3, color: 'text.primary', fontSize: 24, fontWeight: 400, letterSpacing: '-0.5px' }}>
+                {formatCurrency(amount)}
+              </Typography>
             </Box>
           ))}
         </Stack>
@@ -318,46 +346,19 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
           aria-valuetext={collectionTotal > 0
             ? `${Math.round(completedPercentage)}% completed, ${Math.round(remainingPercentage)}% remaining`
             : 'No billed revenue'}
-          sx={{
-            display: 'flex',
-            alignItems: 'stretch',
-            gap: completedPercentage > 0 && remainingPercentage > 0 ? 0.75 : 0,
-            height: 40,
-            overflow: 'hidden',
-            borderRadius: 1.8,
-            bgcolor: 'action.hover',
-          }}
+          sx={{ display: 'flex', gap: 1.2, height: 46 }}
         >
           <Box
             aria-hidden="true"
-            sx={{
-              flexGrow: completedPercentage,
-              flexBasis: 0,
-              minWidth: 0,
-              bgcolor: '#4E2BCC',
-              borderRadius: 'inherit',
-              transition: 'flex-grow 300ms ease',
-            }}
+            sx={{ flexGrow: Math.max(completedPercentage, 12), flexBasis: 0, minWidth: 0, bgcolor: '#0F032D', borderRadius: '14px', transition: 'flex-grow 300ms ease' }}
           />
-          {completedPercentage > 0 && remainingPercentage > 0 && (
-            <Box
-              aria-hidden="true"
-              sx={{ flex: '0 0 1px', bgcolor: '#70777D', alignSelf: 'stretch' }}
-            />
-          )}
           <Box
             aria-hidden="true"
-            sx={{
-              flexGrow: remainingPercentage,
-              flexBasis: 0,
-              minWidth: 0,
-              bgcolor: '#D8D8D8',
-              borderRadius: 'inherit',
-              transition: 'flex-grow 300ms ease',
-            }}
+            sx={{ flexGrow: Math.max(remainingPercentage, 12), flexBasis: 0, minWidth: 0, bgcolor: '#D9D9DC', borderRadius: '14px', transition: 'flex-grow 300ms ease' }}
           />
         </Box>
 
+        {/* Stat cards */}
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1.2 }}>
           {summaryCards.map(({ title, value, detail, icon: Icon, tone, onClick }) => (
             <ButtonBase
@@ -370,35 +371,36 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
                 display: 'block',
                 width: '100%',
                 minWidth: 0,
-                minHeight: 136,
-                p: 1.6,
-                borderRadius: 2.5,
+                minHeight: 132,
+                p: 1.5,
+                borderRadius: '16px',
                 bgcolor: 'background.paper',
-                boxShadow: '0 8px 20px rgba(20, 16, 35, 0.08)',
+                boxShadow: '0 2px 12px rgba(78, 43, 204, 0.08)',
                 textAlign: 'left',
                 color: 'inherit',
-                transition: 'box-shadow 150ms ease, transform 150ms ease',
-                '&:hover': { boxShadow: '0 10px 24px rgba(20, 16, 35, 0.14)', transform: 'translateY(-1px)' },
+                transition: 'box-shadow 150ms ease',
+                '&:hover': { boxShadow: '0 4px 16px rgba(78, 43, 204, 0.14)' },
                 '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
                 '&.Mui-disabled': { opacity: 0.6 },
               }}
             >
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                <Box sx={{ width: 34, height: 34, display: 'grid', placeItems: 'center', borderRadius: 1.5, bgcolor: tone === 'amber' ? '#FFF2D8' : '#F0E9FF', color: tone === 'amber' ? '#F59E0B' : '#5D36D3' }}>
-                  <Icon size={17} strokeWidth={2.1} />
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.2 }}>
+                <Box sx={{ width: 28, height: 28, display: 'grid', placeItems: 'center', borderRadius: '8px', bgcolor: tone === 'amber' ? '#FFF2D8' : '#F0E9FF', color: tone === 'amber' ? '#F59E0B' : '#5D36D3' }}>
+                  <Icon size={14} strokeWidth={2.1} />
                 </Box>
-                <ArrowUpRight size={17} color="#505650" />
+                <ArrowUpRight size={15} color="#0F032D" />
               </Box>
-              <Typography noWrap sx={{ color: 'text.primary', fontSize: 25, lineHeight: 1.1, fontWeight: 600, letterSpacing: '-0.7px' }}>{value}</Typography>
+              <Typography noWrap sx={{ color: 'text.primary', fontSize: 24, lineHeight: 1.1, fontWeight: 500, letterSpacing: '-0.5px' }}>{value}</Typography>
               <Typography noWrap sx={{ mt: 0.5, color: 'text.primary', fontSize: 11.5, lineHeight: 1.2 }}>{title}</Typography>
               <Typography noWrap sx={{ mt: 0.6, color: tone === 'amber' ? '#E89100' : '#4E2BCC', fontSize: 9.5, lineHeight: 1.2 }}>{detail}</Typography>
             </ButtonBase>
           ))}
         </Box>
 
-        <Box sx={{ backgroundColor: 'background.paper', borderRadius: 2.5, p: 1.6, border: '1px solid var(--mui-palette-divider)', boxShadow: '0 4px 14px rgba(0, 0, 0, 0.08)' }}>
+        {/* Sales Overview */}
+        <Box sx={{ backgroundColor: 'background.paper', borderRadius: '16px', p: 1.8, boxShadow: '0 2px 12px rgba(78, 43, 204, 0.08)' }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.2 }}>
-            <Typography sx={{ fontSize: 18, lineHeight: 1.2, fontWeight: 600, color: 'text.primary' }}>Sales Overview</Typography>
+            <Typography sx={{ fontSize: 16, lineHeight: 1.2, fontWeight: 500, color: 'text.primary' }}>Sales Overview</Typography>
             <ButtonBase
               id="sales-period-button"
               type="button"
@@ -406,7 +408,7 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
               aria-haspopup="menu"
               aria-expanded={Boolean(salesMenuAnchor)}
               onClick={(event) => setSalesMenuAnchor(event.currentTarget)}
-              sx={{ minHeight: 32, px: 0.9, gap: 0.5, border: '1px solid', borderColor: 'divider', borderRadius: 1.5, color: 'text.secondary' }}
+              sx={{ minHeight: 32, px: 0.9, gap: 0.5, border: '1px solid', borderColor: 'divider', borderRadius: '8px', color: 'text.secondary' }}
             >
               <Typography sx={{ fontSize: 11, fontWeight: 700 }}>{salesIntervalLabel}</Typography>
               <MoreVertical size={16} aria-hidden="true" />
@@ -445,35 +447,117 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
           )}
         </Box>
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1 }}>
-          <ActivityPanel
-            title="Recent Transactions"
-            entries={recentActivity.map((entry) => ({
-              label: entry.label,
-              detail: entry.detail,
-              value: entry.value,
-              badge: entry.label.slice(0, 2),
-              ariaLabel: `View invoice ${entry.label}`,
-              onClick: () => onOpenInvoice(entry.id),
-            }))}
-            emptyTitle="No activity"
-            emptyDescription="Financial activity will show here."
-          />
-          <ActivityPanel
-            title="Upcoming Appointments"
-            entries={upcomingAppointments.map((appointment) => ({
-              label: appointment.serviceName ?? 'Appointment',
-              detail: appointment.status ?? 'BOOKED',
-              value: appointment.scheduledAt
-                ? new Date(appointment.scheduledAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-                : '—',
-              badge: (appointment.serviceName ?? 'AP').slice(0, 2),
-              ariaLabel: `View appointment details for ${appointment.serviceName ?? `appointment ${appointment.id}`}`,
-              onClick: () => setSelectedAppointmentId(appointment.id),
-            }))}
-            emptyTitle="No appointments"
-            emptyDescription="Upcoming customer appointments will appear here."
-          />
+        {/* Appointments (Figma): title + "+" + lime arrow, then a "Today - N events" panel with coloured side bars */}
+        {appointmentsEnabled && (
+          <Box sx={{ bgcolor: 'background.paper', borderRadius: '20px', boxShadow: '0 2px 12px rgba(78, 43, 204, 0.08)', overflow: 'hidden' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1.4 }}>
+              <Typography sx={{ fontSize: 18, lineHeight: 1.2, fontWeight: 500, color: 'text.primary' }}>Appointments</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <IconButton
+                  aria-label="Add appointment"
+                  size="small"
+                  disabled={!hasBusiness}
+                  onClick={() => onQuickAction('appointment')}
+                  sx={{ color: '#4E2BCC' }}
+                >
+                  <Plus size={20} />
+                </IconButton>
+                <IconButton
+                  aria-label="Open appointments"
+                  disabled={!hasBusiness}
+                  onClick={() => onQuickAction('appointment')}
+                  sx={{ width: 30, height: 30, borderRadius: '8px', bgcolor: '#CDF27E', color: '#0F032D', '&:hover': { bgcolor: '#C2EA6A' }, '&.Mui-disabled': { bgcolor: '#CDF27E', opacity: 0.6 } }}
+                >
+                  <ArrowUpRight size={16} />
+                </IconButton>
+              </Box>
+            </Box>
+            <Box sx={{ borderTop: '1px solid', borderColor: 'divider', p: 1.5 }}>
+              <Box sx={{ border: '1px solid rgba(15, 3, 45, 0.07)', borderRadius: '16px', p: 1.6 }}>
+                {eventsToShow.length === 0 ? (
+                  <Box role="status" sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', py: 1 }}>
+                    <Box sx={{ width: 48, height: 48, display: 'grid', placeItems: 'center', borderRadius: '12px', bgcolor: '#F4F4F7', color: '#9A97A6', mb: 1 }}>
+                      <CalendarCheck2 size={22} />
+                    </Box>
+                    <Typography sx={{ fontSize: 13, fontWeight: 500, color: 'text.primary' }}>No appointments today</Typography>
+                    <Typography sx={{ mt: 0.3, fontSize: 10.5, color: 'text.secondary' }}>All clear. Add a new event to get started.</Typography>
+                  </Box>
+                ) : (
+                  <>
+                    <Typography sx={{ fontSize: 15, color: 'text.secondary', mb: 1.4 }}>
+                      {showingToday ? 'Today' : 'Upcoming'} - {eventsCount} {eventsCount === 1 ? 'event' : 'events'}
+                    </Typography>
+                    <Stack spacing={1.4}>
+                      {eventsToShow.map((appointment, index) => (
+                        <ButtonBase
+                          key={appointment.id}
+                          type="button"
+                          aria-label={`View appointment details for ${appointment.serviceName ?? `appointment ${appointment.id}`}`}
+                          onClick={() => setSelectedAppointmentId(appointment.id)}
+                          sx={{
+                            display: 'block',
+                            width: '100%',
+                            textAlign: 'left',
+                            pl: 1,
+                            borderLeft: '3px solid',
+                            borderColor: EVENT_BAR_COLORS[index % EVENT_BAR_COLORS.length],
+                            borderRadius: 0,
+                          }}
+                        >
+                          <Typography noWrap sx={{ fontSize: 12, lineHeight: 1.25, color: 'text.primary' }}>
+                            {appointment.serviceName ?? 'Appointment'}
+                          </Typography>
+                          <Typography sx={{ fontSize: 10, lineHeight: 1.3, color: 'text.secondary' }}>
+                            {showingToday
+                              ? formatEventTime(appointment.scheduledAt)
+                              : `${new Date(appointment.scheduledAt ?? '').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} · ${formatEventTime(appointment.scheduledAt)}`}
+                          </Typography>
+                        </ButtonBase>
+                      ))}
+                    </Stack>
+                  </>
+                )}
+              </Box>
+            </Box>
+          </Box>
+        )}
+
+        {/* Recent Transactions (Figma): plain list on the page, grey circle + invoice + date/status + amount */}
+        <Box sx={{ pb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.2, px: 0.5 }}>
+            <Typography sx={{ fontSize: 18, lineHeight: 1.2, fontWeight: 500, color: 'text.primary' }}>Recent Transactions</Typography>
+            <ButtonBase
+              type="button"
+              aria-label="See all invoices"
+              disabled={!hasBusiness}
+              onClick={onOpenInvoices}
+              sx={{ fontSize: 10.5, color: '#4E2BCC', px: 0.5, borderRadius: '6px' }}
+            >
+              See all
+            </ButtonBase>
+          </Box>
+          {recentActivity.length === 0 ? (
+            <Typography sx={{ px: 0.5, fontSize: 13, color: 'text.secondary' }}>No activity yet. Financial activity will show here.</Typography>
+          ) : (
+            <Stack spacing={1.3}>
+              {recentActivity.map((entry) => (
+                <ButtonBase
+                  key={entry.id}
+                  type="button"
+                  aria-label={`View invoice ${entry.label}`}
+                  onClick={() => onOpenInvoice(entry.id)}
+                  sx={{ display: 'flex', alignItems: 'center', gap: 1.4, width: '100%', px: 0.5, textAlign: 'left', borderRadius: '12px' }}
+                >
+                  <Box aria-hidden="true" sx={{ width: 38, height: 38, flexShrink: 0, borderRadius: '50%', bgcolor: '#F0F0F4' }} />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography noWrap sx={{ fontSize: 13, lineHeight: 1.25, color: 'text.primary' }}>{entry.label}</Typography>
+                    <Typography noWrap sx={{ fontSize: 10, lineHeight: 1.35, color: 'text.secondary' }}>{entry.detail}</Typography>
+                  </Box>
+                  <Typography sx={{ flexShrink: 0, fontSize: 13, color: 'text.primary' }}>{entry.value}</Typography>
+                </ButtonBase>
+              ))}
+            </Stack>
+          )}
         </Box>
       </Stack>
 

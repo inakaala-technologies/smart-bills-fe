@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Button, Container, Paper, Stack, Typography } from '@mui/material'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
@@ -25,7 +25,7 @@ import {
 import { addProfile, getCurrentUser, logoutUser, switchAccount, type Role } from '../../services/auth'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import type { RootState } from '../../store/store'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Search } from 'lucide-react'
 import { BusinessProductsSection } from './components/BusinessProductsSection'
 import { getBusinessProducts } from '../../services/api/billingApi'
 import { fetchBusinessDashboard, fetchBusinessSummary, setActiveTab,setBusinessFeatures, setBusinessHomeVisitCharge as setBusinessHomeVisitChargeAction, setSelectedBusinessId } from '../../store/businessDashboardSlice'
@@ -57,6 +57,9 @@ import { normalizeBusinessType } from '../../constants/businessTypes'
 import { v4 as uuidv4 } from 'uuid'
 
 const businessDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'customers', 'appointments', 'memberships', 'loyalty', 'offers', 'retention', 'callbacks', 'insights', 'search', 'profile']
+
+// Pale-to-ink header gradient sampled from the Figma swatch (compact headers)
+const COMPACT_HEADER_GRADIENT = 'linear-gradient(180deg, #F1EBFC 0%, #CDBAF1 14%, #AE89F2 30%, #8C59F2 46%, #5B34D4 66%, #331A88 84%, #0F032D 100%)'
 
 function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
@@ -131,6 +134,20 @@ export function BusinessDashboard() {
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false)
   const [isNotificationDialogOpen, setIsNotificationDialogOpen] = useState(false)
   const [isProfilePageOpen, setIsProfilePageOpen] = useState(false)
+  // Pinned (collapsed) header: appears smoothly on the Home tab once the page is scrolled
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const [isHeaderPinned, setIsHeaderPinned] = useState(false)
+  const heroEdgeRef = useRef<Element | null>(null)
+  const pinnedHeaderRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    setIsHeaderPinned(false)
+    heroEdgeRef.current = null
+    if (pinnedHeaderRef.current) {
+      pinnedHeaderRef.current.style.transform = 'translateY(-110%)'
+      pinnedHeaderRef.current.style.opacity = '0'
+    }
+    scrollRef.current?.scrollTo({ top: 0 })
+  }, [activeTab])
   const [businessForm, setBusinessForm] = useState({
     name: selectedBusiness?.businessName ?? selectedBusiness?.name ?? '',
     legalName: selectedBusiness?.name ?? '',
@@ -607,7 +624,15 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
     navigate(`/customer/${customerId}`)
   }
 
-  const invoiceRows = data.invoices.map((invoice) => {
+  // Newest invoice first (issue date, then id as tie-breaker). The list panel filters this same array,
+  // so All / Draft / Pending / Paid / Overdue all keep the newest-to-oldest order.
+  const invoiceTime = (issueDate?: string) => {
+    const time = issueDate ? new Date(issueDate).getTime() : Number.NaN
+    return Number.isNaN(time) ? 0 : time
+  }
+  const invoiceRows = [...data.invoices]
+    .sort((first, second) => invoiceTime(second.issueDate) - invoiceTime(first.issueDate) || second.id - first.id)
+    .map((invoice) => {
     const customer = data.customers.find((item) => item.id === invoice.customerId)
     const customerName = customer?.fullName ?? 'Customer'
     const initials = customerName
@@ -686,6 +711,21 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
     )
   }
 
+  // Header is built once: on the Home (overview) tab it is transparent and rendered
+  // INSIDE the overview gradient (via topSlot); on every other tab it renders standalone.
+  const appHeader = (
+    <AppHeader
+      authUser={authUser}
+      contextLabel={selectedBusiness?.businessName ?? selectedBusiness?.name ?? 'Business workspace'}
+      roleLabel="Business Owner"
+      menuId="profile-menu-page"
+      isMenuOpen={isProfilePageOpen}
+      showWorkspaceContext={activeTab !== 'overview'}
+      transparent={activeTab === 'overview'}
+      onOpenMenu={() => setIsProfilePageOpen(true)}
+    />
+  )
+
   return (
     <Box
       sx={{
@@ -719,17 +759,77 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
             flexDirection: 'column',
           }}
         >
-          <AppHeader
-            authUser={authUser}
-            contextLabel={selectedBusiness?.businessName ?? selectedBusiness?.name ?? 'Business workspace'}
-            roleLabel="Business Owner"
-            menuId="profile-menu-page"
-            isMenuOpen={isProfilePageOpen}
-            showWorkspaceContext={activeTab !== 'overview'}
-            onOpenMenu={() => setIsProfilePageOpen(true)}
-          />
+          {activeTab === 'search' ? (
+            // Figma "Search" screen: gradient header with lime search icon + title, bell and photo
+            <Box sx={{ flexShrink: 0, background: COMPACT_HEADER_GRADIENT, borderRadius: '0 0 35px 35px', pb: 2.4 }}>
+              <AppHeader
+                authUser={authUser}
+                contextLabel={selectedBusiness?.businessName ?? selectedBusiness?.name ?? 'Business workspace'}
+                roleLabel="Business Owner"
+                menuId="profile-menu-page"
+                isMenuOpen={isProfilePageOpen}
+                showWorkspaceContext={false}
+                transparent
+                pageTitle="Search"
+                pageIcon={<Search size={26} strokeWidth={2} color="#CDF27E" aria-hidden="true" />}
+                onOpenMenu={() => setIsProfilePageOpen(true)}
+              />
+            </Box>
+          ) : (
+            activeTab !== 'overview' && appHeader
+          )}
 
-          <Box sx={{
+          {activeTab === 'overview' && (
+            <Box
+              ref={pinnedHeaderRef}
+              aria-hidden={!isHeaderPinned}
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                zIndex: 5,
+                pb: 2.2,
+                background: COMPACT_HEADER_GRADIENT,
+                borderRadius: '0 0 35px 35px',
+                boxShadow: '0 10px 28px rgba(15, 3, 45, 0.28)',
+                // transform/opacity are driven by scroll position (see onScroll) so the header follows the finger
+                transform: 'translateY(-110%)',
+                opacity: 0,
+                pointerEvents: isHeaderPinned ? 'auto' : 'none',
+                willChange: 'transform, opacity',
+              }}
+            >
+              {appHeader}
+            </Box>
+          )}
+
+          <Box
+            ref={scrollRef}
+            onScroll={(event) => {
+              if (activeTab !== 'overview') return
+              const container = event.currentTarget
+              // The pinned header may only appear once the quick-action buttons have scrolled completely out of view.
+              if (!heroEdgeRef.current || !container.contains(heroEdgeRef.current)) {
+                heroEdgeRef.current = container.querySelector('[data-overview-hero]')
+                  ?? Array.from(container.querySelectorAll('button, [role="button"]'))
+                    .find((el) => /send reminders/i.test(el.textContent ?? '')) ?? null
+              }
+              const edge = heroEdgeRef.current
+              // How far (px) the hero has scrolled past the top edge; the header glides in over the next 90px.
+              const distance = edge
+                ? container.getBoundingClientRect().top - (edge.getBoundingClientRect().bottom + (edge.hasAttribute('data-overview-hero') ? 0 : 32))
+                : container.scrollTop - 380
+              const raw = Math.min(1, Math.max(0, distance / 90))
+              const eased = 1 - Math.pow(1 - raw, 2)
+              const pinnedEl = pinnedHeaderRef.current
+              if (pinnedEl) {
+                pinnedEl.style.transform = `translateY(${(eased - 1) * 110}%)`
+                pinnedEl.style.opacity = String(Math.min(1, eased * 1.5))
+              }
+              setIsHeaderPinned(raw > 0.5)
+            }}
+            sx={{
             px: activeTab === 'overview' ? 0 : { xs: 2, sm: 2.2 },
             pt: activeTab === 'overview' ? 0 : { xs: 2, sm: 2.2 },
             pb: 'calc(96px + env(safe-area-inset-bottom))',
@@ -759,6 +859,7 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
             <>
               {activeTab === 'overview' && (
                 <BusinessDashboardOverview
+                  topSlot={appHeader}
                   onQuickAction={handleQuickAction}
                   onOpenInsights={() => changeTab('insights')}
                   onOpenInvoices={() => changeTab('invoices')}
