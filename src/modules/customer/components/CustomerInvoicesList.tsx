@@ -20,6 +20,7 @@ import {
 import SearchIcon from '@mui/icons-material/Search'
 import { EmptyState } from '../../../components/EmptyState'
 import { RecentActivityItem } from '../../../components/RecentActivityItem'
+import { BUSINESS_TIME_ZONE, parseBusinessDateTime, parseDateOnly } from '../../../utils/date'
 import {
   fetchBusinessById,
   fetchFamilyInvoices,
@@ -137,9 +138,9 @@ export function CustomerInvoicesList({
         .map((part) => part[0]?.toUpperCase() ?? '')
         .join('') || 'B'
 
-    const invoiceDate = invoice.issueDate
-      ? new Date(invoice.issueDate)
-      : null
+    const invoiceDate = parseDateOnly(invoice.issueDate)
+    const invoiceCreatedAt = parseBusinessDateTime(invoice.createdAt)
+    const displayedDate = invoiceCreatedAt ?? invoiceDate
 
     const status = String(invoice.status ?? 'SENT').toUpperCase()
     const displayStatus = ['SENT', 'PENDING', 'UNPAID'].includes(status)
@@ -156,19 +157,20 @@ export function CustomerInvoicesList({
       status,
       amount: formatCurrency(invoice.totalAmount),
       amountValue,
-      timestamp: invoiceDate?.getTime() ?? 0,
+      timestamp: displayedDate?.getTime() ?? 0,
       subtitle: `${invoice.invoiceNumber ?? `INV-${invoice.id}`} · ${displayStatus}`,
       date:
-        invoiceDate?.toLocaleDateString('en-IN', {
+        displayedDate?.toLocaleDateString('en-IN', {
+          timeZone: BUSINESS_TIME_ZONE,
           day: 'numeric',
           month: 'short',
           year: 'numeric',
         }) ?? '—',
-      time:
-        invoiceDate?.toLocaleTimeString('en-IN', {
-          hour: 'numeric',
-          minute: '2-digit',
-        }) ?? '',
+      time: invoiceCreatedAt?.toLocaleTimeString('en-IN', {
+        timeZone: BUSINESS_TIME_ZONE,
+        hour: 'numeric',
+        minute: '2-digit',
+      }) ?? '',
       badge: initials,
     }
   })
@@ -181,6 +183,7 @@ export function CustomerInvoicesList({
         const searchableDate = entry.timestamp
           ? new Date(entry.timestamp)
               .toLocaleDateString('en-IN', {
+                timeZone: BUSINESS_TIME_ZONE,
                 day: 'numeric',
                 month: 'short',
                 year: 'numeric',
@@ -422,6 +425,24 @@ export function CustomerInvoicesList({
                       : 'Not provided'}
                   </Typography>
                 </Box>
+              </Stack>
+              <Stack spacing={0.8} sx={{ borderTop: '1px solid var(--mui-palette-divider)', pt: 1.2 }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Items</Typography>
+                {(selectedInvoice.invoice.items?.length ?? 0) > 0
+                  ? selectedInvoice.invoice.items?.map((item) => (
+                    <Box key={item.id} sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography sx={{ color: 'text.primary', fontWeight: 700 }}>{item.productName}</Typography>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                          {item.quantity.toLocaleString('en-IN', { maximumFractionDigits: 3 })} × {formatCurrency(item.unitPrice)} · GST {item.gstRate}%
+                        </Typography>
+                      </Box>
+                      <Typography sx={{ color: 'text.primary', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        {formatCurrency(item.quantity * item.unitPrice)}
+                      </Typography>
+                    </Box>
+                  ))
+                  : <Typography variant="caption" color="text.secondary">Item details are unavailable for this invoice.</Typography>}
               </Stack>
               <Stack spacing={0.6} sx={{ borderTop: '1px solid var(--mui-palette-divider)', pt: 1.2 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>

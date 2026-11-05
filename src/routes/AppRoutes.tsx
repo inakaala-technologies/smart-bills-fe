@@ -16,6 +16,7 @@ import { appStyles } from '../theme/styles'
 import { setAuthUser } from '../store/authSlice'
 import { getDashboardPath, isDashboardPathname } from './dashboardPaths'
 import { isDashboardFresh } from '../store/dashboardFreshness'
+import { parseDateOnly } from '../utils/date'
 
 const DetailView = lazy(() => import('../components/DetailView').then((m) => ({ default: m.DetailView })))
 const BusinessDetailPage = lazy(() => import('../components/BusinessDetailPage').then((m) => ({ default: m.BusinessDetailPage })))
@@ -117,7 +118,7 @@ function BusinessDetailRoute({
             amount: `₹${Number(invoice.totalAmount ?? 0).toLocaleString('en-IN')}`,
             status: invoice.status ?? 'PAID',
             date: invoice.issueDate
-              ? new Date(invoice.issueDate).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+              ? parseDateOnly(invoice.issueDate)?.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) ?? 'Recently'
               : 'Recently',
           })),
         )

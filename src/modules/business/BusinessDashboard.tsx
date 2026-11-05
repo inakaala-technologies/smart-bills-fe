@@ -18,7 +18,7 @@ import {
   updateAppointmentStaff,
   updateAppointmentStatus,
   updateInvoiceStatus,
-  type AppointmentStaffOption,
+  type AppointmentStaffView,
   type AppointmentStatus,
   type AppointmentSummary,
   type DashboardData,
@@ -33,6 +33,7 @@ import { fetchBusinessDashboard, fetchBusinessSummary, setActiveTab,setBusinessF
 import { setAuthUser } from '../../store/authSlice'
 import { getDashboardPath } from '../../routes/dashboardPaths'
 import { AppointmentListCard } from './components/AppointmentListCard'
+import { AppointmentStaffManager } from './components/AppointmentStaffManager'
 import { AppointmentServiceManager } from './components/AppointmentServiceManager'
 import { BottomNavBar } from './components/BottomNavBar'
 import { BusinessOverview } from './components/BusinessOverview'
@@ -56,6 +57,7 @@ import type { BusinessFeature } from './components/BusinessProfileCard'
 import type { QuickActionId } from './components/QuickActionGrid'
 import type { DashboardTab } from '../types'
 import { normalizeBusinessType } from '../../constants/businessTypes'
+import { getBusinessDateInputValue, parseDateOnly } from '../../utils/date'
 import { v4 as uuidv4 } from 'uuid'
 
 const businessDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'customers', 'appointments', 'memberships', 'loyalty', 'offers', 'retention', 'callbacks', 'payslips', 'insights', 'search', 'profile']
@@ -69,12 +71,7 @@ function formatCurrency(value?: number) {
 }
 
 function getLocalDate() {
-  const date = new Date()
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-
-  return `${year}-${month}-${day}`
+  return getBusinessDateInputValue()
 }
 
 export function BusinessDashboard() {
@@ -181,7 +178,8 @@ export function BusinessDashboard() {
     return explicitAppointment
   }, [appointmentIdFromUrl, data.appointments, explicitAppointment])
 
-  const [staffOptions, setStaffOptions] = useState<AppointmentStaffOption[]>([])
+  const [staffOptions, setStaffOptions] = useState<AppointmentStaffView[]>([])
+  const [appointmentStaffRefreshKey, setAppointmentStaffRefreshKey] = useState(0)
 
   const clearAppointmentUrlParam = () => {
     setExplicitAppointment(null)
@@ -204,7 +202,7 @@ export function BusinessDashboard() {
     return () => {
       isCurrent = false
     }
-  }, [selectedBusiness?.id])
+  }, [appointmentStaffRefreshKey, selectedBusiness?.id])
 
   useEffect(() => {
     const tabParam = searchParams.get('tab')
@@ -258,15 +256,17 @@ export function BusinessDashboard() {
     )
   }
 
-  const handleStaffAssignFromDialog = async (appointmentId: number, staffUserId?: number) => {
-    const result = await updateAppointmentStaff(appointmentId, staffUserId)
+  const handleStaffAssignFromDialog = async (appointmentId: number, staffId?: number) => {
+    const result = await updateAppointmentStaff(appointmentId, staffId)
     if (!result.ok) {
       throw new Error(result.message ?? 'Could not update the assigned staff member.')
     }
 
     dispatch(fetchBusinessDashboard(selectedBusinessId ?? undefined))
     setSelectedAppointmentForDetails((current) =>
-      current && current.id === appointmentId ? { ...current, staffUserId } : current,
+      current && current.id === appointmentId
+        ? { ...current, staffId, staffUserId: staffOptions.find((staff) => staff.staffId === staffId)?.userId }
+        : current,
     )
   }
 
@@ -580,6 +580,12 @@ export function BusinessDashboard() {
   gstAmount,
   totalAmount,
   invoiceDiscountAmount,
+  items: items.map(({ productName, quantity, unitPrice, gstRate }) => ({
+    productName: productName.trim(),
+    quantity,
+    unitPrice,
+    gstRate,
+  })),
   ...(invoiceForm.discountValue.trim() ? {
     invoiceDiscountType: invoiceForm.discountType,
     invoiceDiscountValue: discountValue,
@@ -636,7 +642,7 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
   // Newest invoice first (issue date, then id as tie-breaker). The list panel filters this same array,
   // so All / Draft / Pending / Paid / Overdue all keep the newest-to-oldest order.
   const invoiceTime = (issueDate?: string) => {
-    const time = issueDate ? new Date(issueDate).getTime() : Number.NaN
+    const time = parseDateOnly(issueDate)?.getTime() ?? Number.NaN
     return Number.isNaN(time) ? 0 : time
   }
   const invoiceRows = [...data.invoices]
@@ -650,7 +656,7 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase() ?? '')
       .join('') || 'C'
-    const invoiceDate = invoice.issueDate ? new Date(invoice.issueDate) : null
+    const invoiceDate = parseDateOnly(invoice.issueDate)
 
     return {
       id: invoice.id,
@@ -1030,20 +1036,28 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
             {activeTab === 'appointments' && (
               <Stack spacing={1.6}>
                 {selectedBusiness && (
-                  <AppointmentServiceManager
-                    key={selectedBusiness.id}
-                    businessId={selectedBusiness.id}
-                    appointmentsEnabled={selectedBusiness.appointmentsEnabled ?? false}
-                    homeServicesEnabled={homeServicesEnabled}
-                    onToggleHomeServices={(enabled) => handleFeatureToggle('homeServices', enabled)}
-                    homeVisitCharge={selectedBusiness.homeVisitCharge ?? 0}
-                    onSaveHomeVisitCharge={handleSaveHomeVisitCharge}
-                    onConfigurationChanged={() => dispatch(fetchBusinessDashboard(selectedBusiness.id))}
-                  />
+                  <>
+                    <AppointmentServiceManager
+                      key={selectedBusiness.id}
+                      businessId={selectedBusiness.id}
+                      appointmentsEnabled={selectedBusiness.appointmentsEnabled ?? false}
+                      homeServicesEnabled={homeServicesEnabled}
+                      onToggleHomeServices={(enabled) => handleFeatureToggle('homeServices', enabled)}
+                      homeVisitCharge={selectedBusiness.homeVisitCharge ?? 0}
+                      onSaveHomeVisitCharge={handleSaveHomeVisitCharge}
+                      onConfigurationChanged={() => dispatch(fetchBusinessDashboard(selectedBusiness.id))}
+                    />
+                    <AppointmentStaffManager
+                      key={selectedBusiness.id}
+                      businessId={selectedBusiness.id}
+                      onStaffAdded={() => setAppointmentStaffRefreshKey((current) => current + 1)}
+                    />
+                  </>
                 )}
                 {appointmentsEnabled && (
                   <AppointmentListCard
                     businessId={selectedBusinessId ?? selectedBusiness?.id ?? 0}
+                    staffRefreshKey={appointmentStaffRefreshKey}
                     appointments={data.appointments}
                     customers={data.customers}
                     selectedAppointmentId={selectedAppointmentForDetails?.id}

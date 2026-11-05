@@ -176,6 +176,12 @@ export function DetailView() {
         gstAmount,
         totalAmount: Number((grossAmount - invoiceDiscountAmount).toFixed(2)),
         invoiceDiscountAmount,
+        items: items.map(({ productName, quantity, unitPrice, gstRate }) => ({
+          productName: productName.trim(),
+          quantity,
+          unitPrice,
+          gstRate,
+        })),
         ...(invoiceForm.discountValue.trim() ? {
           invoiceDiscountType: invoiceForm.discountType,
           invoiceDiscountValue: discountValue,
