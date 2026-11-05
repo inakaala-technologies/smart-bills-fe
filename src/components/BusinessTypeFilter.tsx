@@ -18,7 +18,14 @@ export function BusinessTypeFilter({ id, value, onChange }: BusinessTypeFilterPr
         value={value}
         label="Business type"
         onChange={(event) => onChange(event.target.value)}
-        sx={{ backgroundColor: '#fff' }}
+        sx={{
+          // Theme-aware (was hard-coded #fff, unreadable in dark mode)
+          backgroundColor: 'background.paper',
+          color: 'text.primary',
+          // Keep the selected icon and its label on one line
+          '& .MuiSelect-select': { display: 'flex', alignItems: 'center' },
+        }}
+        MenuProps={{ slotProps: { paper: { sx: { backgroundImage: 'none', bgcolor: 'background.paper', color: 'text.primary' } } } }}
       >
         <MenuItem value="ALL">
           <ListItemIcon sx={{ minWidth: 34 }}><Store size={17} /></ListItemIcon>

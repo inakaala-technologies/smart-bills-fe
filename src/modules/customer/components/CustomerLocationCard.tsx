@@ -303,7 +303,7 @@ export function CustomerLocationCard({
     savedLocation.longitude !== null
 
   return (
-    <Box sx={{ mb: 2 }}>
+    <Box sx={{ mb: 2, minWidth: 0, maxWidth: '100%' }}>
       {/* Customer location selector */}
       <LocationPicker
         value={location}
@@ -695,22 +695,19 @@ export function CustomerLocationCard({
                 !businessesError &&
                 nearbyBusinesses.length > 0 && (
                   <>
-                    <Stack
-                      direction={{ xs: 'column', sm: 'row' }}
-                      spacing={1}
-                      sx={{
-                        alignItems: { xs: 'stretch', sm: 'center' },
-                        justifyContent: 'space-between',
-                        mb: 1,
-                      }}
-                    >
+                    {/* Always stacked: the app is a fixed phone-width column, so the browser
+                        window width (sm breakpoint) must not decide this layout. */}
+                    <Stack spacing={1} sx={{ mb: 1, minWidth: 0 }}>
                       <Typography
                         variant="caption"
                         sx={{ color: 'text.secondary', fontWeight: 800 }}
                       >
                         {filteredBusinesses.length} nearby businesses
                       </Typography>
-                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      <Stack
+                        direction="row"
+                        sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1, minWidth: 0 }}
+                      >
                         <Chip
                           label="Home services"
                           size="small"
@@ -720,11 +717,20 @@ export function CustomerLocationCard({
                           onClick={() => setHomeServicesOnly((current) => !current)}
                           aria-pressed={homeServicesOnly}
                         />
-                        <BusinessTypeFilter
-                          id="nearby-business-type"
-                          value={businessTypeFilter}
-                          onChange={setBusinessTypeFilter}
-                        />
+                        {/* Dropdown shrinks to the space left in the row instead of a fixed 190px */}
+                        <Box
+                          sx={{
+                            flex: '1 1 170px',
+                            minWidth: 0,
+                            '& .MuiFormControl-root': { minWidth: 0, width: '100%' },
+                          }}
+                        >
+                          <BusinessTypeFilter
+                            id="nearby-business-type"
+                            value={businessTypeFilter}
+                            onChange={setBusinessTypeFilter}
+                          />
+                        </Box>
                       </Stack>
                     </Stack>
                     {filteredBusinesses.length > 0 ? (
