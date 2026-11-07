@@ -50,7 +50,7 @@ const customerSteps: WalkthroughStep[] = [
   {
     icon: FileText,
     title: 'Bills, receipts and payments',
-    description: 'Your Documents tab keeps every bill in one place so nothing gets lost.',
+    description: 'Your Invoices tab keeps business invoices and receipts in one place.',
     points: ['Unpaid bills are clearly marked', 'Tap any bill to see its full details', 'Review receipts and payment history anytime'],
   },
   {

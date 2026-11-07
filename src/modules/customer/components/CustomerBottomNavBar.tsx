@@ -5,7 +5,7 @@ import type { DashboardTab } from '../../types'
 const roleNav: Array<{ key: DashboardTab; label: string; icon: LucideIcon }> = [
   { key: 'overview', label: 'Home', icon: Home },
   { key: 'businesses', label: 'Businesses', icon: LayoutGrid },
-  { key: 'invoices', label: 'Documents', icon: FileText },
+  { key: 'invoices', label: 'Invoices', icon: FileText },
   { key: 'appointments', label: 'Bookings', icon: CalendarCheck2 },
 ]
 

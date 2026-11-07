@@ -98,7 +98,7 @@ export function CustomerProfilePanel({ authUser, data, onProfileUpdated, onOpenM
   }
 
   const profileActions = [
-    { label: 'My Documents', icon: FileText, onClick: onOpenDocuments, trailing: data.documents.length > 0 ? `${data.documents.length}` : undefined },
+    { label: 'My invoices', icon: FileText, onClick: onOpenDocuments, trailing: data.invoices.length > 0 ? `${data.invoices.length}` : undefined },
     { label: 'Family', icon: UsersRound, onClick: onOpenFamily },
     { label: 'Settings', icon: Settings, onClick: onOpenManageDialog },
     { label: 'Help & Support', icon: CircleHelp, onClick: () => setHelpOpen(true) },

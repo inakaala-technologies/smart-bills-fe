@@ -80,7 +80,7 @@ export function CustomerProfileMenuPage({
       items: [
         { label: 'Home', icon: Home, onClick: () => onNavigateTab('overview') },
         { label: 'Businesses', icon: LayoutGrid, onClick: () => onNavigateTab('businesses') },
-        { label: 'Documents', icon: FileText, onClick: () => onNavigateTab('invoices') },
+        { label: 'Invoices', icon: FileText, onClick: () => onNavigateTab('invoices') },
         { label: 'Bookings', icon: CalendarCheck2, onClick: () => onNavigateTab('appointments') },
       ],
     },

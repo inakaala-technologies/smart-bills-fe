@@ -57,6 +57,7 @@ const customerDashboardTabs: DashboardTab[] = [
   'rewards',
   'memberships',
   'bills',
+  'bill-documents',
   'insights',
   'payslips',
   'profile',
@@ -393,6 +394,12 @@ export function CustomerDashboard() {
             />
 
             {activeTab === 'bills' && <CustomerBillsPage />}
+            {activeTab === 'bill-documents' && (
+              <CustomerBillsPage
+                categoryCodes={['DOCUMENTS']}
+                title="Vehicle Documents"
+              />
+            )}
 
             {activeTab === 'overview' && (
               <Box>
@@ -453,7 +460,7 @@ export function CustomerDashboard() {
                     </Box>
                     <Box sx={{ minWidth: 0 }}>
                       <Typography sx={{ fontWeight: 700, color: 'text.primary', fontSize: '15px', lineHeight: 1.25 }}>
-                        Insurance
+                        Insurance Catalog
                       </Typography>
                       <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '13px', display: 'block', mt: 0.2 }}>
                         Health, vehicle, life, travel and more

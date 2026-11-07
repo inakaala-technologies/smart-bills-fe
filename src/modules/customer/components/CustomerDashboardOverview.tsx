@@ -1,5 +1,5 @@
 import { Box, ButtonBase, Typography } from '@mui/material'
-import { CalendarCheck2, ChartColumnIncreasing, ChevronRight, ShieldCheck, Tag, ReceiptText } from 'lucide-react'
+import { CalendarCheck2, ChartColumnIncreasing, ChevronRight, FileText, ShieldCheck, Tag, ReceiptText } from 'lucide-react'
 import type { DashboardData } from '../../../services/api'
 import type { DashboardTab } from '../../types'
 
@@ -74,10 +74,11 @@ export function SummaryCards({ data, loading, offersCount, onSelectTab }: Summar
     { label: 'Memberships', count: data.memberships.length, tab: 'memberships' as const, icon: ShieldCheck },
     { label: 'Appointments', count: data.appointments.length, tab: 'appointments' as const, icon: CalendarCheck2 },
     { label: 'Bills', count: 0, tab: 'bills' as const, icon: ReceiptText },
+    { label: 'Documents', count: 0, tab: 'bill-documents' as const, icon: FileText },
   ]
 
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: { xs: 1.1, sm: 1.4 }, my: 2.2 }}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(4, minmax(0, 1fr))' }, gap: { xs: 1.1, sm: 1.4 }, my: 2.2 }}>
       {summaryCards.map(({ label, count, tab, icon: Icon }) => (
         <ButtonBase
           key={label}
