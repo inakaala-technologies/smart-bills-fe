@@ -1,4 +1,5 @@
 import {
+  Box,
   Button,
   Dialog,
   DialogContent,
@@ -7,11 +8,9 @@ import {
   List,
   ListItem,
   Typography,
-  alpha,
 } from '@mui/material'
 import { Building2, UserRound } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Box } from '@mui/material'
 import type { Role } from '../services/auth'
 
 type ProfileManagerDialogProps = {
@@ -23,6 +22,19 @@ type ProfileManagerDialogProps = {
   onSwitchAccount?: (role: Role) => void
   onAddProfile?: (role: Role) => void
 }
+
+const LIME = '#CDF27E'
+const INK = '#0F032D'
+
+const pillButtonSx = {
+  minWidth: 74,
+  minHeight: 34,
+  borderRadius: 999,
+  textTransform: 'none',
+  fontWeight: 600,
+  boxShadow: 'none',
+  flexShrink: 0,
+} as const
 
 export function ProfileManagerDialog({
   open,
@@ -39,10 +51,25 @@ export function ProfileManagerDialog({
   ]
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
-      <DialogTitle sx={{ pb: 1.25, fontWeight: 800 }}>Manage profiles</DialogTitle>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      maxWidth="xs"
+      slotProps={{
+        paper: {
+          sx: {
+            borderRadius: '24px',
+            backgroundColor: 'background.paper',
+            backgroundImage: 'none',
+            border: '1px solid var(--mui-palette-divider)',
+          },
+        },
+      }}
+    >
+      <DialogTitle sx={{ pb: 1.25, fontWeight: 600, color: 'text.primary' }}>Manage profiles</DialogTitle>
       <DialogContent sx={{ px: 2, pb: 2 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+        <Typography variant="body2" sx={{ mb: 1.5, color: 'text.secondary' }}>
           You can keep one business profile and one customer profile, or both at the same time.
         </Typography>
 
@@ -56,32 +83,42 @@ export function ProfileManagerDialog({
               <ListItem
                 key={role}
                 disablePadding
-                sx={(theme) => ({
+                sx={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   gap: 1,
-                  border: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
-                  borderRadius: 2.5,
+                  // Theme-token strings (not theme.palette.*) so light AND dark mode both resolve correctly
+                  border: '1px solid',
+                  borderColor: isCurrent ? 'primary.main' : 'divider',
+                  borderRadius: '14px',
                   px: 1.4,
-                  py: 1,
-                  background: isCurrent ? alpha(theme.palette.primary.main, 0.04) : theme.palette.background.paper,
-                })}
+                  py: 1.1,
+                  bgcolor: 'action.hover',
+                }}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
-                  <BoxIcon>
-                    <Icon size={16} />
-                  </BoxIcon>
-                  <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>{label}</Typography>
-                    <Typography variant="caption" color="text.secondary">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, minWidth: 0 }}>
+                  <IconTile>
+                    <Icon size={17} />
+                  </IconTile>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, color: 'text.primary' }}>{label}</Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                       {isCurrent ? 'Current profile' : isAvailable ? 'Available' : 'Not added'}
                     </Typography>
                   </Box>
                 </Box>
 
                 {isCurrent ? (
-                  <Button variant="contained" size="small" disabled sx={{ borderRadius: 999, textTransform: 'none', fontWeight: 700 }}>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    disabled
+                    sx={{
+                      ...pillButtonSx,
+                      '&.Mui-disabled': { bgcolor: 'action.selected', color: 'primary.main', opacity: 1 },
+                    }}
+                  >
                     Active
                   </Button>
                 ) : isAvailable ? (
@@ -92,7 +129,7 @@ export function ProfileManagerDialog({
                       onSwitchAccount?.(role)
                       onClose()
                     }}
-                    sx={{ borderRadius: 999, textTransform: 'none', fontWeight: 700 }}
+                    sx={{ ...pillButtonSx, borderColor: 'primary.main', color: 'primary.main' }}
                   >
                     Switch
                   </Button>
@@ -104,12 +141,12 @@ export function ProfileManagerDialog({
                       onAddProfile?.(role)
                       onClose()
                     }}
-                    sx={{ borderRadius: 999, textTransform: 'none', fontWeight: 700 }}
+                    sx={{ ...pillButtonSx, bgcolor: LIME, color: INK, '&:hover': { bgcolor: '#C2E86C', boxShadow: 'none' } }}
                   >
                     Add
                   </Button>
                 ) : (
-                  <Button variant="text" size="small" disabled sx={{ borderRadius: 999, textTransform: 'none', fontWeight: 700 }}>
+                  <Button variant="text" size="small" disabled sx={pillButtonSx}>
                     Locked
                   </Button>
                 )}
@@ -119,7 +156,7 @@ export function ProfileManagerDialog({
         </List>
 
         <Divider sx={{ my: 1.5 }} />
-        <Button fullWidth variant="text" onClick={onClose} sx={{ fontWeight: 700, textTransform: 'none' }}>
+        <Button fullWidth variant="text" onClick={onClose} sx={{ fontWeight: 600, textTransform: 'none', color: 'primary.main' }}>
           Close
         </Button>
       </DialogContent>
@@ -127,21 +164,22 @@ export function ProfileManagerDialog({
   )
 }
 
-function BoxIcon({ children }: { children: ReactNode }) {
+function IconTile({ children }: { children: ReactNode }) {
   return (
-    <div
-      style={{
-        width: 32,
-        height: 32,
-        borderRadius: 10,
+    <Box
+      sx={{
+        width: 34,
+        height: 34,
+        flexShrink: 0,
+        borderRadius: '10px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'rgba(15, 118, 110, 0.08)',
-        color: '#0f766e',
+        bgcolor: 'action.selected',
+        color: 'primary.main',
       }}
     >
       {children}
-    </div>
+    </Box>
   )
 }

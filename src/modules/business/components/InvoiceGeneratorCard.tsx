@@ -47,6 +47,13 @@ export type InvoiceGeneratorCardProps = {
   onCreateInvoice: (status: 'DRAFT' | 'SENT' | 'PAID', invoiceMode: 'products' | 'membership') => void
 }
 
+// Today's date as yyyy-mm-dd in the user's LOCAL time zone.
+// (toISOString() uses UTC and can return yesterday's date around midnight in India.)
+const getTodayLocal = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export function InvoiceGeneratorCard({
   open,
   businessId,
@@ -188,6 +195,8 @@ export function InvoiceGeneratorCard({
 
   const payLater = payLaterChosen || Boolean(invoiceForm.dueDate)
   const discountOpen = showDiscount || Number(invoiceForm.discountValue) > 0
+  const today = getTodayLocal()
+  const isDueDateInPast = Boolean(invoiceForm.dueDate) && invoiceForm.dueDate < today
 
   const handleClose = () => {
     setIsBillPreviewOpen(false)
@@ -297,6 +306,17 @@ const handleAddCustomer = async () => {
       setPreviewError(invoiceForm.discountType === 'PERCENTAGE'
         ? 'Enter a discount percentage from 0 to 100.'
         : 'Enter a discount amount no greater than the invoice total.')
+      return
+    }
+
+    // Pay later needs a due date, and it must be today or a future date.
+    if (payLater && !invoiceForm.dueDate) {
+      setPreviewError('Select a due date for a pay later invoice.')
+      return
+    }
+
+    if (payLater && invoiceForm.dueDate < today) {
+      setPreviewError('Due date cannot be in the past. Choose today or a later date.')
       return
     }
 
@@ -749,7 +769,12 @@ const handleAddCustomer = async () => {
                   value={invoiceForm.dueDate}
                   onChange={(event) => onInvoiceFieldChange('dueDate', event.target.value)}
                   fullWidth
-                  slotProps={{ inputLabel: { shrink: true } }}
+                  error={isDueDateInPast}
+                  helperText={isDueDateInPast ? 'Due date cannot be in the past.' : undefined}
+                  slotProps={{
+                    inputLabel: { shrink: true },
+                    htmlInput: { min: today },
+                  }}
                 />
               )}
             </Stack>
@@ -848,14 +873,17 @@ const handleAddCustomer = async () => {
             </Typography>
           )}
 
-          <Box sx={{ mt: 2, mb: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              {invoiceMode === 'membership' ? 'Due date' : 'Invoice date'}
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 700 }}>
-              {invoiceForm.dueDate || 'Not selected'}
-            </Typography>
-          </Box>
+          {/* Only "Pay later" has a date (the due date). "Paid now" invoices don't ask for one, so show nothing. */}
+          {invoiceForm.dueDate && (
+            <Box sx={{ mt: 2, mb: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Due date
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                {new Date(`${invoiceForm.dueDate}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </Typography>
+            </Box>
+          )}
 
           <Box sx={{ borderTop: '1px solid', borderColor: 'divider', my: 2 }} />
 

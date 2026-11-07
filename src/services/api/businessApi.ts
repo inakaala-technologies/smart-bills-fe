@@ -1,4 +1,5 @@
 import { apiClient, getErrorMessage } from './httpClient'
+import { bustCache } from './imageUrl'
 import { normalizeBusiness } from './normalizers'
 import { normalizeOfferAsset } from './offerNormalizers'
 import type { BusinessCreateRequest, BusinessInsights, BusinessOffer, BusinessSummary } from './types'
@@ -12,7 +13,9 @@ export async function uploadBusinessBanner(businessId: number, file: File): Prom
       formData,
       { timeout: 60000 },
     )
-    return normalizeBusiness(response.data)
+    const business = normalizeBusiness(response.data)
+    // Cache-bust so the new banner shows immediately instead of the cached one.
+    return { ...business, bannerImageUrl: bustCache(business.bannerImageUrl) }
   } catch (error) {
     throw new Error(getErrorMessage(error, 'Could not upload the banner image.'), { cause: error })
   }

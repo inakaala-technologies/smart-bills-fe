@@ -216,10 +216,45 @@ function resolveAppointmentId(
   return null
 }
 
+/* Pulls the invoice a notification is about: an explicit id when the API sends one,
+   otherwise the invoice number mentioned in the text (e.g. "Invoice INV-490ACAD7 has been issued…"). */
+function extractInvoiceRef(notification: AppNotificationSummary): { invoiceId: number | null; invoiceNumber: string | null } {
+  const withId = notification as AppNotificationSummary & { invoiceId?: number | null }
+  let invoiceId = typeof withId.invoiceId === 'number' && withId.invoiceId > 0 ? withId.invoiceId : null
+  if (!invoiceId && notification.targetUrl) {
+    const urlMatch = notification.targetUrl.match(/(?:invoiceId=|invoices\/)(\d+)/i)
+    if (urlMatch?.[1]) invoiceId = Number(urlMatch[1])
+  }
+  const numberMatch = `${notification.title ?? ''} ${notification.message ?? ''}`.match(/\bINV-[A-Z0-9]+\b/i)
+  return { invoiceId, invoiceNumber: numberMatch ? numberMatch[0].toUpperCase() : null }
+}
+
+type PanelPlacement = { top: number; left: number; width: number; maxHeight: number }
+
+/* The app renders inside a phone-sized frame (marked with data-app-frame) that is narrower than the browser window.
+   Position the panel inside that frame, not the window, so it can never stick out past the frame's edges. */
+function computePlacement(anchor: HTMLElement): PanelPlacement {
+  const frame = anchor.closest<HTMLElement>('[data-app-frame]')?.getBoundingClientRect()
+  const left = frame?.left ?? 0
+  const frameWidth = frame?.width ?? window.innerWidth
+  const frameBottom = Math.min(frame?.bottom ?? window.innerHeight, window.innerHeight)
+  const gutter = 12
+  const bottomNavReserve = 96
+  const width = Math.min(360, frameWidth - gutter * 2)
+  const top = anchor.getBoundingClientRect().bottom + 8
+  return {
+    top,
+    left: left + (frameWidth - width) / 2,
+    width,
+    maxHeight: Math.max(240, frameBottom - top - bottomNavReserve),
+  }
+}
+
 export function NotificationBell({ contrast = false, prominent = false }: { contrast?: boolean; prominent?: boolean }) {
   const navigate = useNavigate()
   const dispatch = useAppDispatch()
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
+  const [placement, setPlacement] = useState<PanelPlacement | null>(null)
   const [feed, setFeed] = useState<NotificationFeed>(emptyFeed)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
@@ -281,8 +316,16 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
     return () => window.clearInterval(id)
   }, [])
 
-  const open = Boolean(anchorEl)
+  const open = Boolean(anchorEl && placement)
   const close = () => setAnchorEl(null)
+
+  /* Keep the panel inside the frame if the window is resized or rotated while it is open */
+  useEffect(() => {
+    if (!anchorEl) return
+    const update = () => setPlacement(computePlacement(anchorEl))
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [anchorEl])
 
   const visibleNotifications = useMemo(
     () => feed.notifications.filter((item) => matchesFilter(item, filter)),
@@ -310,6 +353,20 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
     }
 
     close()
+
+    // Customers: open the invoice this notification is about. The dashboard reads these params,
+    // switches to the Invoices tab and opens that invoice's details.
+    if (role === 'CUSTOMER' && isInvoiceNotification(notification)) {
+      const { invoiceId, invoiceNumber } = extractInvoiceRef(notification)
+      if (invoiceId || invoiceNumber) {
+        const params = new URLSearchParams()
+        if (invoiceId) params.set('invoiceId', String(invoiceId))
+        if (invoiceNumber) params.set('invoiceNumber', invoiceNumber)
+        dispatch(setCustomerActiveTab('invoices'))
+        navigate(`${getDashboardPath(role, 'invoices')}?${params.toString()}`)
+        return
+      }
+    }
 
     if (isAppointmentNotification(notification)) {
       const appointmentId = resolveAppointmentId(notification, allAppointments)
@@ -547,6 +604,7 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
         aria-expanded={open}
         onClick={(event) => {
           setAnchorEl(event.currentTarget)
+          setPlacement(computePlacement(event.currentTarget))
           setFilter('all')
           setActionError('')
           setReloadToken((current) => current + 1)
@@ -564,16 +622,28 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
         </Badge>
       </IconButton>
 
-      {/* Placement is unchanged from the original dropdown */}
+      {/* Positioned from the app frame (see computePlacement) so it stays fully inside it, clear of the bottom nav */}
       <Popover
         open={open}
-        anchorEl={anchorEl}
         onClose={close}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        slotProps={{ paper: { sx: { width: 'min(360px, calc(100vw - 24px))', mt: 1, overflow: 'hidden', borderRadius: '20px' } } }}
+        anchorReference="anchorPosition"
+        anchorPosition={placement ? { top: placement.top, left: placement.left } : undefined}
+        marginThreshold={0}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        slotProps={{
+          paper: {
+            sx: {
+              width: placement?.width ?? 360,
+              maxHeight: placement?.maxHeight,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              borderRadius: '20px',
+            },
+          },
+        }}
       >
-        <Stack direction="row" spacing={1} sx={{ px: 2, pt: 1.75, pb: 1.25, alignItems: 'center' }}>
+        <Stack direction="row" spacing={1} sx={{ px: 2, pt: 1.75, pb: 1.25, alignItems: 'center', flexShrink: 0 }}>
           <Typography sx={{ color: 'text.primary', fontSize: 17, fontWeight: 600 }}>Notifications</Typography>
           {feed.unreadCount > 0 && (
             <Box
@@ -621,7 +691,7 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
             spacing={1}
             role="group"
             aria-label="Filter notifications"
-            sx={{ px: 2, pb: 1.25, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
+            sx={{ px: 2, pb: 1.25, flexShrink: 0, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
           >
             {filterOptions.map((option) => {
               const selected = filter === option.id
@@ -698,7 +768,7 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
             </Button>
           </Stack>
         ) : (
-          <Box sx={{ maxHeight: 420, overflowY: 'auto' }}>
+          <Box sx={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>
             {groups.map((group) => (
               <Box key={group.key}>
                 <Typography

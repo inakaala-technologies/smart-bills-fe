@@ -9,7 +9,7 @@ export type BusinessSummary = {
   gstin?: string
   pan?: string
   imageUrl?: string
-  bannerImageUrl?: string
+  bannerImageUrl?: string | null
   email?: string
   phone?: string
   address?: string

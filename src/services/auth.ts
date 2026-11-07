@@ -1,4 +1,5 @@
 import { apiClient, getErrorMessage } from './api/httpClient'
+import { bustCache } from './api/imageUrl'
 
 export type Role = 'ADMIN' | 'BUSINESS' | 'CUSTOMER'
 
@@ -336,7 +337,8 @@ export async function uploadCurrentUserProfilePicture(file: File) {
 
     const updatedUser: AuthUser = {
       ...currentSession,
-      profilePictureUrl: response.data.profilePictureUrl,
+      // Cache-bust so the new picture shows immediately instead of the cached one.
+      profilePictureUrl: bustCache(response.data.profilePictureUrl),
     }
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(updatedUser))
     return { ok: true, user: updatedUser }

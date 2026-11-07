@@ -46,7 +46,7 @@ type BusinessProfileMenuPageProps = {
   onAddProfile: (role: Role) => void
   onLogout: () => void
   onProfilePictureUpdated: (user: AuthUser) => void
-  business?: { id: number; bannerImageUrl?: string } | null
+  business?: { id: number; bannerImageUrl?: string | null } | null
   onBannerUploaded?: (business: BusinessSummary) => void
   /** Optional: the Help and About pages are built later; until then these rows are inert. */
   onOpenHelp?: () => void
@@ -139,29 +139,37 @@ export function BusinessProfileMenuPage({
   ]
 
   return (
+    // Outer wrapper copied exactly from the Home column in BusinessDashboard.tsx
     <Box
       sx={{
-        width: '100%',
+        position: 'fixed',
+        inset: 0,
         height: '100dvh',
+        minHeight: 0,
+        backgroundColor: 'background.default',
+        py: { xs: 0, sm: 4 },
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'flex-start',
-        bgcolor: 'background.default',
       }}
     >
-      <Container maxWidth={false} disableGutters sx={{ width: '100%', height: '100%', px: 0 }}>
+      <Container maxWidth="xs" disableGutters sx={{ px: 0 }}>
         <Paper
           elevation={0}
           sx={{
             width: '100%',
             maxWidth: 412,
             mx: 'auto',
-            height: '100%',
-            maxHeight: '100%',
-            borderRadius: 0,
-            bgcolor: 'background.default',
+            height: { xs: '100dvh', sm: 'calc(100dvh - 64px)' },
+            maxHeight: { xs: '100dvh', sm: 'calc(100dvh - 64px)' },
+            borderRadius: { xs: 0, sm: '24px' },
+            backgroundColor: 'background.default',
+            border: '1px solid var(--mui-palette-divider)',
+            boxShadow: '0 18px 46px rgba(0, 0, 0, 0.18)',
+            overflowX: 'hidden',
             overflowY: 'auto',
-            boxShadow: '0 18px 46px rgba(0, 0, 0, 0.12)',
+            overscrollBehaviorY: 'contain',
+            position: 'relative',
           }}
         >
           {/* Figma: violet -> ink gradient header, 35px bottom radius */}
