@@ -5,6 +5,7 @@ import { ArrowRight, Bell, Building2, CalendarCheck2, FileText, LayoutGrid, Plus
 import { EmptyState } from '../components/EmptyState'
 import { addBusinessMembership, createBusiness, createInvoice, type DashboardData } from '../services/api'
 import { getCurrentUser, type Role } from '../services/auth'
+import { getBusinessDateInputValue } from '../utils/date'
 
 export type DashboardTab = 'overview' | 'businesses' | 'customers' | 'appointments'
 
@@ -165,7 +166,7 @@ const greeting =
     const unitPrice = Number(invoiceForm.unitPrice) || 0
     const gstRate = Number(invoiceForm.gstRate) || 0
 
-    if (!businessId || !customerId || quantity <= 0 || unitPrice <= 0) {
+    if (!businessId || !customerId || !invoiceForm.productName.trim() || quantity <= 0 || unitPrice <= 0) {
       setInvoiceMessage('Select a customer and enter valid product details before generating an invoice.')
       return
     }
@@ -173,7 +174,7 @@ const greeting =
     const subtotal = quantity * unitPrice
     const gstAmount = subtotal * (gstRate / 100)
     const totalAmount = subtotal + gstAmount
-    const issueDate = new Date().toISOString().slice(0, 10)
+    const issueDate = getBusinessDateInputValue()
 
     const result = await createInvoice({
       businessId,
@@ -184,6 +185,12 @@ const greeting =
       subtotal,
       gstAmount,
       totalAmount,
+      items: [{
+        productName: invoiceForm.productName.trim(),
+        quantity,
+        unitPrice,
+        gstRate,
+      }],
       status: invoiceForm.dueDate ? 'SENT' : 'PAID',
     })
 

@@ -139,12 +139,12 @@ export function CustomerAppointmentsPanel({
   const [servicesState, setServicesState] = useState<{ businessId: number; services: AppointmentServiceSummary[]; error?: string }>({ businessId: 0, services: [] })
   const [appointmentDate, setAppointmentDate] = useState(() => getDefaultAppointmentDateTime().slice(0, 10))
   const [selectedSlot, setSelectedSlot] = useState('')
-  const [staffUserId, setStaffUserId] = useState('')
+  const [staffId, setStaffId] = useState('')
   const [availabilityState, setAvailabilityState] = useState<{
     businessId: number
     serviceId: number
     date: string
-    staffUserId: number | undefined
+    staffId: number | undefined
     result: AppointmentAvailability
     error?: boolean
   } | null>(null)
@@ -190,7 +190,7 @@ export function CustomerAppointmentsPanel({
   const availabilityRequestMatches = availabilityState?.businessId === selectedBusinessId
     && availabilityState.serviceId === selectedService?.id
     && availabilityState.date === appointmentDate
-    && availabilityState.staffUserId === (Number(staffUserId) || undefined)
+    && availabilityState.staffId === (Number(staffId) || undefined)
   const availability = availabilityRequestMatches ? availabilityState.result : null
   const availabilityError = Boolean(availabilityRequestMatches && availabilityState.error)
   const checkingAvailability = Boolean(selectedService && !availability && !availabilityError)
@@ -247,17 +247,17 @@ export function CustomerAppointmentsPanel({
   useEffect(() => {
     if (!selectedBusinessId || !selectedService) return
     let isCurrent = true
-    fetchAppointmentAvailability(selectedBusinessId, selectedService.id, appointmentDate, Number(staffUserId) || undefined)
+    fetchAppointmentAvailability(selectedBusinessId, selectedService.id, appointmentDate, Number(staffId) || undefined)
       .then((result) => {
         if (!isCurrent) return
-        setAvailabilityState({ businessId: selectedBusinessId, serviceId: selectedService.id, date: appointmentDate, staffUserId: Number(staffUserId) || undefined, result })
+        setAvailabilityState({ businessId: selectedBusinessId, serviceId: selectedService.id, date: appointmentDate, staffId: Number(staffId) || undefined, result })
         setSelectedSlot((current) => result.availableSlots.includes(current) ? current : result.availableSlots[0] ?? '')
       })
       .catch(() => {
-        if (isCurrent) setAvailabilityState({ businessId: selectedBusinessId, serviceId: selectedService.id, date: appointmentDate, staffUserId: Number(staffUserId) || undefined, result: { date: appointmentDate, availableSlots: [], staff: [] }, error: true })
+        if (isCurrent) setAvailabilityState({ businessId: selectedBusinessId, serviceId: selectedService.id, date: appointmentDate, staffId: Number(staffId) || undefined, result: { date: appointmentDate, availableSlots: [], staff: [] }, error: true })
       })
     return () => { isCurrent = false }
-  }, [appointmentDate, selectedBusinessId, selectedService, staffUserId])
+  }, [appointmentDate, selectedBusinessId, selectedService, staffId])
 
   const handleBookAppointment = async () => {
     if (!selectedBusinessId || !selectedService || !selectedSlot || new Date(selectedSlot).getTime() <= now) {
@@ -280,7 +280,7 @@ export function CustomerAppointmentsPanel({
         businessId: selectedBusinessId,
         appointmentServiceId: selectedService.id,
         scheduledAt: selectedSlot,
-        staffUserId: Number(staffUserId) || undefined,
+        staffId: Number(staffId) || undefined,
         notes: notes.trim() || undefined,
         loyaltyPointsToRedeem: requestedPoints,
         homeVisit: isHomeVisit,
@@ -452,9 +452,9 @@ export function CustomerAppointmentsPanel({
           {!servicesLoading && !servicesError && selectedBusinessId > 0 && services.length === 0 && appointmentBusinesses.length > 0 && <Alert severity="info" sx={{ borderRadius: 2 }}>This business has not added any bookable services yet.</Alert>}
           <TextField label="Date" type="date" value={appointmentDate} onChange={(event) => { setAppointmentDate(event.target.value); setSelectedSlot('') }} size="small" required fullWidth slotProps={{ inputLabel: { shrink: true } }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }} />
           {availability && availability.staff.length > 0 && (
-            <TextField select label="Staff or resource" value={staffUserId} onChange={(event) => { setStaffUserId(event.target.value); setSelectedSlot('') }} size="small" fullWidth>
+            <TextField select label="Staff or resource" value={staffId} onChange={(event) => { setStaffId(event.target.value); setSelectedSlot('') }} size="small" fullWidth>
               <MenuItem value="">Any available staff</MenuItem>
-              {availability.staff.map((staff) => <MenuItem key={staff.userId} value={String(staff.userId)}>{staff.label}</MenuItem>)}
+              {availability.staff.map((staff) => <MenuItem key={staff.staffId} value={String(staff.staffId)}>{staff.label}</MenuItem>)}
             </TextField>
           )}
           <Box>

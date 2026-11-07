@@ -30,7 +30,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import type {
-  AppointmentStaffOption,
+  AppointmentStaffView,
   AppointmentStatus,
   AppointmentSummary,
   BusinessSummary,
@@ -44,10 +44,10 @@ export type AppointmentDetailDialogProps = {
   businesses?: BusinessSummary[]
   customers?: CustomerSummary[]
   role?: Role
-  staffOptions?: AppointmentStaffOption[]
+  staffOptions?: AppointmentStaffView[]
   onClose: () => void
   onStatusChange?: (appointmentId: number, status: AppointmentStatus, note?: string) => Promise<unknown>
-  onStaffAssign?: (appointmentId: number, staffUserId?: number) => Promise<unknown>
+  onStaffAssign?: (appointmentId: number, staffId?: number) => Promise<unknown>
 }
 
 function formatCurrency(value?: number) {
@@ -126,8 +126,11 @@ export function AppointmentDetailDialog({
     }
   }
 
-  const assignedStaffLabel = staffOptions.find((s) => s.userId === appointment.staffUserId)?.label
-    ?? (appointment.staffUserId ? `Staff Member #${appointment.staffUserId}` : 'Unassigned')
+  const assignedStaffId = appointment.staffId
+    ?? staffOptions.find((staff) => staff.userId === appointment.staffUserId)?.staffId
+  const assignedStaffLabel = staffOptions.find((staff) => staff.staffId === assignedStaffId)?.label
+    ?? appointment.staffName
+    ?? (assignedStaffId ? `Staff Member #${assignedStaffId}` : 'Unassigned')
 
   return (
     <Dialog
@@ -343,7 +346,7 @@ export function AppointmentDetailDialog({
           </Paper>
 
           {/* Staff Assignment */}
-          {(role === 'BUSINESS' || Boolean(appointment.staffUserId)) && (
+          {(role === 'BUSINESS' || Boolean(assignedStaffId || appointment.staffUserId)) && (
             <Paper variant="outlined" sx={{ p: 1.8, borderRadius: 2, bgcolor: 'background.paper' }}>
               <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 750, textTransform: 'uppercase', display: 'block', mb: 1 }}>
                 Assigned Staff Member
@@ -354,13 +357,13 @@ export function AppointmentDetailDialog({
                   size="small"
                   fullWidth
                   label="Select staff or resource"
-                  value={appointment.staffUserId ? String(appointment.staffUserId) : ''}
+                  value={assignedStaffId ? String(assignedStaffId) : ''}
                   onChange={(e) => void handleAssignStaff(e.target.value)}
                   disabled={submittingAction === 'assign'}
                 >
                   <MenuItem value="">Unassigned</MenuItem>
                   {staffOptions.map((opt) => (
-                    <MenuItem key={opt.userId} value={String(opt.userId)}>
+                    <MenuItem key={opt.staffId} value={String(opt.staffId)}>
                       {opt.label}
                     </MenuItem>
                   ))}

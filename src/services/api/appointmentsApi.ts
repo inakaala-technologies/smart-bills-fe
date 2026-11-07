@@ -1,6 +1,6 @@
 import { apiClient, getErrorMessage } from './httpClient'
 import { normalizeAppointment, normalizeAppointmentService, normalizeBusiness } from './normalizers'
-import type { AppointmentAvailability, AppointmentCreateRequest, AppointmentServiceRequest, AppointmentServiceSummary, AppointmentStatus, AppointmentSummary, BusinessSummary } from './types'
+import type { AppointmentAvailability, AppointmentCreateRequest, AppointmentServiceRequest, AppointmentServiceSummary, AppointmentStaffView, AppointmentStatus, AppointmentSummary, BusinessSummary } from './types'
 
 export async function createAppointment(payload: AppointmentCreateRequest): Promise<{ ok: boolean; appointment?: AppointmentSummary; message?: string }> {
   try {
@@ -47,21 +47,36 @@ export async function updateAppointmentStatus(id: number, status: AppointmentSta
   }
 }
 
-export async function fetchAppointmentAvailability(businessId: number, serviceId: number, date: string, staffUserId?: number): Promise<AppointmentAvailability> {
+export async function fetchAppointmentAvailability(businessId: number, serviceId: number, date: string, staffId?: number): Promise<AppointmentAvailability> {
   const { data } = await apiClient.get<AppointmentAvailability>('/api/v1/appointments/availability', {
-    params: { businessId, serviceId, date, staffUserId },
+    params: { businessId, serviceId, date, staffId },
   })
   return data
 }
 
-export async function fetchAppointmentStaff(businessId: number): Promise<AppointmentAvailability['staff']> {
-  const { data } = await apiClient.get<AppointmentAvailability['staff']>(`/api/v1/businesses/${businessId}/appointment-staff`)
+export async function fetchAppointmentStaff(businessId: number): Promise<AppointmentStaffView[]> {
+  const { data } = await apiClient.get<AppointmentStaffView[]>(`/api/v1/businesses/${businessId}/appointment-staff`)
   return data
 }
 
-export async function updateAppointmentStaff(id: number, staffUserId?: number): Promise<{ ok: boolean; message?: string }> {
+export async function addAppointmentStaff(
+  businessId: number,
+  staff: { name: string; email?: string; phone?: string },
+): Promise<{ ok: boolean; staff?: AppointmentStaffView; message?: string }> {
   try {
-    await apiClient.put(`/api/v1/appointments/${id}/staff`, undefined, { params: { staffUserId } })
+    const { data } = await apiClient.post<AppointmentStaffView>(
+      `/api/v1/businesses/${businessId}/appointment-staff`,
+      staff,
+    )
+    return { ok: true, staff: data }
+  } catch (error) {
+    return { ok: false, message: getErrorMessage(error, 'Could not add appointment staff.') }
+  }
+}
+
+export async function updateAppointmentStaff(id: number, staffId?: number): Promise<{ ok: boolean; message?: string }> {
+  try {
+    await apiClient.put(`/api/v1/appointments/${id}/staff`, undefined, { params: { staffId } })
     return { ok: true }
   } catch (error) {
     return { ok: false, message: getErrorMessage(error, 'Could not update the assigned staff member.') }
@@ -76,4 +91,3 @@ export async function fetchAppointmentById(id: number): Promise<AppointmentSumma
     return null
   }
 }
-

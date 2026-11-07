@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import { alpha, Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import { CalendarDays } from 'lucide-react'
 import { EmptyState } from '../../../components/EmptyState'
-import { fetchAppointmentStaff, updateAppointmentStaff, updateAppointmentStatus, type AppointmentStatus, type AppointmentStaffOption, type DashboardData } from '../../../services/api'
+import { fetchAppointmentStaff, updateAppointmentStaff, updateAppointmentStatus, type AppointmentStatus, type AppointmentStaffView, type DashboardData } from '../../../services/api'
 
 export type AppointmentListCardProps = {
   appointments: DashboardData['appointments']
   customers: DashboardData['customers']
   businessId: number
+  staffRefreshKey?: number
   selectedAppointmentId?: number | null
   onSelectAppointment?: (appointment: DashboardData['appointments'][number]) => void
   onUpdated: () => void
@@ -24,6 +25,7 @@ export function AppointmentListCard({
   appointments,
   customers,
   businessId,
+  staffRefreshKey = 0,
   selectedAppointmentId,
   onSelectAppointment,
   onUpdated,
@@ -31,7 +33,7 @@ export function AppointmentListCard({
   const [message, setMessage] = useState('')
   const [view, setView] = useState<'UPCOMING' | 'ALL' | 'CANCELLED'>('UPCOMING')
   const [selectedDate, setSelectedDate] = useState('')
-  const [staff, setStaff] = useState<AppointmentStaffOption[]>([])
+  const [staff, setStaff] = useState<AppointmentStaffView[]>([])
   const [updatingId, setUpdatingId] = useState<number | null>(null)
   const [assigningId, setAssigningId] = useState<number | null>(null)
   const [pendingAction, setPendingAction] = useState<{ appointmentId: number; status: AppointmentStatus; label: string } | null>(null)
@@ -40,9 +42,13 @@ export function AppointmentListCard({
 
   useEffect(() => {
     let isCurrent = true
-    fetchAppointmentStaff(businessId).then((options) => { if (isCurrent) setStaff(options) }).catch(() => undefined)
+    fetchAppointmentStaff(businessId)
+      .then((options) => { if (isCurrent) setStaff(options) })
+      .catch((error: unknown) => {
+        if (isCurrent) setMessage(error instanceof Error ? error.message : 'Could not load appointment staff.')
+      })
     return () => { isCurrent = false }
-  }, [businessId])
+  }, [businessId, staffRefreshKey])
 
   const visibleAppointments = appointments.filter((appointment) => {
     if (selectedAppointmentId && appointment.id === selectedAppointmentId) return true
@@ -212,13 +218,15 @@ export function AppointmentListCard({
                       fullWidth
                       size="small"
                       label="Staff or resource"
-                      value={appointment.staffUserId ? String(appointment.staffUserId) : ''}
+                      value={appointment.staffId
+                        ? String(appointment.staffId)
+                        : String(staff.find((option) => option.userId === appointment.staffUserId)?.staffId ?? '')}
                       onClick={(e) => e.stopPropagation()}
                       onChange={(event) => void assignStaff(appointment.id, event.target.value)}
                       disabled={assigningId === appointment.id}
                     >
                       <MenuItem value="">Unassigned</MenuItem>
-                      {staff.map((option) => <MenuItem key={option.userId} value={String(option.userId)}>{option.label}</MenuItem>)}
+                      {staff.map((option) => <MenuItem key={option.staffId} value={String(option.staffId)}>{option.label}</MenuItem>)}
                     </TextField>
                   )}
 

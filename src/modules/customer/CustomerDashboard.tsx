@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
+import { parseDateOnly } from '../../utils/date'
 import { AppointmentDetailDialog } from '../../components/AppointmentDetailDialog'
 import { EmptyState } from '../../components/EmptyState'
 import { ProfileManagerDialog } from '../../components/ProfileManagerDialog'
@@ -247,14 +248,14 @@ export function CustomerDashboard() {
       title: businessName,
       subtitle: `Invoice #${invoice.invoiceNumber ?? invoice.id}`,
       date: invoice.issueDate
-        ? new Date(invoice.issueDate).toLocaleDateString(
+        ? parseDateOnly(invoice.issueDate)?.toLocaleDateString(
           'en-IN',
           {
             day: 'numeric',
             month: 'short',
             year: 'numeric',
           },
-        )
+        ) ?? '—'
         : '—',
       amount: formatCurrency(invoice.totalAmount),
       icon: ShoppingCart,

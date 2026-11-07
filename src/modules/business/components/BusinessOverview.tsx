@@ -1,6 +1,7 @@
 import { Box, Button, Chip, Stack, Typography, type Theme } from '@mui/material'
 import { EmptyState } from '../../../components/EmptyState'
 import { useAppSelector } from '../../../store/hooks'
+import { parseDateOnly } from '../../../utils/date'
 
 export type BusinessOverviewProps = {
   onOpenBusiness: (businessId: number) => void
@@ -48,7 +49,7 @@ export function BusinessOverview({ onOpenBusiness }: BusinessOverviewProps) {
         amount: Number(invoice.totalAmount ?? 0),
         meta: invoice.status ?? 'SENT',
         date: invoice.issueDate
-          ? new Date(invoice.issueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+          ? parseDateOnly(invoice.issueDate)?.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) ?? '—'
           : '—',
       })))
     .map((entry) => ({

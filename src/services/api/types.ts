@@ -92,6 +92,16 @@ export type ProductSummary = {
   status?: string
 }
 
+export type InvoiceLineItemSummary = {
+  id: number
+  productName: string
+  quantity: number
+  unitPrice: number
+  gstRate: number
+}
+
+export type InvoiceLineItemInput = Omit<InvoiceLineItemSummary, 'id'>
+
 export type InvoiceSummary = {
   id: number
   invoiceNumber?: string
@@ -99,6 +109,8 @@ export type InvoiceSummary = {
   customerId?: number
   issueDate?: string
   dueDate?: string
+  createdAt?: string
+  items?: InvoiceLineItemSummary[]
   subtotal?: number
   gstAmount?: number
   totalAmount?: number
@@ -126,6 +138,7 @@ export type AppointmentSummary = {
   id: number
   businessId?: number
   customerId?: number
+  staffId?: number
   staffUserId?: number
   appointmentServiceId?: number
   serviceName?: string
@@ -158,7 +171,8 @@ export type AppointmentServiceSummary = {
   enabled: boolean
 }
 
-export type AppointmentStaffOption = { userId: number; label: string }
+export type AppointmentStaffOption = { staffId: number; label: string; userId?: number }
+export type AppointmentStaffView = AppointmentStaffOption & { email?: string; phone?: string; userId?: number }
 export type AppointmentAvailability = { date: string; availableSlots: string[]; staff: AppointmentStaffOption[] }
 
 export type BusinessInsightsInterval = 'DAILY' | 'WEEKLY' | 'MONTHLY'
@@ -333,6 +347,7 @@ export type InvoiceCreateRequest = {
   invoiceDiscountAmount?: number
   invoiceDiscountType?: 'PERCENTAGE' | 'AMOUNT'
   invoiceDiscountValue?: number
+  items?: InvoiceLineItemInput[]
   status?: 'DRAFT' | 'SENT' | 'PAID'
 }
 
@@ -340,7 +355,7 @@ export type AppointmentCreateRequest = {
   businessId: number
   appointmentServiceId: number
   scheduledAt: string
-  staffUserId?: number
+  staffId?: number
   notes?: string
   loyaltyPointsToRedeem?: number
   homeVisit?: boolean
