@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { alpha, Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
+import { CalendarDays } from 'lucide-react'
 import { EmptyState } from '../../../components/EmptyState'
 import { fetchAppointmentStaff, updateAppointmentStaff, updateAppointmentStatus, type AppointmentStatus, type AppointmentStaffView, type DashboardData } from '../../../services/api'
 
@@ -98,26 +99,57 @@ export function AppointmentListCard({
   }
 
   return (
-    <Card variant="outlined" sx={(theme) => ({ borderRadius: 2, border: `1px solid ${alpha(theme.palette.text.primary, 0.06)}` })}>
-      <CardContent>
-        <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ alignItems: { sm: 'center' }, justifyContent: 'space-between', gap: 0.4, mb: 1.4 }}>
-          <Box>
-            <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Appointment operations</Typography>
-            <Typography variant="caption" color="text.secondary">Review bookings, assign staff, and update customer status.</Typography>
+    <Card
+      variant="outlined"
+      sx={(theme) => ({
+        borderRadius: '16px',
+        border: `1px solid ${alpha(theme.palette.text.primary, 0.06)}`,
+        boxShadow: '0 2px 12px rgba(78, 43, 204, 0.07)',
+        bgcolor: 'background.paper',
+      })}
+    >
+      <CardContent sx={{ p: 1.6, '&:last-child': { pb: 1.6 } }}>
+        {/* Header: title + count */}
+        <Stack direction="row" sx={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 1, mb: 1.6 }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{ fontSize: 16, fontWeight: 600, lineHeight: 1.3 }}>Appointment operations</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.3, lineHeight: 1.4 }}>
+              Review bookings, assign staff, and update customer status.
+            </Typography>
           </Box>
-          <Chip size="small" label={`${visibleAppointments.length} shown`} variant="outlined" sx={{ alignSelf: { xs: 'flex-start', sm: 'center' }, fontWeight: 700 }} />
+          <Chip size="small" label={`${visibleAppointments.length} shown`} variant="outlined" sx={{ flexShrink: 0, fontWeight: 600 }} />
         </Stack>
+
         {message && <Alert severity="error" sx={{ mb: 1.5 }}>{message}</Alert>}
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 1.5, alignItems: { sm: 'center' } }}>
-          <ToggleButtonGroup exclusive size="small" value={view} onChange={(_event, value: 'UPCOMING' | 'ALL' | 'CANCELLED' | null) => { if (value) setView(value) }} aria-label="Appointment list filter" sx={{ width: { xs: '100%', sm: 'auto' }, '& .MuiToggleButton-root': { flex: { xs: 1, sm: 'initial' }, px: { xs: 0.7, sm: 1.4 }, whiteSpace: 'nowrap' } }}>
+
+        {/* Filters: full-width segmented control, then full-width day picker */}
+        <Stack spacing={1} sx={{ mb: 1.8 }}>
+          <ToggleButtonGroup
+            exclusive
+            fullWidth
+            size="small"
+            value={view}
+            onChange={(_event, value: 'UPCOMING' | 'ALL' | 'CANCELLED' | null) => { if (value) setView(value) }}
+            aria-label="Appointment list filter"
+            sx={{ '& .MuiToggleButton-root': { flex: 1, px: 0.8, py: 0.9, whiteSpace: 'nowrap', textTransform: 'none', fontWeight: 600 } }}
+          >
             <ToggleButton value="UPCOMING">Upcoming</ToggleButton>
             <ToggleButton value="ALL">All</ToggleButton>
             <ToggleButton value="CANCELLED">Cancelled</ToggleButton>
           </ToggleButtonGroup>
-          <TextField type="date" size="small" label="Day" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ width: { xs: '100%', sm: 190 } }} />
+          <TextField
+            type="date"
+            size="small"
+            label="Day"
+            fullWidth
+            value={selectedDate}
+            onChange={(event) => setSelectedDate(event.target.value)}
+            slotProps={{ inputLabel: { shrink: true } }}
+          />
         </Stack>
+
         {visibleAppointments.length > 0 ? (
-          <Stack spacing={1.2}>
+          <Stack spacing={1.4}>
             {visibleAppointments.map((appointment) => {
               const status = (appointment.status ?? 'BOOKED').toUpperCase()
               const customer = customers.find((item) => item.id === appointment.customerId)
@@ -126,38 +158,64 @@ export function AppointmentListCard({
                 : status === 'CONFIRMED'
                   ? [{ label: 'Complete', status: 'COMPLETED' }, { label: 'No-show', status: 'NO_SHOW' }, { label: 'Cancel', status: 'CANCELLED' }]
                   : []
+              const buttonCount = actions.length + (onSelectAppointment ? 1 : 0)
 
               const isSelected = selectedAppointmentId === appointment.id
               return (
-              <Box
-                key={appointment.id}
-                onClick={() => onSelectAppointment?.(appointment)}
-                sx={(theme) => ({
-                  display: 'grid',
-                  gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'minmax(0, 1fr) auto' },
-                  alignItems: 'start',
-                  gap: 1.2,
-                  p: 1.2,
-                  borderRadius: 1.5,
-                  border: isSelected ? '1px solid var(--mui-palette-primary-main)' : `1px solid ${alpha(theme.palette.text.primary, 0.06)}`,
-                  bgcolor: isSelected ? 'action.selected' : 'transparent',
-                  cursor: onSelectAppointment ? 'pointer' : 'default',
-                  transition: 'all 0.2s ease',
-                  boxShadow: isSelected ? '0 0 0 1px var(--mui-palette-primary-main)' : 'none',
-                  '&:hover': onSelectAppointment ? {
-                    bgcolor: 'action.hover',
-                    borderColor: 'primary.main',
-                  } : undefined,
-                })}
-              >
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography sx={{ fontWeight: 750, overflowWrap: 'anywhere' }}>{appointment.serviceName ?? `Appointment ${appointment.id}`}</Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                    {customer?.fullName ?? customer?.firstName ?? `Customer ${appointment.customerId ?? ''}`}
-                  </Typography>
+                <Box
+                  key={appointment.id}
+                  onClick={() => onSelectAppointment?.(appointment)}
+                  sx={(theme) => ({
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 1.2,
+                    p: 1.6,
+                    borderRadius: '14px',
+                    border: isSelected ? '1px solid var(--mui-palette-primary-main)' : `1px solid ${alpha(theme.palette.text.primary, 0.1)}`,
+                    bgcolor: isSelected ? 'action.selected' : 'background.paper',
+                    cursor: onSelectAppointment ? 'pointer' : 'default',
+                    transition: 'all 0.2s ease',
+                    boxShadow: isSelected ? '0 0 0 1px var(--mui-palette-primary-main)' : 'none',
+                    '&:hover': onSelectAppointment ? {
+                      bgcolor: 'action.hover',
+                      borderColor: 'primary.main',
+                    } : undefined,
+                  })}
+                >
+                  {/* Row 1: service name + status pill */}
+                  <Stack direction="row" sx={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+                    <Typography sx={{ minWidth: 0, flex: 1, fontSize: 15, fontWeight: 600, lineHeight: 1.3, overflowWrap: 'anywhere' }}>
+                      {appointment.serviceName ?? `Appointment ${appointment.id}`}
+                    </Typography>
+                    <Chip label={status.replace('_', ' ')} size="small" color={statusColor(status)} sx={{ flexShrink: 0, fontWeight: 700 }} />
+                  </Stack>
+
+                  {/* Row 2: customer + date / duration / price */}
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 500, overflowWrap: 'anywhere' }}>
+                      {customer?.fullName ?? customer?.firstName ?? `Customer ${appointment.customerId ?? ''}`}
+                    </Typography>
+                    <Stack direction="row" sx={{ alignItems: 'center', gap: 0.7, mt: 0.5, color: 'text.secondary' }}>
+                      <CalendarDays size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+                      <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5 }}>
+                        {appointment.scheduledAt ? new Date(appointment.scheduledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Schedule pending'}
+                        {appointment.durationMinutes ? ` · ${appointment.durationMinutes} min` : ''}
+                        {appointment.servicePrice !== undefined ? ` · ₹${(appointment.servicePrice - (appointment.loyaltyDiscountAmount ?? 0)).toLocaleString('en-IN')}` : ''}
+                      </Typography>
+                    </Stack>
+                    {(appointment.loyaltyPointsRedeemed ?? 0) > 0 && (
+                      <Typography variant="caption" color="success.main" sx={{ display: 'block', mt: 0.4, fontWeight: 700 }}>
+                        {appointment.loyaltyPointsRedeemed} points redeemed · ₹{Number(appointment.loyaltyDiscountAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} off
+                      </Typography>
+                    )}
+                    {appointment.notes && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.4 }}>{appointment.notes}</Typography>}
+                  </Box>
+
+                  {/* Row 3: staff dropdown, full width */}
                   {(status === 'BOOKED' || status === 'CONFIRMED') && (
                     <TextField
                       select
+                      fullWidth
                       size="small"
                       label="Staff or resource"
                       value={appointment.staffId
@@ -166,59 +224,47 @@ export function AppointmentListCard({
                       onClick={(e) => e.stopPropagation()}
                       onChange={(event) => void assignStaff(appointment.id, event.target.value)}
                       disabled={assigningId === appointment.id}
-                      sx={{ mt: 0.8, width: { xs: '100%', sm: 240 }, maxWidth: '100%' }}
                     >
                       <MenuItem value="">Unassigned</MenuItem>
                       {staff.map((option) => <MenuItem key={option.staffId} value={String(option.staffId)}>{option.label}</MenuItem>)}
                     </TextField>
                   )}
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                    {appointment.scheduledAt ? new Date(appointment.scheduledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Schedule pending'}
-                    {appointment.durationMinutes ? ` · ${appointment.durationMinutes} min` : ''}
-                    {appointment.servicePrice !== undefined ? ` · ₹${(appointment.servicePrice - (appointment.loyaltyDiscountAmount ?? 0)).toLocaleString('en-IN')}` : ''}
-                  </Typography>
-                  {(appointment.loyaltyPointsRedeemed ?? 0) > 0 && (
-                    <Typography variant="caption" color="success.main" sx={{ display: 'block', fontWeight: 700 }}>
-                      {appointment.loyaltyPointsRedeemed} points redeemed · ₹{Number(appointment.loyaltyDiscountAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} off
-                    </Typography>
+
+                  {/* Row 4: equal-width action buttons */}
+                  {buttonCount > 0 && (
+                    <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${buttonCount}, minmax(0, 1fr))`, gap: 0.8 }}>
+                      {onSelectAppointment && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onSelectAppointment(appointment)
+                          }}
+                          sx={{ minWidth: 0, minHeight: 36, px: 0.5, borderRadius: '10px', textTransform: 'none', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' }}
+                        >
+                          Details
+                        </Button>
+                      )}
+                      {actions.map((action) => (
+                        <Button
+                          key={action.status}
+                          size="small"
+                          variant={action.status === 'CONFIRMED' || action.status === 'COMPLETED' ? 'contained' : 'text'}
+                          color={action.status === 'CANCELLED' || action.status === 'NO_SHOW' ? 'error' : 'primary'}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleAction(appointment.id, action.status, action.label)
+                          }}
+                          disabled={updatingId === appointment.id}
+                          sx={{ minWidth: 0, minHeight: 36, px: 0.5, borderRadius: '10px', textTransform: 'none', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' }}
+                        >
+                          {action.label}
+                        </Button>
+                      ))}
+                    </Box>
                   )}
-                  {appointment.notes && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{appointment.notes}</Typography>}
                 </Box>
-                <Stack direction={{ xs: 'row', sm: 'column' }} spacing={0.8} sx={{ alignItems: { xs: 'center', sm: 'flex-end' }, justifyContent: { xs: 'space-between', sm: 'flex-start' }, flexWrap: 'wrap', minWidth: 0 }}>
-                  <Chip label={status.replace('_', ' ')} size="small" color={statusColor(status)} sx={{ fontWeight: 700 }} />
-                  <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', justifyContent: { xs: 'flex-end', sm: 'flex-start' } }}>
-                    {onSelectAppointment && (
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onSelectAppointment(appointment)
-                        }}
-                        sx={{ minWidth: 0, px: 0.8, textTransform: 'none', fontSize: '0.72rem', fontWeight: 700 }}
-                      >
-                        Details
-                      </Button>
-                    )}
-                    {actions.map((action) => (
-                      <Button
-                        key={action.status}
-                        size="small"
-                        variant={action.status === 'CONFIRMED' || action.status === 'COMPLETED' ? 'contained' : 'text'}
-                        color={action.status === 'CANCELLED' || action.status === 'NO_SHOW' ? 'error' : 'primary'}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleAction(appointment.id, action.status, action.label)
-                        }}
-                        disabled={updatingId === appointment.id}
-                        sx={{ minWidth: 0, px: 0.8, textTransform: 'none', fontSize: '0.72rem' }}
-                      >
-                        {action.label}
-                      </Button>
-                    ))}
-                  </Stack>
-                </Stack>
-              </Box>
               )
             })}
           </Stack>

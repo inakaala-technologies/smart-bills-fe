@@ -12,6 +12,7 @@ import {
   DialogContent,
   DialogTitle,
   Paper,
+  Snackbar,
   Stack,
   Typography,
 } from '@mui/material'
@@ -21,7 +22,7 @@ import {
   ShieldCheck,
   ShoppingCart,
 } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { parseDateOnly } from '../../utils/date'
 import { AppointmentDetailDialog } from '../../components/AppointmentDetailDialog'
@@ -85,6 +86,9 @@ export function CustomerDashboard() {
   const [explicitAppointment, setExplicitAppointment] = useState<AppointmentSummary | null>(null)
   const setSelectedAppointment = setExplicitAppointment
   const [selectedInvoice, setSelectedInvoice] = useState<DashboardData['invoices'][number] | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const invoiceIdParam = searchParams.get('invoiceId')
+  const invoiceNumberParam = searchParams.get('invoiceNumber')
   const isMenuOpen = isProfilePageOpen
   // Loyalty endpoints expect the customer profile id, which differs from the login user id.
   const customerProfileEmail = authUser?.email?.trim().toLowerCase()
@@ -125,6 +129,40 @@ export function CustomerDashboard() {
       isCurrent = false
     }
   }, [customerLatitude, customerLongitude])
+
+  // A notification links here with ?invoiceId=… and/or ?invoiceNumber=… The invoice is derived straight from the URL
+  // (not copied into state), so the popup can't be lost when the page re-renders. The params are removed when it closes.
+  const hasInvoiceLink = Boolean(invoiceIdParam || invoiceNumberParam)
+  const wantedInvoiceNumber = (invoiceNumberParam ?? '').trim().toLowerCase()
+  const invoiceFromLink = hasInvoiceLink
+    ? data.invoices.find((invoice) => (
+      (invoiceIdParam != null && String(invoice.id) === invoiceIdParam)
+      || (wantedInvoiceNumber !== '' && String(invoice.invoiceNumber ?? '').trim().toLowerCase() === wantedInvoiceNumber)
+    )) ?? null
+    : null
+  const activeInvoice = selectedInvoice ?? invoiceFromLink
+  const [missingInvoiceLabel, setMissingInvoiceLabel] = useState('')
+
+  const closeInvoiceDialog = () => {
+    setSelectedInvoice(null)
+    if (hasInvoiceLink) {
+      const nextParams = new URLSearchParams(searchParams)
+      nextParams.delete('invoiceId')
+      nextParams.delete('invoiceNumber')
+      setSearchParams(nextParams, { replace: true })
+    }
+  }
+
+  useEffect(() => {
+    if (!hasInvoiceLink || invoiceFromLink) return
+    // Invoices may still be loading: only report "not found" once they have loaded and nothing matches.
+    if (loading || data.invoices.length === 0) return
+    setMissingInvoiceLabel(invoiceNumberParam ?? `#${invoiceIdParam}`)
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.delete('invoiceId')
+    nextParams.delete('invoiceNumber')
+    setSearchParams(nextParams, { replace: true })
+  }, [data.invoices.length, hasInvoiceLink, invoiceFromLink, invoiceIdParam, invoiceNumberParam, loading, searchParams, setSearchParams])
 
   const handleChangeTab = (tab: DashboardTab) => {
     dispatch(setActiveTab(tab))
@@ -293,6 +331,7 @@ export function CustomerDashboard() {
       <Container maxWidth="xs" disableGutters sx={{ px: 0 }}>
         <Paper
           elevation={0}
+          data-app-frame
           sx={{
             width: '100%',
             maxWidth: 412,
@@ -708,224 +747,6 @@ export function CustomerDashboard() {
                     />
                   )}
                 </Box>
-
-                <Dialog open={Boolean(selectedInvoice)} onClose={() => setSelectedInvoice(null)} fullWidth maxWidth="xs">
-                  <DialogTitle sx={{ color: 'text.primary', fontWeight: 800 }}>Invoice details</DialogTitle>
-                  {selectedInvoice && (
-                    <DialogContent dividers>
-                      <Stack spacing={1.5}>
-                        <Box>
-                          <Typography
-                            variant="caption"
-                            sx={{
-                              color: 'text.secondary',
-                              fontWeight: 700,
-                            }}
-                          >
-                            Invoice number
-                          </Typography>
-
-                          <Typography
-                            sx={{
-                              color: 'text.primary',
-                              fontWeight: 700,
-                            }}
-                          >
-                            {selectedInvoice.invoiceNumber ??
-                              `INV-${selectedInvoice.id}`}
-                          </Typography>
-                        </Box>
-
-                        <Box>
-                          <Typography
-                            variant="caption"
-                            sx={{
-                              color: 'text.secondary',
-                              fontWeight: 700,
-                            }}
-                          >
-                            Business
-                          </Typography>
-
-                          <Typography
-                            sx={{
-                              color: 'text.primary',
-                              fontWeight: 700,
-                            }}
-                          >
-                            {data.businesses.find(
-                              (business) =>
-                                business.id ===
-                                selectedInvoice.businessId,
-                            )?.businessName ??
-                              data.businesses.find(
-                                (business) =>
-                                  business.id ===
-                                  selectedInvoice.businessId,
-                              )?.name ??
-                              'Business'}
-                          </Typography>
-                        </Box>
-
-                        <Box>
-                          <Typography
-                            variant="caption"
-                            sx={{
-                              color: 'text.secondary',
-                              fontWeight: 700,
-                            }}
-                          >
-                            Status
-                          </Typography>
-
-                          <Box>
-                            <Chip
-                              label={
-                                ['SENT', 'PENDING', 'UNPAID'].includes(
-                                  String(selectedInvoice.status ?? 'SENT').toUpperCase(),
-                                )
-                                  ? 'Unpaid'
-                                  : selectedInvoice.status ?? 'SENT'
-                              }
-                              size="small"
-                              color="success"
-                              sx={{ mt: 0.4, fontWeight: 800 }}
-                            />
-                          </Box>
-                        </Box>
-
-                        <Box
-                          sx={{
-                            display: 'grid',
-                            gridTemplateColumns: '1fr 1fr',
-                            gap: 1.5,
-                          }}
-                        >
-                          <Box>
-                            <Typography
-                              variant="caption"
-                              sx={{
-                                color: 'text.secondary',
-                                fontWeight: 700,
-                              }}
-                            >
-                              Issue date
-                            </Typography>
-
-                            <Typography sx={{ color: 'text.primary' }}>
-                              {selectedInvoice.issueDate
-                                ? new Date(
-                                  `${selectedInvoice.issueDate}T00:00:00`,
-                                ).toLocaleDateString('en-IN', {
-                                  dateStyle: 'medium',
-                                })
-                                : 'Not provided'}
-                            </Typography>
-                          </Box>
-
-                          <Box>
-                            <Typography
-                              variant="caption"
-                              sx={{
-                                color: 'text.secondary',
-                                fontWeight: 700,
-                              }}
-                            >
-                              Due date
-                            </Typography>
-
-                            <Typography sx={{ color: 'text.primary' }}>
-                              {selectedInvoice.dueDate
-                                ? new Date(
-                                  `${selectedInvoice.dueDate}T00:00:00`,
-                                ).toLocaleDateString('en-IN', {
-                                  dateStyle: 'medium',
-                                })
-                                : 'Not provided'}
-                            </Typography>
-                          </Box>
-                        </Box>
-
-                        <Box
-                          sx={{
-                            borderTop:
-                              '1px solid var(--mui-palette-divider)',
-                            pt: 1.2,
-                          }}
-                        >
-                          <Stack spacing={0.6}>
-                            <Box
-                              sx={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                gap: 1,
-                              }}
-                            >
-                              <Typography sx={{ color: 'text.secondary' }}>
-                                Subtotal
-                              </Typography>
-
-                              <Typography sx={{ color: 'text.primary' }}>
-                                {formatCurrency(
-                                  selectedInvoice.subtotal,
-                                )}
-                              </Typography>
-                            </Box>
-
-                            <Box
-                              sx={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                gap: 1,
-                              }}
-                            >
-                              <Typography sx={{ color: 'text.secondary' }}>
-                                GST
-                              </Typography>
-
-                              <Typography sx={{ color: 'text.primary' }}>
-                                {formatCurrency(
-                                  selectedInvoice.gstAmount,
-                                )}
-                              </Typography>
-                            </Box>
-                            {(selectedInvoice.invoiceDiscountAmount ?? 0) > 0 && (
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                                <Typography sx={{ color: 'success.main' }}>
-                                  Discount{selectedInvoice.invoiceDiscountType === 'PERCENTAGE' ? ` (${selectedInvoice.invoiceDiscountValue}%)` : ''}
-                                </Typography>
-                                <Typography sx={{ color: 'success.main' }}>−{formatCurrency(selectedInvoice.invoiceDiscountAmount)}</Typography>
-                              </Box>
-                            )}
-                            {(selectedInvoice.loyaltyPointsRedeemed ?? 0) > 0 && (
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                                <Typography sx={{ color: 'success.main' }}>Loyalty discount ({selectedInvoice.loyaltyPointsRedeemed} points)</Typography>
-                                <Typography sx={{ color: 'success.main' }}>−{formatCurrency(selectedInvoice.loyaltyDiscountAmount)}</Typography>
-                              </Box>
-                            )}
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, pt: 0.7, borderTop: '1px solid var(--mui-palette-divider)' }}>
-                              <Typography sx={{ color: 'text.primary', fontWeight: 800 }}>Total</Typography>
-                              <Typography sx={{ color: 'primary.main', fontWeight: 800 }}>{formatCurrency(selectedInvoice.totalAmount)}</Typography>
-                            </Box>
-                          </Stack>
-                        </Box>
-                      </Stack>
-                    </DialogContent>
-                  )}
-
-                  <DialogActions>
-                    <Button
-                      onClick={() => setSelectedInvoice(null)}
-                      sx={{
-                        color: 'primary.main',
-                        fontWeight: 700,
-                        textTransform: 'none',
-                      }}
-                    >
-                      Close
-                    </Button>
-                  </DialogActions>
-                </Dialog>
               </Box>
             )}
 
@@ -1181,6 +1002,231 @@ export function CustomerDashboard() {
               />
             )}
           </Box>
+
+          <Snackbar open={Boolean(missingInvoiceLabel)} autoHideDuration={5000} onClose={() => setMissingInvoiceLabel('')} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
+            <Alert severity="info" variant="filled" onClose={() => setMissingInvoiceLabel('')} sx={{ width: '100%' }}>
+              Couldn’t find invoice {missingInvoiceLabel} in your account.
+            </Alert>
+          </Snackbar>
+
+          {/* Invoice details: lives outside the Home tab so it can open from any tab (e.g. from a notification) */}
+          <Dialog open={Boolean(activeInvoice)} onClose={closeInvoiceDialog} fullWidth maxWidth="xs">
+            <DialogTitle sx={{ color: 'text.primary', fontWeight: 800 }}>Invoice details</DialogTitle>
+            {activeInvoice && (
+              <DialogContent dividers>
+                <Stack spacing={1.5}>
+                  <Box>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: 'text.secondary',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Invoice number
+                    </Typography>
+
+                    <Typography
+                      sx={{
+                        color: 'text.primary',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {activeInvoice.invoiceNumber ??
+                        `INV-${activeInvoice.id}`}
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: 'text.secondary',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Business
+                    </Typography>
+
+                    <Typography
+                      sx={{
+                        color: 'text.primary',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {data.businesses.find(
+                        (business) =>
+                          business.id ===
+                          activeInvoice.businessId,
+                      )?.businessName ??
+                        data.businesses.find(
+                          (business) =>
+                            business.id ===
+                            activeInvoice.businessId,
+                        )?.name ??
+                        'Business'}
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: 'text.secondary',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Status
+                    </Typography>
+
+                    <Box>
+                      <Chip
+                        label={
+                          ['SENT', 'PENDING', 'UNPAID'].includes(
+                            String(activeInvoice.status ?? 'SENT').toUpperCase(),
+                          )
+                            ? 'Unpaid'
+                            : activeInvoice.status ?? 'SENT'
+                        }
+                        size="small"
+                        color="success"
+                        sx={{ mt: 0.4, fontWeight: 800 }}
+                      />
+                    </Box>
+                  </Box>
+
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: 1.5,
+                    }}
+                  >
+                    <Box>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: 'text.secondary',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Issue date
+                      </Typography>
+
+                      <Typography sx={{ color: 'text.primary' }}>
+                        {activeInvoice.issueDate
+                          ? new Date(
+                            `${activeInvoice.issueDate}T00:00:00`,
+                          ).toLocaleDateString('en-IN', {
+                            dateStyle: 'medium',
+                          })
+                          : 'Not provided'}
+                      </Typography>
+                    </Box>
+
+                    <Box>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: 'text.secondary',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Due date
+                      </Typography>
+
+                      <Typography sx={{ color: 'text.primary' }}>
+                        {activeInvoice.dueDate
+                          ? new Date(
+                            `${activeInvoice.dueDate}T00:00:00`,
+                          ).toLocaleDateString('en-IN', {
+                            dateStyle: 'medium',
+                          })
+                          : 'Not provided'}
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  <Box
+                    sx={{
+                      borderTop:
+                        '1px solid var(--mui-palette-divider)',
+                      pt: 1.2,
+                    }}
+                  >
+                    <Stack spacing={0.6}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 1,
+                        }}
+                      >
+                        <Typography sx={{ color: 'text.secondary' }}>
+                          Subtotal
+                        </Typography>
+
+                        <Typography sx={{ color: 'text.primary' }}>
+                          {formatCurrency(
+                            activeInvoice.subtotal,
+                          )}
+                        </Typography>
+                      </Box>
+
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 1,
+                        }}
+                      >
+                        <Typography sx={{ color: 'text.secondary' }}>
+                          GST
+                        </Typography>
+
+                        <Typography sx={{ color: 'text.primary' }}>
+                          {formatCurrency(
+                            activeInvoice.gstAmount,
+                          )}
+                        </Typography>
+                      </Box>
+                      {(activeInvoice.invoiceDiscountAmount ?? 0) > 0 && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                          <Typography sx={{ color: 'success.main' }}>
+                            Discount{activeInvoice.invoiceDiscountType === 'PERCENTAGE' ? ` (${activeInvoice.invoiceDiscountValue}%)` : ''}
+                          </Typography>
+                          <Typography sx={{ color: 'success.main' }}>−{formatCurrency(activeInvoice.invoiceDiscountAmount)}</Typography>
+                        </Box>
+                      )}
+                      {(activeInvoice.loyaltyPointsRedeemed ?? 0) > 0 && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                          <Typography sx={{ color: 'success.main' }}>Loyalty discount ({activeInvoice.loyaltyPointsRedeemed} points)</Typography>
+                          <Typography sx={{ color: 'success.main' }}>−{formatCurrency(activeInvoice.loyaltyDiscountAmount)}</Typography>
+                        </Box>
+                      )}
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, pt: 0.7, borderTop: '1px solid var(--mui-palette-divider)' }}>
+                        <Typography sx={{ color: 'text.primary', fontWeight: 800 }}>Total</Typography>
+                        <Typography sx={{ color: 'primary.main', fontWeight: 800 }}>{formatCurrency(activeInvoice.totalAmount)}</Typography>
+                      </Box>
+                    </Stack>
+                  </Box>
+                </Stack>
+              </DialogContent>
+            )}
+
+            <DialogActions>
+              <Button
+                onClick={closeInvoiceDialog}
+                sx={{
+                  color: 'primary.main',
+                  fontWeight: 700,
+                  textTransform: 'none',
+                }}
+              >
+                Close
+              </Button>
+            </DialogActions>
+          </Dialog>
 
           <AppointmentDetailDialog
             open={Boolean(explicitAppointment)}

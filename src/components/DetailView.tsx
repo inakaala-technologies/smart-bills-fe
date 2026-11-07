@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { alpha } from '@mui/material/styles'
 import { Avatar, Box, Button, Card, CardContent, Chip, CircularProgress, Container, Divider, Paper, Stack, Typography } from '@mui/material'
 import { ArrowLeft, CalendarDays, CreditCard, Mail, Phone, Plus, ReceiptText, ShieldCheck } from 'lucide-react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
@@ -20,6 +19,10 @@ import { setActiveTab as setCustomerTab, setSelectedCustomerId } from '../store/
 import type { DashboardTab } from '../modules/types'
 import { getDashboardPath } from '../routes/dashboardPaths'
 import { v4 as uuidv4 } from 'uuid';
+
+// Theme-aware tint. Reads the CSS variable so it follows light/dark mode
+// (theme.palette.* inside sx callbacks always returns the light-mode value).
+const tint = (token: string, percent: number) => `color-mix(in srgb, var(--mui-palette-${token}) ${percent}%, transparent)`
 
 function createInvoiceItem(): InvoiceLineItemForm {
   return { id: uuidv4(), productName: '', quantity: '1', unitPrice: '0', gstRate: '18' }
@@ -373,23 +376,23 @@ const handleBack = () => {
                 Back
               </Button>
 
-              <Box sx={(theme) => ({
+              <Box sx={{
                 overflow: 'hidden',
                 borderRadius: 2.5,
                 p: 1.35,
-                border: `1px solid ${alpha(theme.palette.primary.main, 0.16)}`,
-                background: `linear-gradient(145deg, ${alpha(theme.palette.primary.main, 0.12)} 0%, ${theme.palette.background.paper} 78%)`,
-              })}>
+                border: `1px solid ${tint('primary-main', 16)}`,
+                background: `linear-gradient(145deg, ${tint('primary-main', 18)} 0%, var(--mui-palette-background-paper) 78%)`,
+              }}>
                 <Stack direction="row" spacing={1.2} sx={{ alignItems: 'center' }}>
-                  <Avatar sx={(theme) => ({
+                  <Avatar sx={{
                     width: 44,
                     height: 44,
-                    bgcolor: theme.palette.primary.main,
-                    color: theme.palette.primary.contrastText,
+                    bgcolor: 'primary.main',
+                    color: 'primary.contrastText',
                     fontSize: '0.95rem',
                     fontWeight: 800,
-                    boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.2)}`,
-                  })}>
+                    boxShadow: `0 4px 12px ${tint('primary-main', 20)}`,
+                  }}>
                     {initials || 'C'}
                   </Avatar>
                   <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -409,7 +412,7 @@ const handleBack = () => {
                         component="a"
                         href={`mailto:${detail.email}`}
                         aria-label={`Email ${title}`}
-                        sx={(theme) => ({
+                        sx={{
                           minWidth: 0,
                           display: 'flex',
                           alignItems: 'center',
@@ -417,11 +420,12 @@ const handleBack = () => {
                           px: 0.85,
                           py: 0.55,
                           borderRadius: 1.5,
-                          color: 'text.secondary',
+                          color: 'text.primary',
                           textDecoration: 'none',
-                          bgcolor: alpha(theme.palette.background.paper, 0.72),
-                          '&:hover': { color: 'primary.main', bgcolor: theme.palette.background.paper },
-                        })}
+                          bgcolor: tint('background-paper', 72),
+                          border: `1px solid ${tint('text-primary', 10)}`,
+                          '&:hover': { color: 'primary.main', bgcolor: 'background.paper' },
+                        }}
                       >
                         <Mail size={14} />
                         <Typography variant="caption" sx={{ maxWidth: 175, fontWeight: 650 }} noWrap>{detail.email}</Typography>
@@ -432,7 +436,7 @@ const handleBack = () => {
                         component="a"
                         href={`tel:${detail.phoneNumber}`}
                         aria-label={`Call ${title}`}
-                        sx={(theme) => ({
+                        sx={{
                           minWidth: 0,
                           display: 'flex',
                           alignItems: 'center',
@@ -440,11 +444,12 @@ const handleBack = () => {
                           px: 0.85,
                           py: 0.55,
                           borderRadius: 1.5,
-                          color: 'text.secondary',
+                          color: 'text.primary',
                           textDecoration: 'none',
-                          bgcolor: alpha(theme.palette.background.paper, 0.72),
-                          '&:hover': { color: 'primary.main', bgcolor: theme.palette.background.paper },
-                        })}
+                          bgcolor: tint('background-paper', 72),
+                          border: `1px solid ${tint('text-primary', 10)}`,
+                          '&:hover': { color: 'primary.main', bgcolor: 'background.paper' },
+                        }}
                       >
                         <Phone size={14} />
                         <Typography variant="caption" sx={{ fontWeight: 650 }} noWrap>{detail.phoneNumber}</Typography>
@@ -463,27 +468,27 @@ const handleBack = () => {
                 ].map(({ label, value, icon: Icon }) => (
                   <Box
                     key={label}
-                    sx={(theme) => ({
+                    sx={{
                       minWidth: 0,
                       display: 'flex',
                       alignItems: 'center',
                       gap: 1,
                       p: 1.1,
                       borderRadius: 2,
-                      border: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
-                      bgcolor: theme.palette.background.default,
-                    })}
+                      border: `1px solid ${tint('text-primary', 10)}`,
+                      bgcolor: 'background.default',
+                    }}
                   >
-                    <Box sx={(theme) => ({
+                    <Box sx={{
                       width: 32,
                       height: 32,
                       flexShrink: 0,
                       display: 'grid',
                       placeItems: 'center',
                       borderRadius: 1.5,
-                      color: theme.palette.primary.main,
-                      bgcolor: alpha(theme.palette.primary.main, 0.1),
-                    })}>
+                      color: 'primary.main',
+                      bgcolor: tint('primary-main', 16),
+                    }}>
                       <Icon size={16} />
                     </Box>
                     <Box sx={{ minWidth: 0 }}>
@@ -510,17 +515,17 @@ const handleBack = () => {
           )}
         </Box>
         {historySections.map(({ title: sectionTitle, icon: Icon, records }) => (
-          <Card key={sectionTitle} variant="outlined" sx={{ borderRadius: 2.5, borderColor: (theme) => alpha(theme.palette.text.primary, 0.09), boxShadow: '0 4px 16px rgba(20, 40, 40, 0.035)' }}>
+          <Card key={sectionTitle} variant="outlined" sx={{ borderRadius: 2.5, borderColor: tint('text-primary', 12), boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)' }}>
             <CardContent sx={{ p: 1.6, '&:last-child': { pb: 1.6 } }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.1 }}>
-                <Box sx={(theme) => ({ width: 34, height: 34, display: 'grid', placeItems: 'center', borderRadius: 1.5, color: theme.palette.primary.main, bgcolor: alpha(theme.palette.primary.main, 0.09) })}>
+                <Box sx={{ width: 34, height: 34, display: 'grid', placeItems: 'center', borderRadius: 1.5, color: 'primary.main', bgcolor: tint('primary-main', 16) }}>
                   <Icon size={17} />
                 </Box>
                 <Typography variant="subtitle1" component="h3" sx={{ flex: 1, fontWeight: 800 }}>{sectionTitle}</Typography>
                 {sectionTitle === 'Memberships' && role === 'BUSINESS' && businessId != null && (
                   <Button size="small" onClick={() => setMembershipManagerOpen(true)} sx={{ minWidth: 0, px: 0.8, textTransform: 'none', fontWeight: 700 }}>Manage</Button>
                 )}
-                <Chip size="small" variant="outlined" label={records.length} sx={{ fontWeight: 700, borderColor: (theme) => alpha(theme.palette.text.primary, 0.12) }} />
+                <Chip size="small" variant="outlined" label={records.length} sx={{ fontWeight: 700, borderColor: tint('text-primary', 20) }} />
               </Box>
               {records.length ? (
                 <Stack divider={<Divider flexItem />}>

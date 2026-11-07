@@ -9,7 +9,7 @@ const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
 type BusinessBannerUploadProps = {
   businessId: number
-  bannerImageUrl?: string
+  bannerImageUrl?: string | null
   onUploaded: (business: BusinessSummary) => void
 }
 

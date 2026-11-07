@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Alert, Box, Button, Chip, FormControlLabel, MenuItem, Skeleton, Stack, Switch, TextField, Typography } from '@mui/material'
-import { CalendarCheck2, CalendarDays, CalendarPlus, Clock3, X } from 'lucide-react'
+import { alpha, keyframes } from '@mui/material/styles'
+import { CalendarCheck2, CalendarDays, CalendarPlus, Clock3, Gift, MapPin, Sparkles, X } from 'lucide-react'
 import { EmptyState } from '../../../components/EmptyState'
 import {
   createAppointment,
@@ -29,6 +30,99 @@ function getDefaultAppointmentDateTime() {
   const date = new Date(Date.now() + 24 * 60 * 60 * 1000)
   date.setSeconds(0, 0)
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+}
+
+const formatINR = (value: number) => `₹${value.toLocaleString('en-IN', {
+  minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+  maximumFractionDigits: 2,
+})}`
+
+const popIn = keyframes`
+  0% { opacity: 0; transform: translateY(8px) scale(0.95); }
+  60% { opacity: 1; transform: translateY(0) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+`
+
+const tick = keyframes`
+  0% { transform: scale(0.9); opacity: 0.4; }
+  100% { transform: scale(1); opacity: 1; }
+`
+
+function PriceRow({ icon, label, amount, tone = 'default' }: { icon: ReactNode; label: string; amount: ReactNode; tone?: 'default' | 'success' }) {
+  return (
+    <Stack direction="row" spacing={1.1} sx={{ alignItems: 'center' }}>
+      <Box
+        sx={{
+          width: 28,
+          height: 28,
+          flexShrink: 0,
+          display: 'grid',
+          placeItems: 'center',
+          borderRadius: '50%',
+          color: tone === 'success' ? 'success.main' : 'primary.main',
+          bgcolor: (theme) => alpha(tone === 'success' ? theme.palette.success.main : theme.palette.primary.main, 0.16),
+        }}
+      >
+        {icon}
+      </Box>
+      <Typography variant="body2" sx={{ flex: 1, minWidth: 0, color: tone === 'success' ? 'success.main' : 'text.secondary', fontWeight: 650 }}>{label}</Typography>
+      <Typography variant="body2" sx={{ color: tone === 'success' ? 'success.main' : 'text.primary', fontWeight: 800 }}>{amount}</Typography>
+    </Stack>
+  )
+}
+
+/* Friendly price breakdown shown for home visits: service + visiting charge (− loyalty discount) = total to pay. */
+function PriceBreakdown({ servicePrice, visitingCharge, loyaltyDiscount }: { servicePrice: number; visitingCharge: number; loyaltyDiscount: number }) {
+  const total = Math.max(0, servicePrice + visitingCharge - loyaltyDiscount)
+  return (
+    <Box
+      role="group"
+      aria-label="Price breakdown"
+      sx={{
+        p: 1.5,
+        borderRadius: 2.5,
+        border: '1px solid',
+        borderColor: (theme) => alpha(theme.palette.primary.main, 0.4),
+        background: (theme) => `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.18)} 0%, ${alpha(theme.palette.primary.main, 0.05)} 100%)`,
+        boxShadow: (theme) => `0 8px 22px ${alpha(theme.palette.primary.main, 0.16)}`,
+        transformOrigin: 'top center',
+        animation: `${popIn} 380ms cubic-bezier(0.22, 1, 0.36, 1)`,
+        '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
+      }}
+    >
+      <Stack spacing={1}>
+        <PriceRow icon={<Sparkles size={14} />} label="Service" amount={formatINR(servicePrice)} />
+        <PriceRow
+          icon={<MapPin size={14} />}
+          label="Home visit charge"
+          amount={visitingCharge > 0 ? `+ ${formatINR(visitingCharge)}` : 'Free'}
+        />
+        {loyaltyDiscount > 0 && (
+          <PriceRow icon={<Gift size={14} />} label="Loyalty discount" amount={`− ${formatINR(loyaltyDiscount)}`} tone="success" />
+        )}
+        <Stack
+          direction="row"
+          sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 0.4, pt: 1.1, borderTop: '1px dashed', borderColor: 'divider' }}
+        >
+          <Typography sx={{ color: 'text.primary', fontWeight: 800, fontSize: 14 }}>Total to pay</Typography>
+          <Typography
+            key={total}
+            sx={{
+              color: 'primary.main',
+              fontWeight: 900,
+              fontSize: 24,
+              lineHeight: 1,
+              letterSpacing: '-0.03em',
+              animation: `${tick} 240ms ease-out`,
+              '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
+            }}
+          >
+            {formatINR(total)}
+          </Typography>
+        </Stack>
+      </Stack>
+    </Box>
+  )
 }
 
 export function CustomerAppointmentsPanel({
@@ -325,9 +419,7 @@ export function CustomerAppointmentsPanel({
               {isHomeVisit && (
                 <Stack spacing={0.8} sx={{ mt: 1 }}>
                   <TextField label="Visit address" value={visitAddress} onChange={(event) => setVisitAddress(event.target.value)} size="small" required multiline minRows={2} fullWidth slotProps={{ htmlInput: { maxLength: 500 } }} />
-                  <Typography variant="body2" sx={{ textAlign: 'right', fontWeight: 750 }}>
-                    Service ₹{selectedService.price.toLocaleString('en-IN')} + Visiting charge ₹{visitingCharge.toLocaleString('en-IN')} = ₹{(selectedService.price + visitingCharge).toLocaleString('en-IN')}
-                  </Typography>
+                  <PriceBreakdown servicePrice={selectedService.price} visitingCharge={visitingCharge} loyaltyDiscount={loyaltyDiscount} />
                 </Stack>
               )}
             </Box>
@@ -349,7 +441,9 @@ export function CustomerAppointmentsPanel({
               />
               {loyaltyDiscount > 0 && (
                 <Typography variant="body2" sx={{ textAlign: 'right', fontWeight: 750 }}>
-                  {requestedPoints} points discount: −₹{loyaltyDiscount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · Pay ₹{Math.max(0, selectedService.price - loyaltyDiscount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {requestedPoints} points discount: −₹{loyaltyDiscount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {/* For home visits the total (including the visiting charge) is shown in the price card above */}
+                  {!isHomeVisit && <> · Pay ₹{Math.max(0, selectedService.price - loyaltyDiscount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>}
                 </Typography>
               )}
             </Stack>
