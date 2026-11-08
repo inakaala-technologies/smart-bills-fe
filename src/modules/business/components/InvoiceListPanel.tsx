@@ -273,7 +273,25 @@ export function InvoiceListPanel({ invoiceRows, onBack, onCreateInvoice, onUpdat
               <IconButton aria-label="Close invoice preview" onClick={closePreview} size="small"><X size={18} /></IconButton>
             </DialogTitle>
             <DialogContent dividers sx={{ p: { xs: 1, sm: 2.5 }, bgcolor: '#f1f5f4' }}>
-              <Box sx={{ maxWidth: 680, mx: 'auto', p: { xs: 1.5, sm: 3 }, bgcolor: '#fff', border: '1px solid', borderColor: 'divider', borderRadius: 1.5, boxShadow: '0 5px 20px rgba(24, 51, 47, 0.08)' }}>
+              {/* The sheet is always white (like a printed invoice), so it gets its own light palette
+                  instead of inheriting the dark theme's near-white text colors. */}
+              <Box sx={{
+                '--mui-palette-text-primary': '#1a1530',
+                '--mui-palette-text-secondary': '#5b5870',
+                '--mui-palette-divider': 'rgba(26, 21, 48, 0.16)',
+                '--mui-palette-action-hover': 'rgba(78, 43, 204, 0.07)',
+                '--mui-palette-primary-main': '#4E2BCC',
+                '--mui-palette-success-main': '#16845f',
+                maxWidth: 680,
+                mx: 'auto',
+                p: { xs: 1.5, sm: 3 },
+                bgcolor: '#fff',
+                color: '#1a1530',
+                border: '1px solid rgba(26, 21, 48, 0.12)',
+                borderRadius: 1.5,
+                boxShadow: '0 5px 20px rgba(24, 51, 47, 0.08)',
+                '& .MuiChip-root': { color: '#1a1530', bgcolor: 'rgba(26, 21, 48, 0.08)' },
+              }}>
                 <Stack spacing={2.5}>
                   <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ justifyContent: 'space-between', gap: 2, pb: 2, borderBottom: '2px solid', borderColor: 'primary.main' }}>
                     <Box sx={{ minWidth: 0 }}>
@@ -303,10 +321,6 @@ export function InvoiceListPanel({ invoiceRows, onBack, onCreateInvoice, onUpdat
                       {displayedPreview.customerPhone && <Typography variant="body2" color="text.secondary">{displayedPreview.customerPhone}</Typography>}
                     </Box>
                     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(100px, 1fr))', gap: 1.5, alignContent: 'start' }}>
-                      <Box>
-                        <Typography variant="caption" color="text.secondary">Invoice number</Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 750, overflowWrap: 'anywhere' }}>{displayedPreview.invoiceNumber}</Typography>
-                      </Box>
                       <Box>
                         <Typography variant="caption" color="text.secondary">Invoice date</Typography>
                         <Typography variant="body2" sx={{ fontWeight: 750 }}>{formatDate(displayedPreview.issueDate)}</Typography>
@@ -368,7 +382,7 @@ export function InvoiceListPanel({ invoiceRows, onBack, onCreateInvoice, onUpdat
               </Box>
             </DialogContent>
             <DialogActions sx={{ px: 2, py: 1.3 }}>
-              <Button onClick={() => setPreviewInvoice(null)} sx={{ textTransform: 'none', fontWeight: 750 }}>Close preview</Button>
+              <Button onClick={closePreview} sx={{ textTransform: 'none', fontWeight: 750 }}>Close preview</Button>
             </DialogActions>
           </>
         )}

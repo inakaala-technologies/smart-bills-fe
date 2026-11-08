@@ -87,17 +87,23 @@ const businessDashboardSlice = createSlice({
       }
       state.selectedBusinessId = action.payload
     },
-    setBusinessFeatures: (state, action: PayloadAction<{ businessId: number; appointmentsEnabled: boolean;     membershipsEnabled: boolean; homeServicesEnabled?: boolean; payslipsEnabled?: boolean }>) => {
+    setBusinessFeatures: (state, action: PayloadAction<{ businessId: number; appointmentsEnabled: boolean; membershipsEnabled: boolean; homeServicesEnabled?: boolean; payslipsEnabled?: boolean }>) => {
       const business = state.data.businesses.find((item) => item.id === action.payload.businessId)
       if (!business) return
       business.payslipsEnabled = action.payload.payslipsEnabled ?? business.payslipsEnabled ?? false
       business.appointmentsEnabled = action.payload.appointmentsEnabled
-          business.homeServicesEnabled = action.payload.homeServicesEnabled ?? false
+      business.homeServicesEnabled = action.payload.homeServicesEnabled ?? false
       business.membershipsEnabled = action.payload.membershipsEnabled
     },
     setBusinessHomeVisitCharge: (state, action: PayloadAction<{ businessId: number; homeVisitCharge: number }>) => {
       const business = state.data.businesses.find((item) => item.id === action.payload.businessId)
       if (business) business.homeVisitCharge = action.payload.homeVisitCharge
+    },
+    // NEW: store the freshly uploaded (cache-busted) banner URL so every screen updates immediately.
+    // Make sure `bannerImageUrl?: string | null` exists on the business type (BusinessSummary).
+    setBusinessBanner: (state, action: PayloadAction<{ businessId: number; bannerImageUrl?: string | null }>) => {
+      const business = state.data.businesses.find((item) => item.id === action.payload.businessId)
+      if (business) business.bannerImageUrl = action.payload.bannerImageUrl
     },
     resetBusinessDashboard: () => initialState,
   },
@@ -169,5 +175,13 @@ const businessDashboardSlice = createSlice({
   },
 })
 
-export const { setActiveTab, setBusinessMembershipPlans, setSelectedBusinessId, setBusinessFeatures, setBusinessHomeVisitCharge, resetBusinessDashboard } = businessDashboardSlice.actions
+export const {
+  setActiveTab,
+  setBusinessMembershipPlans,
+  setSelectedBusinessId,
+  setBusinessFeatures,
+  setBusinessHomeVisitCharge,
+  setBusinessBanner,
+  resetBusinessDashboard,
+} = businessDashboardSlice.actions
 export default businessDashboardSlice.reducer

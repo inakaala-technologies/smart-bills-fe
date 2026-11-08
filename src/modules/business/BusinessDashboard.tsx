@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Box, Button, Container, Drawer, Paper, Snackbar, Stack, Typography } from '@mui/material'
+import { Alert, Box, Button, Container, Paper, Snackbar, Stack, Typography } from '@mui/material'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { AppointmentDetailDialog } from '../../components/AppointmentDetailDialog'
@@ -23,13 +23,14 @@ import {
   type AppointmentSummary,
   type DashboardData,
 } from '../../services/api'
+import type { BusinessSummary } from '../../services/api/types'
 import { addProfile, getCurrentUser, logoutUser, switchAccount, type Role } from '../../services/auth'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import type { RootState } from '../../store/store'
 import { ArrowLeft, Search } from 'lucide-react'
 import { BusinessProductsSection } from './components/BusinessProductsSection'
 import { getBusinessProducts } from '../../services/api/billingApi'
-import { fetchBusinessDashboard, fetchBusinessSummary, setActiveTab,setBusinessFeatures, setBusinessHomeVisitCharge as setBusinessHomeVisitChargeAction, setSelectedBusinessId } from '../../store/businessDashboardSlice'
+import { fetchBusinessDashboard, fetchBusinessSummary, setActiveTab, setBusinessBanner, setBusinessFeatures, setBusinessHomeVisitCharge as setBusinessHomeVisitChargeAction, setSelectedBusinessId } from '../../store/businessDashboardSlice'
 import { setAuthUser } from '../../store/authSlice'
 import { getDashboardPath } from '../../routes/dashboardPaths'
 import { AppointmentListCard } from './components/AppointmentListCard'
@@ -78,7 +79,10 @@ export function BusinessDashboard() {
   const navigate = useNavigate()
   const { tab: routeTab } = useParams()
   const dispatch = useAppDispatch()
-  const authUser = getCurrentUser()
+  // Subscribe to the auth slice so this screen re-renders as soon as the profile picture is updated.
+  // FIXED: the auth slice stores the user under `authUser` (not `user`).
+  const reduxAuthUser = useAppSelector((state: RootState) => state.auth.authUser)
+  const authUser = reduxAuthUser ?? getCurrentUser()
   const accountRoles = new Set((authUser?.accounts ?? []).map((account) => account.role).concat(authUser?.role ?? 'BUSINESS'))
   const availableAccounts = (authUser?.accounts ?? []).filter((account) => account.role !== authUser?.role)
   const missingProfileRoles = (['BUSINESS', 'CUSTOMER'] as Role[]).filter((role) => role !== authUser?.role && !accountRoles.has(role))
@@ -338,42 +342,51 @@ export function BusinessDashboard() {
     return { ok: true }
   }
 
+  // After a banner upload, put the new (cache-busted) URL straight into Redux so every screen updates at once.
+  // Do not refetch the dashboard here: that would bring back the old, cached URL.
+  const handleBannerUploaded = (updated: BusinessSummary) => {
+    dispatch(setBusinessBanner({ businessId: updated.id, bannerImageUrl: updated.bannerImageUrl }))
+  }
+
+  // FIXED: depend on the business id (not the whole object) so updating the banner
+  // does not re-trigger this fetch in a loop.
+  const selectedBusinessIdForSummary = selectedBusiness?.id
   useEffect(() => {
-    if (selectedBusiness) dispatch(fetchBusinessSummary(selectedBusiness.id))
-  }, [dispatch, selectedBusiness])
+    if (selectedBusinessIdForSummary) dispatch(fetchBusinessSummary(selectedBusinessIdForSummary))
+  }, [dispatch, selectedBusinessIdForSummary])
 
   useEffect(() => {
-  let cancelled = false
+    let cancelled = false
 
-  const loadActiveProductCount = async () => {
-    if (!selectedBusiness?.id) {
-      setActiveProductCount(0)
-      return
-    }
-
-    try {
-      const result = await getBusinessProducts(selectedBusiness.id)
-
-      if (cancelled) return
-
-      if (result.ok) {
-        const count = result.products.filter(
-          (product) => product.status === 'ACTIVE',
-        ).length
-
-        setActiveProductCount(count)
+    const loadActiveProductCount = async () => {
+      if (!selectedBusiness?.id) {
+        setActiveProductCount(0)
+        return
       }
-    } catch (error) {
-      console.error('Failed to load active product count:', error)
+
+      try {
+        const result = await getBusinessProducts(selectedBusiness.id)
+
+        if (cancelled) return
+
+        if (result.ok) {
+          const count = result.products.filter(
+            (product) => product.status === 'ACTIVE',
+          ).length
+
+          setActiveProductCount(count)
+        }
+      } catch (error) {
+        console.error('Failed to load active product count:', error)
+      }
     }
-  }
 
-  void loadActiveProductCount()
+    void loadActiveProductCount()
 
-  return () => {
-    cancelled = true
-  }
-}, [selectedBusiness?.id])
+    return () => {
+      cancelled = true
+    }
+  }, [selectedBusiness?.id])
 
   useEffect(() => {
     if (!data.businesses.length || selectedBusinessId !== null) return
@@ -532,7 +545,7 @@ export function BusinessDashboard() {
     if (!businessId || !customerId) {
       setInvoiceMessageSeverity('error')
       setInvoiceMessage('Select a customer before generating an invoice.')
-      return 
+      return
     }
 
     if (items.some((item) => !item.productName.trim() || !Number.isFinite(item.quantity) || item.quantity <= 0 || !Number.isFinite(item.unitPrice) || item.unitPrice <= 0 || !Number.isFinite(item.gstRate) || item.gstRate < 0)) {
@@ -567,37 +580,36 @@ export function BusinessDashboard() {
     }
     const totalAmount = Number((grossTotal - invoiceDiscountAmount).toFixed(2))
     const issueDate = getLocalDate()
-    // const issueDate = new Date().toISOString().slice(0, 10)
     setIsInvoiceSubmitting(true)
     try {
       const result = await createInvoice({
-  businessId,
-  customerId,
-  invoiceNumber: `INV-${Date.now()}`,
-  issueDate,
-  ...(invoiceForm.dueDate ? { dueDate: invoiceForm.dueDate } : {}),
-  subtotal,
-  gstAmount,
-  totalAmount,
-  invoiceDiscountAmount,
-  items: items.map(({ productName, quantity, unitPrice, gstRate }) => ({
-    productName: productName.trim(),
-    quantity,
-    unitPrice,
-    gstRate,
-  })),
-  ...(invoiceForm.discountValue.trim() ? {
-    invoiceDiscountType: invoiceForm.discountType,
-    invoiceDiscountValue: discountValue,
-  } : {}),
-  status,
-})
+        businessId,
+        customerId,
+        invoiceNumber: `INV-${Date.now()}`,
+        issueDate,
+        ...(invoiceForm.dueDate ? { dueDate: invoiceForm.dueDate } : {}),
+        subtotal,
+        gstAmount,
+        totalAmount,
+        invoiceDiscountAmount,
+        items: items.map(({ productName, quantity, unitPrice, gstRate }) => ({
+          productName: productName.trim(),
+          quantity,
+          unitPrice,
+          gstRate,
+        })),
+        ...(invoiceForm.discountValue.trim() ? {
+          invoiceDiscountType: invoiceForm.discountType,
+          invoiceDiscountValue: discountValue,
+        } : {}),
+        status,
+      })
 
       if (!result.ok) {
-  setInvoiceMessageSeverity('error')
-  setInvoiceMessage(result.message ?? 'Invoice generation failed.')
-  return
-}
+        setInvoiceMessageSeverity('error')
+        setInvoiceMessage(result.message ?? 'Invoice generation failed.')
+        return
+      }
 
       setInvoiceMessage('')
       setIsInvoiceFormOpen(false)
@@ -620,8 +632,8 @@ export function BusinessDashboard() {
       setCustomerSearchText('')
       dispatch(fetchBusinessDashboard(businessId))
     } catch (error) {
-setInvoiceMessageSeverity('error')
-setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation failed.')
+      setInvoiceMessageSeverity('error')
+      setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation failed.')
     } finally {
       setIsInvoiceSubmitting(false)
     }
@@ -648,43 +660,45 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
   const invoiceRows = [...data.invoices]
     .sort((first, second) => invoiceTime(second.issueDate) - invoiceTime(first.issueDate) || second.id - first.id)
     .map((invoice) => {
-    const customer = data.customers.find((item) => item.id === invoice.customerId)
-    const customerName = customer?.fullName ?? 'Customer'
-    const initials = customerName
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() ?? '')
-      .join('') || 'C'
-    const invoiceDate = parseDateOnly(invoice.issueDate)
+      const customer = data.customers.find((item) => item.id === invoice.customerId)
+      const customerName = customer?.fullName ?? 'Customer'
+      const initials = customerName
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase() ?? '')
+        .join('') || 'C'
+      const invoiceDate = parseDateOnly(invoice.issueDate)
 
-    return {
-      id: invoice.id,
-      customerName,
-      customerEmail: customer?.email,
-      customerPhone: customer?.phoneNumber,
-      customerAddress: customer?.locationAddress,
-      invoiceNumber: invoice.invoiceNumber ?? `INV-${invoice.id}`,
-      status: invoice.status ?? 'SENT',
-      issueDate: invoice.issueDate,
-      dueDate: invoice.dueDate,
-      subtotal: invoice.subtotal,
-      gstAmount: invoice.gstAmount,
-      totalAmount: invoice.totalAmount,
-      invoiceDiscountAmount: invoice.invoiceDiscountAmount,
-      invoiceDiscountType: invoice.invoiceDiscountType,
-      invoiceDiscountValue: invoice.invoiceDiscountValue,
-      amount: formatCurrency(invoice.totalAmount),
-      loyaltyDetails: (invoice.loyaltyPointsRedeemed ?? 0) > 0
-        ? `${invoice.loyaltyPointsRedeemed} points redeemed · ${formatCurrency(invoice.loyaltyDiscountAmount)} discount`
-        : undefined,
-      date: invoiceDate && !Number.isNaN(invoiceDate.getTime())
-        ? invoiceDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-        : '—',
-      badge: initials,
-    }
-  })
+      return {
+        id: invoice.id,
+        customerName,
+        customerEmail: customer?.email,
+        customerPhone: customer?.phoneNumber,
+        customerAddress: customer?.locationAddress,
+        invoiceNumber: invoice.invoiceNumber ?? `INV-${invoice.id}`,
+        status: invoice.status ?? 'SENT',
+        issueDate: invoice.issueDate,
+        dueDate: invoice.dueDate,
+        subtotal: invoice.subtotal,
+        gstAmount: invoice.gstAmount,
+        totalAmount: invoice.totalAmount,
+        invoiceDiscountAmount: invoice.invoiceDiscountAmount,
+        invoiceDiscountType: invoice.invoiceDiscountType,
+        invoiceDiscountValue: invoice.invoiceDiscountValue,
+        amount: formatCurrency(invoice.totalAmount),
+        loyaltyDetails: (invoice.loyaltyPointsRedeemed ?? 0) > 0
+          ? `${invoice.loyaltyPointsRedeemed} points redeemed · ${formatCurrency(invoice.loyaltyDiscountAmount)} discount`
+          : undefined,
+        date: invoiceDate && !Number.isNaN(invoiceDate.getTime())
+          ? invoiceDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+          : '—',
+        badge: initials,
+      }
+    })
 
+  // Full-screen profile page. This is the only copy of BusinessProfileMenuPage now
+  // (the old Drawer copy further down was unreachable and has been removed).
   if (isProfilePageOpen) {
     return (
       <BusinessProfileMenuPage
@@ -694,6 +708,7 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
         missingProfileRoles={missingProfileRoles}
         appointmentsEnabled={appointmentsEnabled}
         membershipsEnabled={membershipsEnabled}
+        payslipsEnabled={payslipsEnabled}
         onBack={() => setIsProfilePageOpen(false)}
         onNavigateTab={(tab) => {
           setIsProfilePageOpen(false)
@@ -721,7 +736,7 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
         }}
         onProfilePictureUpdated={(user) => dispatch(setAuthUser(user))}
         business={selectedBusiness}
-        onBannerUploaded={(updated) => dispatch(fetchBusinessDashboard(updated.id))}
+        onBannerUploaded={handleBannerUploaded}
       />
     )
   }
@@ -758,6 +773,7 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
       <Container maxWidth="xs" disableGutters sx={{ px: 0 }}>
         <Paper
           elevation={0}
+          data-app-frame
           sx={{
             width: '100%',
             maxWidth: 412,
@@ -845,352 +861,297 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
               setIsHeaderPinned(raw > 0.5)
             }}
             sx={{
-            px: activeTab === 'overview' ? 0 : { xs: 2, sm: 2.2 },
-            pt: activeTab === 'overview' ? 0 : { xs: 2, sm: 2.2 },
-            pb: 'calc(96px + env(safe-area-inset-bottom))',
-            flex: 1,
-            minHeight: 0,
-            overflowY: 'auto',
-            overscrollBehaviorY: 'contain',
-          }}>
+              px: activeTab === 'overview' ? 0 : { xs: 2, sm: 2.2 },
+              pt: activeTab === 'overview' ? 0 : { xs: 2, sm: 2.2 },
+              pb: 'calc(96px + env(safe-area-inset-bottom))',
+              flex: 1,
+              minHeight: 0,
+              overflowY: 'auto',
+              overscrollBehaviorY: 'contain',
+            }}
+          >
             <Stack spacing={1.6}>
               {isProductsViewOpen ? (
-            <Stack spacing={2}>
-              <Button
-                variant="text"
-                startIcon={<ArrowLeft size={18} />}
-                onClick={() => setIsProductsViewOpen(false)}
-                sx={{ alignSelf: 'flex-start', textTransform: 'none' }}
-              >
-                Back to Business Profile
-              </Button>
+                <Stack spacing={2}>
+                  <Button
+                    variant="text"
+                    startIcon={<ArrowLeft size={18} />}
+                    onClick={() => setIsProductsViewOpen(false)}
+                    sx={{ alignSelf: 'flex-start', textTransform: 'none' }}
+                  >
+                    Back to Business Profile
+                  </Button>
 
-              <BusinessProductsSection
-                businessId={selectedBusiness?.id ?? null}
-                onProductCountChange={setActiveProductCount}
-              />
-            </Stack>
-          ) : (
-            <>
-              {activeTab === 'overview' && (
-                <BusinessDashboardOverview
-                  topSlot={appHeader}
-                  onQuickAction={handleQuickAction}
-                  onOpenInsights={() => changeTab('insights')}
-                  onOpenInvoices={() => changeTab('invoices')}
-                  onOpenCustomers={() => changeTab('customers')}
-                  onOpenInvoice={(invoiceId) => {
-                    setPreviewInvoiceId(invoiceId)
-                    changeTab('invoices')
-                  }}
-                  hasBusiness={Boolean(selectedBusiness)}
-                  appointmentsEnabled={appointmentsEnabled}
-                  membershipsEnabled={membershipsEnabled}
-                />
-              )}
-
-            {activeTab === 'businesses' && (
-              <BusinessOverview
-                onOpenBusiness={(businessId) => {
-                dispatch(setSelectedBusinessId(businessId))
-                navigate(`/business/${businessId}`)
-              }}
-              />
-            )}
-
-            {activeTab === 'offers' && (
-              selectedBusiness ? (
-                <BusinessOffersWorkspace
-  businessId={selectedBusiness.id}
-  businessName={
-    selectedBusiness.businessName ??
-    selectedBusiness.name ??
-    selectedBusiness.companyName ??
-    'Your business'
-  }
-  businessLocation={
-    [
-      selectedBusiness.city,
-      selectedBusiness.region,
-      selectedBusiness.country,
-    ]
-      .filter(Boolean)
-      .join(', ') ||
-    selectedBusiness.address ||
-    'Location unavailable'
-  }
-  hasMappedLocation={
-    selectedBusiness.latitude != null &&
-    selectedBusiness.longitude != null
-  }
-/>
-              ) : (
-                <Typography color="text.secondary">Create or select a business profile before posting offers.</Typography>
-              )
-            )}
-
-            {activeTab === 'invoices' && (
-              <Stack spacing={1.6}>
-                <InvoiceListPanel
-                  invoiceRows={invoiceRows}
-                  onBack={() => dispatch(setActiveTab('overview'))}
-                  onCreateInvoice={() => {
-                    setInvoiceMessage('')
-                    setIsInvoiceFormOpen(true)
-                  }}
-                  onUpdateStatus={handleInvoiceStatusChange}
-                  previewInvoiceId={previewInvoiceId}
-                  onPreviewClosed={() => setPreviewInvoiceId(null)}
-                />
-
-                {isInvoiceFormOpen && (
-                  <InvoiceGeneratorCard
-                    open
-                    businessId={selectedBusinessId ?? selectedBusiness?.id ?? data.businesses[0]?.id ?? 0}
-                    data={data}
-                    selectedCustomer={selectedCustomer}
-                    customerSearchText={customerSearchText}
-                    customerSearchResults={customerSearchText.trim() ? customerSearchResults : data.customers}
-                    isCustomerSearching={isCustomerSearching}
-                    invoiceForm={invoiceForm}
-                    invoiceMessage={invoiceMessage}
-                    invoiceMessageSeverity={invoiceMessageSeverity}
-                    isSubmitting={isInvoiceSubmitting}
-                    onClose={() => setIsInvoiceFormOpen(false)}
-                    onCustomerSearchChange={setCustomerSearchText}
-                    onCustomerSelection={(customer) => {
-                      setSelectedCustomer(customer)
-                      if (customer) {
-                        handleInvoiceInput('customerId', String(customer.id))
-                      }
-                    }}
-                    onInvoiceFieldChange={handleInvoiceInput}
-                    onInvoiceItemChange={handleInvoiceItemChange}
-                    onAddItem={handleAddInvoiceItem}
-                    onRemoveItem={handleRemoveInvoiceItem}
-                    onCreateInvoice={(status) => void handleCreateInvoice(status)}
+                  <BusinessProductsSection
+                    businessId={selectedBusiness?.id ?? null}
+                    onProductCountChange={setActiveProductCount}
                   />
-                )}
-              </Stack>
-            )}
+                </Stack>
+              ) : (
+                <>
+                  {activeTab === 'overview' && (
+                    <BusinessDashboardOverview
+                      topSlot={appHeader}
+                      onQuickAction={handleQuickAction}
+                      onOpenInsights={() => changeTab('insights')}
+                      onOpenInvoices={() => changeTab('invoices')}
+                      onOpenCustomers={() => changeTab('customers')}
+                      onOpenInvoice={(invoiceId) => {
+                        setPreviewInvoiceId(invoiceId)
+                        changeTab('invoices')
+                      }}
+                      hasBusiness={Boolean(selectedBusiness)}
+                      appointmentsEnabled={appointmentsEnabled}
+                      membershipsEnabled={membershipsEnabled}
+                    />
+                  )}
 
-            {activeTab === 'customers' && selectedBusiness && (
-              <CustomerListCard
+                  {activeTab === 'businesses' && (
+                    <BusinessOverview
+                      onOpenBusiness={(businessId) => {
+                        dispatch(setSelectedBusinessId(businessId))
+                        navigate(`/business/${businessId}`)
+                      }}
+                    />
+                  )}
+
+                  {activeTab === 'offers' && (
+                    selectedBusiness ? (
+                      <BusinessOffersWorkspace
+                        businessId={selectedBusiness.id}
+                        businessName={
+                          selectedBusiness.businessName ??
+                          selectedBusiness.name ??
+                          selectedBusiness.companyName ??
+                          'Your business'
+                        }
+                        businessLocation={
+                          [
+                            selectedBusiness.city,
+                            selectedBusiness.region,
+                            selectedBusiness.country,
+                          ]
+                            .filter(Boolean)
+                            .join(', ') ||
+                          selectedBusiness.address ||
+                          'Location unavailable'
+                        }
+                        hasMappedLocation={
+                          selectedBusiness.latitude != null &&
+                          selectedBusiness.longitude != null
+                        }
+                      />
+                    ) : (
+                      <Typography color="text.secondary">Create or select a business profile before posting offers.</Typography>
+                    )
+                  )}
+
+                  {activeTab === 'invoices' && (
+                    <Stack spacing={1.6}>
+                      <InvoiceListPanel
+                        invoiceRows={invoiceRows}
+                        onBack={() => dispatch(setActiveTab('overview'))}
+                        onCreateInvoice={() => {
+                          setInvoiceMessage('')
+                          setIsInvoiceFormOpen(true)
+                        }}
+                        onUpdateStatus={handleInvoiceStatusChange}
+                        previewInvoiceId={previewInvoiceId}
+                        onPreviewClosed={() => setPreviewInvoiceId(null)}
+                      />
+
+                      {isInvoiceFormOpen && (
+                        <InvoiceGeneratorCard
+                          open
+                          businessId={selectedBusinessId ?? selectedBusiness?.id ?? data.businesses[0]?.id ?? 0}
+                          data={data}
+                          selectedCustomer={selectedCustomer}
+                          customerSearchText={customerSearchText}
+                          customerSearchResults={customerSearchText.trim() ? customerSearchResults : data.customers}
+                          isCustomerSearching={isCustomerSearching}
+                          invoiceForm={invoiceForm}
+                          invoiceMessage={invoiceMessage}
+                          invoiceMessageSeverity={invoiceMessageSeverity}
+                          isSubmitting={isInvoiceSubmitting}
+                          onClose={() => setIsInvoiceFormOpen(false)}
+                          onCustomerSearchChange={setCustomerSearchText}
+                          onCustomerSelection={(customer) => {
+                            setSelectedCustomer(customer)
+                            if (customer) {
+                              handleInvoiceInput('customerId', String(customer.id))
+                            }
+                          }}
+                          onInvoiceFieldChange={handleInvoiceInput}
+                          onInvoiceItemChange={handleInvoiceItemChange}
+                          onAddItem={handleAddInvoiceItem}
+                          onRemoveItem={handleRemoveInvoiceItem}
+                          onCreateInvoice={(status) => void handleCreateInvoice(status)}
+                        />
+                      )}
+                    </Stack>
+                  )}
+
+                  {activeTab === 'customers' && selectedBusiness && (
+                    <CustomerListCard
+                      businessId={selectedBusiness.id}
+                      customers={data.customers}
+                      onOpenCustomer={handleOpenCustomer}
+                      onAddCustomer={() => setIsAddCustomerOpen(true)}
+                    />
+                  )}
+
+                  {activeTab === 'retention' && selectedBusiness && (
+                    <CustomerRetentionWorkspace
+                      key={selectedBusiness.id}
+                      businessId={selectedBusiness.id}
+                      data={data}
+                      onUpdated={() => dispatch(fetchBusinessDashboard(selectedBusiness.id))}
+                    />
+                  )}
+
+                  {activeTab === 'callbacks' && selectedBusiness && (
+                    <CallbackRequestsWorkspace key={selectedBusiness.id} businessId={selectedBusiness.id} />
+                  )}
+
+                  {activeTab === 'loyalty' && selectedBusiness && (
+                    <LoyaltyWorkspace
+                      key={selectedBusiness.id}
+                      businessId={selectedBusiness.id}
+                      products={data.products}
+                    />
+                  )}
+
+                  {activeTab === 'payslips' && payslipsEnabled && selectedBusiness && (
+                    <PayslipsWorkspace key={selectedBusiness.id} businessId={selectedBusiness.id} />
+                  )}
+
+                  {activeTab === 'insights' && selectedBusiness && <BusinessInsightsWorkspace key={selectedBusiness.id} businessId={selectedBusiness.id} appointmentsEnabled={appointmentsEnabled} membershipsEnabled={membershipsEnabled} />}
+
+                  {activeTab === 'search' && (
+                    <GlobalSearchWorkspace
+                      data={data}
+                      appointmentsEnabled={appointmentsEnabled}
+                      membershipsEnabled={membershipsEnabled}
+                      onOpenCustomer={handleOpenCustomer}
+                      onChangeTab={changeTab}
+                    />
+                  )}
+
+                  {activeTab === 'memberships' && membershipsEnabled && selectedBusiness && (
+                    <MembershipWorkspace
+                      key={selectedBusiness.id}
+                      businessId={selectedBusiness.id}
+                      memberships={data.memberships}
+                      customers={data.customers}
+                      onUpdated={() => dispatch(fetchBusinessDashboard(selectedBusiness.id))}
+                    />
+                  )}
+
+                  {activeTab === 'appointments' && (
+                    <Stack spacing={1.6}>
+                      {selectedBusiness && (
+                        <>
+                          <AppointmentServiceManager
+                            key={selectedBusiness.id}
+                            businessId={selectedBusiness.id}
+                            appointmentsEnabled={selectedBusiness.appointmentsEnabled ?? false}
+                            homeServicesEnabled={homeServicesEnabled}
+                            onToggleHomeServices={(enabled) => handleFeatureToggle('homeServices', enabled)}
+                            homeVisitCharge={selectedBusiness.homeVisitCharge ?? 0}
+                            onSaveHomeVisitCharge={handleSaveHomeVisitCharge}
+                            onConfigurationChanged={() => dispatch(fetchBusinessDashboard(selectedBusiness.id))}
+                          />
+                          <AppointmentStaffManager
+                            key={selectedBusiness.id}
+                            businessId={selectedBusiness.id}
+                            onStaffAdded={() => setAppointmentStaffRefreshKey((current) => current + 1)}
+                          />
+                        </>
+                      )}
+                      {appointmentsEnabled && (
+                        <AppointmentListCard
+                          businessId={selectedBusinessId ?? selectedBusiness?.id ?? 0}
+                          staffRefreshKey={appointmentStaffRefreshKey}
+                          appointments={data.appointments}
+                          customers={data.customers}
+                          selectedAppointmentId={selectedAppointmentForDetails?.id}
+                          onSelectAppointment={setSelectedAppointmentForDetails}
+                          onUpdated={() => dispatch(fetchBusinessDashboard(selectedBusinessId ?? undefined))}
+                        />
+                      )}
+                    </Stack>
+                  )}
+
+                  {activeTab === 'profile' && (
+                    <BusinessProfileCard
+                      authUser={authUser}
+                      businessForm={businessForm}
+                      location={businessLocation}
+                      profileId={selectedBusiness?.profileId}
+                      isCreatingBusiness={isCreatingBusiness}
+                      businessMessage={businessMessage}
+                      appointmentsEnabled={appointmentsEnabled}
+                      membershipsEnabled={membershipsEnabled}
+                      payslipsEnabled={payslipsEnabled}
+                      onBusinessFieldChange={handleBusinessFieldChange}
+                      onLocationChange={handleBusinessLocationChange}
+                      onSave={handleSaveBusinessProfile}
+                      onManageProducts={() => setIsProductsViewOpen(true)}
+                      onManageAppointments={() => changeTab('appointments')}
+                      activeProductCount={activeProductCount}
+                      onFeatureToggle={handleFeatureToggle}
+                    />
+                  )}
+                </>
+              )}
+            </Stack>
+          </Box>
+
+          {selectedBusiness && (
+            <>
+              <AddCustomerDialog
+                open={isAddCustomerOpen}
                 businessId={selectedBusiness.id}
-                customers={data.customers}
-                onOpenCustomer={handleOpenCustomer}
-                onAddCustomer={() => setIsAddCustomerOpen(true)}
+                onClose={() => setIsAddCustomerOpen(false)}
+                onCreated={() => dispatch(fetchBusinessDashboard(selectedBusiness.id))}
               />
-            )}
-
-            {activeTab === 'retention' && selectedBusiness && (
-              <CustomerRetentionWorkspace
-                key={selectedBusiness.id}
-                businessId={selectedBusiness.id}
-                businessName={selectedBusiness.businessName ?? selectedBusiness.name ?? 'your business'}
-                businessLocation={selectedBusiness.address ?? ''}
-                hasMappedLocation={selectedBusiness.latitude != null && selectedBusiness.longitude != null}
-                data={data}
-                onUpdated={() => dispatch(fetchBusinessDashboard(selectedBusiness.id))}
-              />
-            )}
-
-            {activeTab === 'callbacks' && selectedBusiness && (
-              <CallbackRequestsWorkspace key={selectedBusiness.id} businessId={selectedBusiness.id} />
-            )}
-
-            {activeTab === 'loyalty' && selectedBusiness && (
-              <LoyaltyWorkspace
-                key={selectedBusiness.id}
-                businessId={selectedBusiness.id}
-                products={data.products}
-              />
-            )}
-
-            {activeTab === 'payslips' && payslipsEnabled && selectedBusiness && (
-              <PayslipsWorkspace key={selectedBusiness.id} businessId={selectedBusiness.id} />
-            )}
-
-            {activeTab === 'insights' && selectedBusiness && <BusinessInsightsWorkspace key={selectedBusiness.id} businessId={selectedBusiness.id} appointmentsEnabled={appointmentsEnabled} membershipsEnabled={membershipsEnabled} />}
-
-            {activeTab === 'search' && (
-              <GlobalSearchWorkspace
-                data={data}
-                appointmentsEnabled={appointmentsEnabled}
-                membershipsEnabled={membershipsEnabled}
-                onOpenCustomer={handleOpenCustomer}
-                onChangeTab={changeTab}
-              />
-            )}
-
-            {activeTab === 'memberships' && membershipsEnabled && selectedBusiness && (
-              <MembershipWorkspace
-                key={selectedBusiness.id}
+              <SendMembershipNotificationDialog
+                open={isNotificationDialogOpen}
                 businessId={selectedBusiness.id}
                 memberships={data.memberships}
                 customers={data.customers}
-                onUpdated={() => dispatch(fetchBusinessDashboard(selectedBusiness.id))}
+                onClose={() => setIsNotificationDialogOpen(false)}
               />
-            )}
-
-            {activeTab === 'appointments' && (
-              <Stack spacing={1.6}>
-                {selectedBusiness && (
-                  <>
-                    <AppointmentServiceManager
-                      key={selectedBusiness.id}
-                      businessId={selectedBusiness.id}
-                      appointmentsEnabled={selectedBusiness.appointmentsEnabled ?? false}
-                      homeServicesEnabled={homeServicesEnabled}
-                      onToggleHomeServices={(enabled) => handleFeatureToggle('homeServices', enabled)}
-                      homeVisitCharge={selectedBusiness.homeVisitCharge ?? 0}
-                      onSaveHomeVisitCharge={handleSaveHomeVisitCharge}
-                      onConfigurationChanged={() => dispatch(fetchBusinessDashboard(selectedBusiness.id))}
-                    />
-                    <AppointmentStaffManager
-                      key={selectedBusiness.id}
-                      businessId={selectedBusiness.id}
-                      onStaffAdded={() => setAppointmentStaffRefreshKey((current) => current + 1)}
-                    />
-                  </>
-                )}
-                {appointmentsEnabled && (
-                  <AppointmentListCard
-                    businessId={selectedBusinessId ?? selectedBusiness?.id ?? 0}
-                    staffRefreshKey={appointmentStaffRefreshKey}
-                    appointments={data.appointments}
-                    customers={data.customers}
-                    selectedAppointmentId={selectedAppointmentForDetails?.id}
-                    onSelectAppointment={setSelectedAppointmentForDetails}
-                    onUpdated={() => dispatch(fetchBusinessDashboard(selectedBusinessId ?? undefined))}
-                  />
-                )}
-              </Stack>
-            )}
-
-            {activeTab === 'profile' && (
-              <BusinessProfileCard
-                authUser={authUser}
-                businessForm={businessForm}
-                location={businessLocation}
-                profileId={selectedBusiness?.profileId}
-                isCreatingBusiness={isCreatingBusiness}
-                businessMessage={businessMessage}
-                  appointmentsEnabled={appointmentsEnabled}
-                  membershipsEnabled={membershipsEnabled}
-                  payslipsEnabled={payslipsEnabled}
-                  onBusinessFieldChange={handleBusinessFieldChange}
-                  onLocationChange={handleBusinessLocationChange}
-                onSave={handleSaveBusinessProfile}
-                onManageProducts={() => setIsProductsViewOpen(true)}
-                onManageAppointments={() => changeTab('appointments')}
-                activeProductCount={activeProductCount}
-                onFeatureToggle={handleFeatureToggle}
-              />
-            )}
             </>
-            )}
-          </Stack>
-        </Box>
+          )}
 
-        {selectedBusiness && (
-          <>
-            <AddCustomerDialog
-              open={isAddCustomerOpen}
-              businessId={selectedBusiness.id}
-              onClose={() => setIsAddCustomerOpen(false)}
-              onCreated={() => dispatch(fetchBusinessDashboard(selectedBusiness.id))}
-            />
-            <SendMembershipNotificationDialog
-              open={isNotificationDialogOpen}
-              businessId={selectedBusiness.id}
-              memberships={data.memberships}
-              customers={data.customers}
-              onClose={() => setIsNotificationDialogOpen(false)}
-            />
-          </>
-        )}
+          <AppointmentDetailDialog
+            open={Boolean(selectedAppointmentForDetails)}
+            appointment={selectedAppointmentForDetails}
+            businesses={data.businesses}
+            customers={data.customers}
+            role={authUser?.role ?? 'BUSINESS'}
+            staffOptions={staffOptions}
+            onClose={clearAppointmentUrlParam}
+            onStatusChange={handleStatusChangeFromDialog}
+            onStaffAssign={handleStaffAssignFromDialog}
+          />
 
-        <AppointmentDetailDialog
-          open={Boolean(selectedAppointmentForDetails)}
-          appointment={selectedAppointmentForDetails}
-          businesses={data.businesses}
-          customers={data.customers}
-          role={authUser?.role ?? 'BUSINESS'}
-          staffOptions={staffOptions}
-          onClose={clearAppointmentUrlParam}
-          onStatusChange={handleStatusChangeFromDialog}
-          onStaffAssign={handleStaffAssignFromDialog}
-        />
-
-        <BottomNavBar
-          activeTab={activeTab}
-          membershipsEnabled={membershipsEnabled}
-          onChangeTab={changeTab}
-        />
-      </Paper>
-    </Container>
-    <Drawer
-      anchor="right"
-      open={isProfilePageOpen}
-      onClose={() => setIsProfilePageOpen(false)}
-      slotProps={{
-        paper: {
-          sx: {
-            width: { xs: '100%', sm: 444 },
-            maxWidth: '100vw',
-            bgcolor: 'background.default',
-            overflow: 'hidden',
-          },
-        },
-      }}
-    >
-      <BusinessProfileMenuPage
-        authUser={authUser}
-        currentRole={authUser?.role ?? 'BUSINESS'}
-        availableAccounts={availableAccounts}
-        missingProfileRoles={missingProfileRoles}
-        appointmentsEnabled={appointmentsEnabled}
-        membershipsEnabled={membershipsEnabled}
-        payslipsEnabled={payslipsEnabled}
-        onBack={() => setIsProfilePageOpen(false)}
-        onNavigateTab={(tab) => {
-          setIsProfilePageOpen(false)
-          changeTab(tab)
-        }}
-        onSwitchAccount={(role) => {
-          const updated = switchAccount(role)
-          if (updated) {
-            dispatch(setAuthUser(updated))
-            navigate(getDashboardPath(updated.role))
-            window.location.reload()
-          }
-        }}
-        onAddProfile={(role) => {
-          const updated = addProfile(role)
-          if (updated) {
-            dispatch(setAuthUser(updated))
-            navigate(getDashboardPath(updated.role))
-            window.location.reload()
-          }
-        }}
-        onLogout={() => {
-          logoutUser()
-          navigate('/')
-        }}
-        onProfilePictureUpdated={(user) => dispatch(setAuthUser(user))}
-        business={selectedBusiness}
-        onBannerUploaded={(updated) => dispatch(fetchBusinessDashboard(updated.id))}
-      />
-    </Drawer>
-    <Snackbar
-      open={Boolean(invoiceToast)}
-      autoHideDuration={4000}
-      onClose={() => setInvoiceToast('')}
-      anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-    >
-      <Alert severity="success" variant="filled" onClose={() => setInvoiceToast('')} sx={{ width: '100%' }}>{invoiceToast}</Alert>
-    </Snackbar>
-  </Box>
+          <BottomNavBar
+            activeTab={activeTab}
+            membershipsEnabled={membershipsEnabled}
+            onChangeTab={changeTab}
+          />
+        </Paper>
+      </Container>
+      <Snackbar
+        open={Boolean(invoiceToast)}
+        autoHideDuration={4000}
+        onClose={() => setInvoiceToast('')}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert severity="success" variant="filled" onClose={() => setInvoiceToast('')} sx={{ width: '100%' }}>{invoiceToast}</Alert>
+      </Snackbar>
+    </Box>
   )
 }

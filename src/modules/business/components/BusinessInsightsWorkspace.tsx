@@ -38,6 +38,10 @@ function money(amount: number) {
   return `₹${Number(amount ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 }
 
+function countLabel(amount: number) {
+  return Number(amount ?? 0).toLocaleString('en-IN')
+}
+
 function parseDate(value?: string) {
   if (!value) return null
   const parsed = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value)
@@ -135,31 +139,39 @@ function countByStatus<T extends { status?: string }>(rows: T[], status: string)
   return rows.filter((row) => row.status?.toUpperCase() === status).length
 }
 
-function TrendBars({ points, comparison }: { points: TrendPoint[]; comparison?: TrendPoint[] }) {
+function TrendBars({ points, comparison, format = money }: { points: TrendPoint[]; comparison?: TrendPoint[]; format?: (amount: number) => string }) {
   const theme = useTheme()
   const maximum = Math.max(...points.map((point) => point.amount), ...(comparison?.map((point) => point.amount) ?? []), 1)
+  // With only one or two data points (e.g. "Today") bars must not stretch to the card width.
+  const sparse = points.length <= 2
+  const barMaxWidth = comparison ? 28 : 40
 
   return (
     <Box>
-      <Stack direction="row" spacing={0.6} sx={{ alignItems: 'flex-end', height: 116, px: 0.4 }}>
+      <Stack direction="row" spacing={0.6} sx={{ alignItems: 'flex-end', justifyContent: 'center', height: sparse ? 140 : 116, px: 0.4 }}>
         {points.map((point, index) => {
           const compareAmount = comparison?.[index]?.amount ?? 0
           const mainHeight = Math.max(point.amount > 0 ? 5 : 0, point.amount / maximum * 100)
           const compareHeight = Math.max(compareAmount > 0 ? 5 : 0, compareAmount / maximum * 100)
           return (
-            <Stack key={point.key} spacing={0.7} sx={{ flex: 1, minWidth: 0, alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-              <Stack direction="row" spacing={0.3} sx={{ alignItems: 'flex-end', width: '100%', height: 100, justifyContent: 'center' }}>
-                <Box title={`${point.label}: ${money(point.amount)}`} sx={{ width: comparison ? '35%' : '58%', height: `${mainHeight}%`, minHeight: point.amount > 0 ? 4 : 0, borderRadius: '5px 5px 2px 2px', background: 'linear-gradient(180deg, #905BF4 0%, #4E2BCC 100%)', transition: 'height 250ms ease' }} />
-                {comparison && <Box title={`${point.label}: ${money(compareAmount)}`} sx={{ width: '35%', height: `${compareHeight}%`, minHeight: compareAmount > 0 ? 4 : 0, borderRadius: '5px 5px 2px 2px', bgcolor: alpha(theme.palette.info.main, 0.65), transition: 'height 250ms ease' }} />}
+            <Stack key={point.key} spacing={0.7} sx={{ flex: sparse ? '0 1 110px' : 1, minWidth: 0, alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
+              <Stack direction="row" spacing={0.6} sx={{ alignItems: 'flex-end', width: '100%', height: 100, justifyContent: 'center' }}>
+                <Box title={`${point.label}: ${format(point.amount)}`} sx={{ width: comparison ? '35%' : '58%', maxWidth: barMaxWidth, height: `${mainHeight}%`, minHeight: point.amount > 0 ? 4 : 0, borderRadius: '5px 5px 2px 2px', background: 'linear-gradient(180deg, #905BF4 0%, #4E2BCC 100%)', transition: 'height 250ms ease' }} />
+                {comparison && <Box title={`${point.label}: ${format(compareAmount)}`} sx={{ width: '35%', maxWidth: barMaxWidth, height: `${compareHeight}%`, minHeight: compareAmount > 0 ? 4 : 0, borderRadius: '5px 5px 2px 2px', bgcolor: alpha(theme.palette.info.main, 0.65), transition: 'height 250ms ease' }} />}
               </Stack>
               <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, fontWeight: 650 }}>{point.label}</Typography>
+              {sparse && (
+                <Typography variant="caption" sx={{ fontSize: 11, fontWeight: 800, lineHeight: 1.2, textAlign: 'center' }}>
+                  {comparison ? `${format(point.amount)} · ${format(compareAmount)}` : format(point.amount)}
+                </Typography>
+              )}
             </Stack>
           )
         })}
       </Stack>
       {comparison && (
         <Stack direction="row" spacing={1.6} sx={{ mt: 1.2, justifyContent: 'center' }}>
-          <Legend color="#0d8b70" label="Billed" />
+          <Legend color="#4E2BCC" label="Billed" />
           <Legend color={theme.palette.info.main} label="Collected" />
         </Stack>
       )}
@@ -500,7 +512,7 @@ export function BusinessInsightsWorkspace({ businessId, appointmentsEnabled, mem
             <Chip size="small" variant="outlined" color="warning" label={`${upcomingAppointments.length} upcoming`} />
           </Stack>
           <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 750 }}>Appointment volume · {selectedPeriodLabel.toLowerCase()}</Typography>
-          <Box sx={{ mt: 0.4 }}><TrendBars points={appointmentTrend} /></Box>
+          <Box sx={{ mt: 0.4 }}><TrendBars points={appointmentTrend} format={countLabel} /></Box>
           <Box sx={{ mt: 1.5, pt: 1.3, borderTop: '1px solid', borderColor: 'divider' }}>
             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 750 }}>Popular services · {rangeText}</Typography>
             {topServices.length === 0 ? (
@@ -539,7 +551,7 @@ export function BusinessInsightsWorkspace({ businessId, appointmentsEnabled, mem
           </Box>
           <Box sx={{ mt: 1.5, pt: 1.3, borderTop: '1px solid', borderColor: 'divider' }}>
             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 750 }}>Membership starts · {selectedPeriodLabel.toLowerCase()}</Typography>
-            <Box sx={{ mt: 0.4 }}><TrendBars points={membershipTrend} /></Box>
+            <Box sx={{ mt: 0.4 }}><TrendBars points={membershipTrend} format={countLabel} /></Box>
           </Box>
           {memberships.length === 0 && <Typography variant="caption" color="text.secondary">Membership activity will appear here as plans are joined.</Typography>}
         </SummaryCard>
@@ -629,7 +641,7 @@ export function BusinessInsightsWorkspace({ businessId, appointmentsEnabled, mem
         <Box sx={{ mt: 1.5, pt: 1.3, borderTop: '1px solid', borderColor: 'divider' }}>
           <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 750 }}>Customers invoiced · {selectedPeriodLabel.toLowerCase()}</Typography>
           <Box sx={{ mt: 0.4 }}>
-            <TrendBars points={customerActivityTrend} />
+            <TrendBars points={customerActivityTrend} format={countLabel} />
           </Box>
           <Typography variant="caption" color="text.secondary">{acquiredLast30Days} new {acquiredLast30Days === 1 ? 'customer' : 'customers'} in the last 30 days</Typography>
         </Box>

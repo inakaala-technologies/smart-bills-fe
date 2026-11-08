@@ -12,6 +12,11 @@ type AddCustomerDialogProps = {
 const MAX_NAME_LENGTH = 30
 const MAX_PHONE_LENGTH = 13
 
+// Names may contain letters (any language), spaces, apostrophes, dots and hyphens only.
+// Digits and other symbols are stripped as the user types or pastes.
+const sanitizeName = (value: string) => value.replace(/[^\p{L}\s.'-]/gu, '').slice(0, MAX_NAME_LENGTH)
+const isValidName = (value: string) => /^\p{L}[\p{L}\s.'-]*$/u.test(value)
+
 export function AddCustomerDialog({ open, businessId, onClose, onCreated }: AddCustomerDialogProps) {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -21,10 +26,17 @@ export function AddCustomerDialog({ open, businessId, onClose, onCreated }: AddC
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+
+    const trimmedName = name.trim()
+    if (!isValidName(trimmedName)) {
+      setMessage('Enter a valid full name using letters only.')
+      return
+    }
+
     setIsSubmitting(true)
     setMessage('')
     const result = await addCustomerToBusiness(businessId, {
-      name: name.trim(),
+      name: trimmedName,
       phone: phone.trim(),
       email: email.trim() || undefined,
     })
@@ -48,8 +60,9 @@ export function AddCustomerDialog({ open, businessId, onClose, onCreated }: AddC
               name="customer-full-name"
               autoComplete="off"
               value={name}
-              // Limit is enforced silently (no counter is shown); slice also covers pasted text
-              onChange={(event) => setName(event.target.value.slice(0, MAX_NAME_LENGTH))}
+              // Letters only; the length limit is enforced silently (no counter is shown).
+              // sanitizeName also covers pasted text.
+              onChange={(event) => setName(sanitizeName(event.target.value))}
               slotProps={{ htmlInput: { maxLength: MAX_NAME_LENGTH } }}
             />
             <TextField

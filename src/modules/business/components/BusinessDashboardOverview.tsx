@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Alert, Box, ButtonBase, Chip, Dialog, DialogContent, DialogTitle, IconButton, Menu, MenuItem, Stack, Typography } from '@mui/material'
-import { ArrowUpRight, BellRing, CalendarCheck2, ChevronDown, FilePlus2, LockKeyhole, MoreVertical, Plus, UserRoundPlus, UsersRound, X, type LucideIcon } from 'lucide-react'
+import { Alert, Box, ButtonBase, Chip, Dialog, DialogContent, DialogTitle, IconButton, Menu, MenuItem, Stack, Typography, type Theme } from '@mui/material'
+import { ArrowUpRight, BellRing, CalendarCheck2, ChevronDown, FilePlus2, LockKeyhole, MoreVertical, UserRoundPlus, UsersRound, X, type LucideIcon } from 'lucide-react'
 import { QuickActionGrid, type QuickActionId } from './QuickActionGrid'
 import { RevenueTrendChart } from './RevenueTrendChart'
 import { useAppSelector } from '../../../store/hooks'
@@ -37,6 +37,31 @@ function formatEventTime(value?: string) {
 }
 
 const EVENT_BAR_COLORS = ['#B9A4F8', '#E8A317', '#34D399']
+
+/* Dark-mode helpers. theme.applyStyles('dark', ...) is the safe way to give different
+   values per colour scheme (unlike theme.palette.* which always returns light values). */
+const completedBarSx = (theme: Theme) => ({
+  bgcolor: '#0F032D',
+  ...theme.applyStyles('dark', { bgcolor: '#905BF4' }),
+})
+const remainingBarSx = (theme: Theme) => ({
+  bgcolor: '#D9D9DC',
+  ...theme.applyStyles('dark', { bgcolor: 'rgba(255,255,255,0.16)' }),
+})
+const violetLinkSx = (theme: Theme) => ({
+  color: '#4E2BCC',
+  ...theme.applyStyles('dark', { color: '#B9A4F8' }),
+})
+const purpleTileSx = (theme: Theme) => ({
+  bgcolor: '#F0E9FF',
+  color: '#5D36D3',
+  ...theme.applyStyles('dark', { bgcolor: 'rgba(144,91,244,0.22)', color: '#C9B3FA' }),
+})
+const amberTileSx = (theme: Theme) => ({
+  bgcolor: '#FFF2D8',
+  color: '#F59E0B',
+  ...theme.applyStyles('dark', { bgcolor: 'rgba(245,158,11,0.2)', color: '#FBBF24' }),
+})
 
 function calculateInvoiceCollectionProgress(
   invoices: Array<{ id: number; totalAmount?: number; status?: string }>,
@@ -192,8 +217,8 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
   const completedPercentage = collectionTotal > 0 ? completedRevenueAmount / collectionTotal * 100 : 0
   const remainingPercentage = collectionTotal > 0 ? 100 - completedPercentage : 0
   const revenueProgress = [
-    { label: 'Completed', amount: completedRevenueAmount, percentage: completedPercentage, color: '#0F032D' },
-    { label: 'Remaining', amount: remainingRevenueAmount, percentage: remainingPercentage, color: '#D9D9DC' },
+    { label: 'Completed', amount: completedRevenueAmount, percentage: completedPercentage },
+    { label: 'Remaining', amount: remainingRevenueAmount, percentage: remainingPercentage },
   ]
   const summaryCards: Array<{ title: string; value: string; detail: string; icon: LucideIcon; tone: 'amber' | 'purple'; onClick: () => void }> = [
     {
@@ -350,11 +375,11 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
         >
           <Box
             aria-hidden="true"
-            sx={{ flexGrow: Math.max(completedPercentage, 12), flexBasis: 0, minWidth: 0, bgcolor: '#0F032D', borderRadius: '14px', transition: 'flex-grow 300ms ease' }}
+            sx={(theme) => ({ flexGrow: Math.max(completedPercentage, 12), flexBasis: 0, minWidth: 0, borderRadius: '14px', transition: 'flex-grow 300ms ease', ...completedBarSx(theme) })}
           />
           <Box
             aria-hidden="true"
-            sx={{ flexGrow: Math.max(remainingPercentage, 12), flexBasis: 0, minWidth: 0, bgcolor: '#D9D9DC', borderRadius: '14px', transition: 'flex-grow 300ms ease' }}
+            sx={(theme) => ({ flexGrow: Math.max(remainingPercentage, 12), flexBasis: 0, minWidth: 0, borderRadius: '14px', transition: 'flex-grow 300ms ease', ...remainingBarSx(theme) })}
           />
         </Box>
 
@@ -377,7 +402,7 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
                 bgcolor: 'background.paper',
                 boxShadow: '0 2px 12px rgba(78, 43, 204, 0.08)',
                 textAlign: 'left',
-                color: 'inherit',
+                color: 'text.primary',
                 transition: 'box-shadow 150ms ease',
                 '&:hover': { boxShadow: '0 4px 16px rgba(78, 43, 204, 0.14)' },
                 '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
@@ -385,14 +410,19 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
               }}
             >
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.2 }}>
-                <Box sx={{ width: 28, height: 28, display: 'grid', placeItems: 'center', borderRadius: '8px', bgcolor: tone === 'amber' ? '#FFF2D8' : '#F0E9FF', color: tone === 'amber' ? '#F59E0B' : '#5D36D3' }}>
+                <Box sx={(theme) => ({ width: 28, height: 28, display: 'grid', placeItems: 'center', borderRadius: '8px', ...(tone === 'amber' ? amberTileSx(theme) : purpleTileSx(theme)) })}>
                   <Icon size={14} strokeWidth={2.1} />
                 </Box>
-                <ArrowUpRight size={15} color="#0F032D" />
+                <ArrowUpRight size={15} color="currentColor" />
               </Box>
               <Typography noWrap sx={{ color: 'text.primary', fontSize: 24, lineHeight: 1.1, fontWeight: 500, letterSpacing: '-0.5px' }}>{value}</Typography>
               <Typography noWrap sx={{ mt: 0.5, color: 'text.primary', fontSize: 11.5, lineHeight: 1.2 }}>{title}</Typography>
-              <Typography noWrap sx={{ mt: 0.6, color: tone === 'amber' ? '#E89100' : '#4E2BCC', fontSize: 9.5, lineHeight: 1.2 }}>{detail}</Typography>
+              <Typography
+                noWrap
+                sx={(theme) => ({ mt: 0.6, fontSize: 9.5, lineHeight: 1.2, ...(tone === 'amber' ? { color: '#E89100' } : violetLinkSx(theme)) })}
+              >
+                {detail}
+              </Typography>
             </ButtonBase>
           ))}
         </Box>
@@ -447,36 +477,25 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
           )}
         </Box>
 
-        {/* Appointments (Figma): title + "+" + lime arrow, then a "Today - N events" panel with coloured side bars */}
+        {/* Appointments (Figma): title + lime arrow, then a "Today - N events" panel with coloured side bars */}
         {appointmentsEnabled && (
           <Box sx={{ bgcolor: 'background.paper', borderRadius: '20px', boxShadow: '0 2px 12px rgba(78, 43, 204, 0.08)', overflow: 'hidden' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1.4 }}>
               <Typography sx={{ fontSize: 18, lineHeight: 1.2, fontWeight: 500, color: 'text.primary' }}>Appointments</Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <IconButton
-                  aria-label="Add appointment"
-                  size="small"
-                  disabled={!hasBusiness}
-                  onClick={() => onQuickAction('appointment')}
-                  sx={{ color: '#4E2BCC' }}
-                >
-                  <Plus size={20} />
-                </IconButton>
-                <IconButton
-                  aria-label="Open appointments"
-                  disabled={!hasBusiness}
-                  onClick={() => onQuickAction('appointment')}
-                  sx={{ width: 30, height: 30, borderRadius: '8px', bgcolor: '#CDF27E', color: '#0F032D', '&:hover': { bgcolor: '#C2EA6A' }, '&.Mui-disabled': { bgcolor: '#CDF27E', opacity: 0.6 } }}
-                >
-                  <ArrowUpRight size={16} />
-                </IconButton>
-              </Box>
+              <IconButton
+                aria-label="Open appointments"
+                disabled={!hasBusiness}
+                onClick={() => onQuickAction('appointment')}
+                sx={{ width: 30, height: 30, borderRadius: '8px', bgcolor: '#CDF27E', color: '#0F032D', '&:hover': { bgcolor: '#C2EA6A' }, '&.Mui-disabled': { bgcolor: '#CDF27E', opacity: 0.6 } }}
+              >
+                <ArrowUpRight size={16} />
+              </IconButton>
             </Box>
             <Box sx={{ borderTop: '1px solid', borderColor: 'divider', p: 1.5 }}>
-              <Box sx={{ border: '1px solid rgba(15, 3, 45, 0.07)', borderRadius: '16px', p: 1.6 }}>
+              <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: '16px', p: 1.6 }}>
                 {eventsToShow.length === 0 ? (
                   <Box role="status" sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', py: 1 }}>
-                    <Box sx={{ width: 48, height: 48, display: 'grid', placeItems: 'center', borderRadius: '12px', bgcolor: '#F4F4F7', color: '#9A97A6', mb: 1 }}>
+                    <Box sx={{ width: 48, height: 48, display: 'grid', placeItems: 'center', borderRadius: '12px', bgcolor: 'action.hover', color: 'text.secondary', mb: 1 }}>
                       <CalendarCheck2 size={22} />
                     </Box>
                     <Typography sx={{ fontSize: 13, fontWeight: 500, color: 'text.primary' }}>No appointments today</Typography>
@@ -531,7 +550,7 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
               aria-label="See all invoices"
               disabled={!hasBusiness}
               onClick={onOpenInvoices}
-              sx={{ fontSize: 10.5, color: '#4E2BCC', px: 0.5, borderRadius: '6px' }}
+              sx={(theme) => ({ fontSize: 10.5, px: 0.5, borderRadius: '6px', ...violetLinkSx(theme) })}
             >
               See all
             </ButtonBase>
@@ -548,7 +567,7 @@ export function BusinessDashboardOverview({ onQuickAction, onOpenInsights, onOpe
                   onClick={() => onOpenInvoice(entry.id)}
                   sx={{ display: 'flex', alignItems: 'center', gap: 1.4, width: '100%', px: 0.5, textAlign: 'left', borderRadius: '12px' }}
                 >
-                  <Box aria-hidden="true" sx={{ width: 38, height: 38, flexShrink: 0, borderRadius: '50%', bgcolor: '#F0F0F4' }} />
+                  <Box aria-hidden="true" sx={{ width: 38, height: 38, flexShrink: 0, borderRadius: '50%', bgcolor: 'action.hover' }} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography noWrap sx={{ fontSize: 13, lineHeight: 1.25, color: 'text.primary' }}>{entry.label}</Typography>
                     <Typography noWrap sx={{ fontSize: 10, lineHeight: 1.35, color: 'text.secondary' }}>{entry.detail}</Typography>
