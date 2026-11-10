@@ -1,11 +1,12 @@
 import { Box, ButtonBase, Typography } from '@mui/material'
-import { CalendarCheck2, FileText, Home, LayoutGrid, type LucideIcon } from 'lucide-react'
+import { CalendarCheck2, FileText, Home, LayoutGrid, ReceiptText, type LucideIcon } from 'lucide-react'
 import type { DashboardTab } from '../../types'
 
 const roleNav: Array<{ key: DashboardTab; label: string; icon: LucideIcon }> = [
   { key: 'overview', label: 'Home', icon: Home },
   { key: 'businesses', label: 'Businesses', icon: LayoutGrid },
   { key: 'invoices', label: 'Documents', icon: FileText },
+  { key: 'receipts', label: 'Receipts', icon: ReceiptText },
   { key: 'appointments', label: 'Bookings', icon: CalendarCheck2 },
 ]
 

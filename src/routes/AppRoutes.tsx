@@ -26,6 +26,10 @@ const BusinessDashboard = lazy(() => import('../modules/business/BusinessDashboa
 const CustomerDashboard = lazy(() => import('../modules/customer/CustomerDashboard').then((m) => ({ default: m.CustomerDashboard })))
 const InsuranceHomePage = lazy(() => import('../pages/InsurancePages').then((m) => ({ default: m.InsuranceHomePage })))
 const InsuranceCategoryPage = lazy(() => import('../pages/InsurancePages').then((m) => ({ default: m.InsuranceCategoryPage })))
+const PartnerOnboardingPage = lazy(() => import('../pages/PartnerOnboardingPage').then((m) => ({ default: m.PartnerOnboardingPage })))
+const DevReceiptSenderPage = import.meta.env.DEV
+  ? lazy(() => import('../pages/DevReceiptSenderPage').then((m) => ({ default: m.DevReceiptSenderPage })))
+  : null
 
 function AuthenticatedRoute({ children }: { children: ReactNode }) {
   const authUser = useAppSelector((state: RootState) => state.auth.authUser)
@@ -300,6 +304,8 @@ export default function AppRoutes() {
           element={<AuthPage />}
         />
 
+        <Route path="/partner/onboarding" element={<PartnerOnboardingPage />} />
+
         <Route
           path="/dashboard/:tab?"
           element={
@@ -341,6 +347,19 @@ export default function AppRoutes() {
             </AuthenticatedRoute>
           }
         />
+
+        {DevReceiptSenderPage && (
+          <Route
+            path="/dev/receipt-sender"
+            element={
+              <AuthenticatedRoute>
+                <RoleRoute allow="ADMIN" role={dashboardRole}>
+                  <DevReceiptSenderPage />
+                </RoleRoute>
+              </AuthenticatedRoute>
+            }
+          />
+        )}
 
         <Route
           path="/business/:id"

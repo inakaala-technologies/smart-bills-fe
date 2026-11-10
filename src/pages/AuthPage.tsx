@@ -158,6 +158,9 @@ export function AuthPage() {
             <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'center', display: 'block' }}>
               Don’t have an account? <Box component="span" sx={(theme) => ({ color: theme.palette.primary.main, fontWeight: 700, cursor: 'pointer' })} onClick={startSignupFlow}>Sign Up</Box>
             </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'center', display: 'block' }}>
+              POS provider? <Box component="span" sx={(theme) => ({ color: theme.palette.primary.main, fontWeight: 700, cursor: 'pointer' })} onClick={() => navigate('/partner/onboarding')}>Apply to integrate with BHive</Box>
+            </Typography>
           </Stack>
         </Box>
 

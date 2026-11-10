@@ -47,6 +47,7 @@ import { setActiveTab, setSelectedBusinessId } from '../../store/customerDashboa
 import type { DashboardTab } from '../types'
 import { FamilyManagementDialog } from './components/FamilyManagementDialog'
 import { CustomerBillsPage } from './components/CustomerBillsPage'
+import { CustomerReceiptsPage } from './components/CustomerReceiptsPage'
 import { getDashboardPath } from '../../routes/dashboardPaths'
 
 // 'offers' is added so /dashboard/offers is a valid route.
@@ -55,6 +56,7 @@ const customerDashboardTabs: DashboardTab[] = [
   'businesses',
   'offers',
   'invoices',
+  'receipts',
   'appointments',
   'rewards',
   'memberships',
@@ -795,6 +797,7 @@ export function CustomerDashboard() {
             )}
 
             {activeTab === 'invoices' && <CustomerInvoicesList invoices={data.invoices} businesses={data.businesses} />}
+            {activeTab === 'receipts' && <CustomerReceiptsPage />}
             {activeTab === 'rewards' && <CustomerLoyaltyPanel customerId={customerProfileId} businesses={data.businesses} />}
             {activeTab === 'payslips' && <CustomerPayslipsPage />}
             {activeTab === 'insights' && <CustomerInsights invoices={data.invoices} businesses={data.businesses} customerId={customerProfileId} />}

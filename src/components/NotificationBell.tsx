@@ -93,7 +93,7 @@ function isFamilyInvitation(notification: AppNotificationSummary): boolean {
 
 function notificationIcon(notification: AppNotificationSummary): ReactNode {
   const text = `${notification.type || ''} ${notification.title || ''}`.toLowerCase()
-  if (text.includes('invoice')) return <FileText size={20} />
+  if (text.includes('invoice') || text.includes('receipt')) return <FileText size={20} />
   if (isFamilyInvitation(notification)) return <Users size={20} />
   if (isAppointmentNotification(notification)) return <CalendarCheck2 size={20} />
   return <Bell size={20} />
