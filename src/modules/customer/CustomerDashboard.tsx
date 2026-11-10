@@ -159,7 +159,9 @@ export function CustomerDashboard() {
     if (!hasInvoiceLink || invoiceFromLink) return
     // Invoices may still be loading: only report "not found" once they have loaded and nothing matches.
     if (loading || data.invoices.length === 0) return
-    setMissingInvoiceLabel(invoiceNumberParam ?? `#${invoiceIdParam}`)
+    void Promise.resolve().then(() => {
+      setMissingInvoiceLabel(invoiceNumberParam ?? `#${invoiceIdParam}`)
+    })
     const nextParams = new URLSearchParams(searchParams)
     nextParams.delete('invoiceId')
     nextParams.delete('invoiceNumber')
@@ -770,6 +772,7 @@ export function CustomerDashboard() {
                   latitude={data.customers[0]?.latitude}
                   longitude={data.customers[0]?.longitude}
                   view="businesses"
+                  myBusinesses={data.businesses}
                 />
               </Box>
             )}
@@ -792,6 +795,7 @@ export function CustomerDashboard() {
                   latitude={data.customers[0]?.latitude}
                   longitude={data.customers[0]?.longitude}
                   view="offers"
+                  myBusinesses={data.businesses}
                 />
               </Box>
             )}

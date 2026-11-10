@@ -8,14 +8,18 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { FileText, Home, MapPin } from 'lucide-react'
+import { alpha } from '@mui/material/styles'
+import { Building2, FileText, Home, MapPin, Store, Tag } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   LocationPicker,
   type LocationValue,
 } from '../../../components/LocationPicker'
 import { BusinessTypeFilter } from '../../../components/BusinessTypeFilter'
 import { BusinessTypeIcon } from '../../../components/BusinessTypeIcon'
+import { DashboardListRow } from '../../../components/DashboardListRow'
+import { EmptyState } from '../../../components/EmptyState'
 import {
   getBusinessTypeLabel,
   normalizeBusinessType,
@@ -24,18 +28,30 @@ import {
   fetchNearbyBusinesses,
   fetchNearbyOffers,
   updateMyLocation,
+  type DashboardData,
   type NearbyBusinessSummary,
   type NearbyOfferSummary,
 } from '../../../services/api'
+import { useAppDispatch } from '../../../store/hooks'
+import { setSelectedBusinessId } from '../../../store/customerDashboardSlice'
 
 // Shared helpers: resolve relative backend paths and detect PDF flyers.
 import { isPdfOffer, resolveAssetUrl } from '../../../utils/offerAsset'
+
+type BusinessesSubTab = 'nearby' | 'offers' | 'my'
+
+const SUB_TABS: Array<{ key: BusinessesSubTab; label: string; icon: typeof Store }> = [
+  { key: 'nearby', label: 'Near Business', icon: Store },
+  { key: 'offers', label: 'Offers', icon: Tag },
+  { key: 'my', label: 'My Business', icon: Building2 },
+]
 
 type CustomerLocationCardProps = {
   locationAddress?: string
   latitude?: number
   longitude?: number
   view?: 'businesses' | 'offers'
+  myBusinesses?: DashboardData['businesses']
 }
 
 function formatDistance(distanceKm: number) {
@@ -59,7 +75,12 @@ export function CustomerLocationCard({
   latitude,
   longitude,
   view = 'businesses',
+  myBusinesses = [],
 }: CustomerLocationCardProps) {
+  const dispatch = useAppDispatch()
+  const navigate = useNavigate()
+  const [subTab, setSubTab] = useState<BusinessesSubTab>(view === 'offers' ? 'offers' : 'nearby')
+  const [myBusinessTypeFilter, setMyBusinessTypeFilter] = useState('ALL')
   const initialLocation: LocationValue = {
     locationAddress: locationAddress ?? '',
     latitude: latitude ?? null,
@@ -103,6 +124,9 @@ export function CustomerLocationCard({
       normalizeBusinessType(business.businessType) === businessTypeFilter) &&
       (!homeServicesOnly || business.homeServicesEnabled === true),
   )
+  const filteredMyBusinesses = (myBusinesses ?? []).filter((business) =>
+    myBusinessTypeFilter === 'ALL' || normalizeBusinessType(business.businessType) === myBusinessTypeFilter,
+  )
 
   /*
    * Keep the location picker synchronized when the
@@ -115,8 +139,10 @@ export function CustomerLocationCard({
       longitude: longitude ?? null,
     }
 
-    setLocation(nextLocation)
-    setSavedLocation(nextLocation)
+    void Promise.resolve().then(() => {
+      setLocation(nextLocation)
+      setSavedLocation(nextLocation)
+    })
   }, [locationAddress, latitude, longitude])
 
   /*
@@ -129,9 +155,13 @@ export function CustomerLocationCard({
       savedLocation.latitude === null ||
       savedLocation.longitude === null
     ) {
-      setNearbyBusinesses([])
-      setBusinessesLoading(false)
-      setBusinessesError(false)
+      void Promise.resolve().then(() => {
+        if (!cancelled) {
+          setNearbyBusinesses([])
+          setBusinessesLoading(false)
+          setBusinessesError(false)
+        }
+      })
 
       return () => {
         cancelled = true
@@ -185,9 +215,13 @@ export function CustomerLocationCard({
       savedLocation.latitude === null ||
       savedLocation.longitude === null
     ) {
-      setNearbyOffers([])
-      setOffersLoading(false)
-      setOffersError(false)
+      void Promise.resolve().then(() => {
+        if (!cancelled) {
+          setNearbyOffers([])
+          setOffersLoading(false)
+          setOffersError(false)
+        }
+      })
 
       return () => {
         cancelled = true
@@ -302,96 +336,189 @@ export function CustomerLocationCard({
     savedLocation.latitude !== null &&
     savedLocation.longitude !== null
 
-  return (
-    <Box sx={{ mb: 2, minWidth: 0, maxWidth: '100%' }}>
-      {/* Customer location selector */}
-      <LocationPicker
-        value={location}
-        onChange={setLocation}
-        footer={
-          <Stack
-            direction="row"
-            spacing={1}
+  const renderLocationPicker = () => (
+    <LocationPicker
+      value={location}
+      onChange={setLocation}
+      footer={
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{
+            alignItems: 'center',
+            flexWrap: 'wrap',
+          }}
+        >
+          <Button
+            variant="contained"
+            loading={saving}
+            onClick={() => void saveLocation()}
+            disabled={
+              saving || !location.locationAddress.trim()
+            }
             sx={{
-              alignItems: 'center',
-              flexWrap: 'wrap',
+              textTransform: 'none',
+              fontWeight: 800,
             }}
           >
-            <Button
-              variant="contained"
-              loading={saving}
-              onClick={() => void saveLocation()}
-              disabled={
-                saving || !location.locationAddress.trim()
-              }
-              sx={{
-                textTransform: 'none',
-                fontWeight: 800,
-              }}
-            >
-              Save location
-            </Button>
+            Save location
+          </Button>
 
-            {feedback && (
-              <Typography
-                variant="caption"
-                sx={{
-                  color: feedbackError
-                    ? 'error.main'
-                    : 'primary.main',
-                }}
-              >
-                {feedback}
-              </Typography>
-            )}
-          </Stack>
-        }
-      />
-
-      {/* Location is required for both views */}
-      {!hasCoordinates ? (
-        <Alert severity="info" sx={{ mt: 1.2 }}>
-          Choose a location with GPS or the selectors above
-          to discover {view === 'offers' ? 'offers' : 'businesses'} near you.
-        </Alert>
-      ) : (
-        <>
-          {/* Search radius */}
-          <Stack
-            direction="row"
-            spacing={0.7}
-            sx={{
-              mt: 1.5,
-              mb: 1.5,
-              alignItems: 'center',
-              flexWrap: 'wrap',
-            }}
-          >
+          {feedback && (
             <Typography
               variant="caption"
               sx={{
-                color: 'text.secondary',
-                fontWeight: 800,
+                color: feedbackError
+                  ? 'error.main'
+                  : 'primary.main',
               }}
             >
-              Search radius
+              {feedback}
             </Typography>
+          )}
+        </Stack>
+      }
+    />
+  )
 
-            {[5, 25, 50, 100].map((radius) => (
-              <Chip
-                key={radius}
-                label={`${radius} km`}
-                size="small"
-                clickable
-                color={
-                  radiusKm === radius ? 'success' : 'default'
-                }
-                onClick={() => setRadiusKm(radius)}
-              />
-            ))}
-          </Stack>
-          {/* OFFERS VIEW */}
-          {view === 'offers' && (
+  const renderRadiusChips = () => (
+    <Stack
+      direction="row"
+      spacing={0.7}
+      sx={{
+        mt: 1.5,
+        mb: 1.5,
+        alignItems: 'center',
+        flexWrap: 'wrap',
+      }}
+    >
+      <Typography
+        variant="caption"
+        sx={{
+          color: 'text.secondary',
+          fontWeight: 800,
+        }}
+      >
+        Search radius
+      </Typography>
+
+      {[5, 25, 50, 100].map((radius) => (
+        <Chip
+          key={radius}
+          label={`${radius} km`}
+          size="small"
+          clickable
+          color={
+            radiusKm === radius ? 'primary' : 'default'
+          }
+          onClick={() => setRadiusKm(radius)}
+        />
+      ))}
+    </Stack>
+  )
+
+  return (
+    <Box sx={{ mb: 2, minWidth: 0, maxWidth: '100%' }}>
+      {/* Sub-tab selector */}
+      <Box
+        sx={{
+          display: 'flex',
+          gap: 0.5,
+          mb: 2,
+          backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+          borderRadius: '14px',
+          p: '4px',
+        }}
+      >
+        {SUB_TABS.map(({ key, label, icon: TabIcon }) => {
+          const isActive = subTab === key
+          const count =
+            key === 'nearby'
+              ? filteredBusinesses.length
+              : key === 'offers'
+              ? nearbyOffers.length
+              : filteredMyBusinesses.length
+
+          return (
+            <Box
+              key={key}
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setSubTab(key)}
+              sx={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 0.6,
+                py: '8px',
+                px: { xs: 0.5, sm: 1 },
+                borderRadius: '11px',
+                cursor: 'pointer',
+                backgroundColor: isActive ? 'primary.main' : 'transparent',
+                color: isActive ? '#fff' : 'text.secondary',
+                fontWeight: isActive ? 800 : 600,
+                fontSize: { xs: '12px', sm: '13px' },
+                lineHeight: 1.3,
+                letterSpacing: '-0.01em',
+                transition: 'all 0.18s ease',
+                userSelect: 'none',
+                boxShadow: isActive ? '0 2px 8px rgba(108, 92, 231, 0.28)' : 'none',
+                '&:hover': {
+                  backgroundColor: isActive
+                    ? 'primary.main'
+                    : (theme) => alpha(theme.palette.primary.main, 0.14),
+                  color: isActive ? '#fff' : 'primary.main',
+                },
+              }}
+            >
+              <TabIcon size={15} strokeWidth={isActive ? 2.5 : 2} style={{ flexShrink: 0 }} />
+              <span>{label}</span>
+              {count > 0 && (
+                <Box
+                  component="span"
+                  sx={{
+                    px: 0.6,
+                    py: 0.1,
+                    fontSize: '10px',
+                    fontWeight: 800,
+                    borderRadius: '8px',
+                    backgroundColor: isActive
+                      ? 'rgba(255, 255, 255, 0.25)'
+                      : (theme) => alpha(theme.palette.primary.main, 0.12),
+                    color: isActive ? '#fff' : 'primary.main',
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {count}
+                </Box>
+              )}
+            </Box>
+          )
+        })}
+      </Box>
+
+      {/* ── Offers tab ── */}
+      {subTab === 'offers' && (
+        <Box>
+          {!hasCoordinates ? (
+            <>
+              <Alert severity="info" sx={{ mb: 1.2 }}>
+                Set your location to see offers near you.
+              </Alert>
+              {renderLocationPicker()}
+            </>
+          ) : (
+            <>
+              {savedLocation.locationAddress && (
+                <Stack direction="row" spacing={0.6} sx={{ alignItems: 'center', mb: 1, color: 'text.secondary' }}>
+                  <MapPin size={14} style={{ flexShrink: 0 }} />
+                  <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                    {savedLocation.locationAddress}
+                  </Typography>
+                </Stack>
+              )}
+              {renderRadiusChips()}
             <Box sx={{ mt: 1.5 }}>
               <Typography
                 sx={{
@@ -644,12 +771,24 @@ export function CustomerLocationCard({
                   })}
                 </Stack>
               )}
-            </Box>
-          )}
+                </Box>
+              </>
+            )}
+        </Box>
+      )}
 
-          {/* BUSINESSES VIEW */}
-          {view === 'businesses' && (
-            <Box sx={{ mt: 1.5 }}>
+      {/* ── Nearby Businesses tab ── */}
+      {subTab === 'nearby' && (
+        <Box>
+          {renderLocationPicker()}
+          {!hasCoordinates ? (
+            <Alert severity="info" sx={{ mt: 1.2 }}>
+              Choose a location with GPS or the selectors above to discover businesses near you.
+            </Alert>
+          ) : (
+            <>
+              {renderRadiusChips()}
+              <Box sx={{ mt: 1.5 }}>
               <Typography
                 sx={{
                   mb: 0.8,
@@ -858,9 +997,66 @@ export function CustomerLocationCard({
                     )}
                   </>
                 )}
-            </Box>
+              </Box>
+            </>
           )}
-        </>
+        </Box>
+      )}
+
+      {/* ── My Business tab ── */}
+      {subTab === 'my' && (
+        <Box sx={{ mt: 0.5 }}>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            sx={{ alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between', gap: 1, mb: 1.5 }}
+          >
+            <Box>
+              <Typography sx={{ color: 'text.primary', fontSize: 17, fontWeight: 900 }}>My businesses</Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                Business profiles linked to your account.
+              </Typography>
+            </Box>
+            <BusinessTypeFilter id="my-business-type" value={myBusinessTypeFilter} onChange={setMyBusinessTypeFilter} />
+          </Stack>
+
+          {filteredMyBusinesses.length > 0 ? (
+            <Stack spacing={1.2}>
+              {filteredMyBusinesses.map((business) => (
+                <Box
+                  key={business.id}
+                  onClick={() => {
+                    dispatch(setSelectedBusinessId(business.id))
+                    navigate(`/business/${business.id}`)
+                  }}
+                  sx={{
+                    cursor: 'pointer',
+                    borderRadius: '16px',
+                    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                    '&:hover': { transform: 'translateY(-1px)', boxShadow: '0 10px 20px rgba(0,0,0,0.18)' },
+                  }}
+                >
+                  <DashboardListRow
+                    leading={<BusinessTypeIcon businessType={business.businessType} />}
+                    title={business.businessName ?? business.name ?? `Business ${business.id}`}
+                    subtitle={`${getBusinessTypeLabel(business.businessType)}${business.email ? ` · ${business.email}` : ''}`}
+                    trailing={
+                      <Chip
+                        label={business.status ?? 'active'}
+                        size="small"
+                        sx={{ bgcolor: 'success.light', color: 'success.dark', fontWeight: 700 }}
+                      />
+                    }
+                  />
+                </Box>
+              ))}
+            </Stack>
+          ) : (
+            <EmptyState
+              title={myBusinesses && myBusinesses.length > 0 ? 'No businesses in this category' : 'No businesses'}
+              description={myBusinesses && myBusinesses.length > 0 ? 'Choose another business type to see more results.' : 'Business records will appear here.'}
+            />
+          )}
+        </Box>
       )}
     </Box>
   )
