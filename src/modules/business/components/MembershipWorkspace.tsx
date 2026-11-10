@@ -126,6 +126,8 @@ export function MembershipWorkspace({ businessId, memberships, customers, onUpda
 
   useEffect(() => {
     if (!memberDialogOpen || !renewalMembership?.customerId) {
+      // The loyalty balance must not survive after its renewal dialog closes.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRenewalLoyalty(null)
       return
     }

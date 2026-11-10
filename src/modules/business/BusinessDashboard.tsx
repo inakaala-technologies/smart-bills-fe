@@ -1,10 +1,25 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Box, Container, Paper, Stack, Typography } from '@mui/material'
-import { useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Box, Button, Container, Paper, Stack, Typography } from '@mui/material'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { AppointmentDetailDialog } from '../../components/AppointmentDetailDialog'
 import type { LocationValue } from '../../components/LocationPicker'
-import { createBusiness, createInvoice, searchCustomers, updateInvoiceStatus, type DashboardData } from '../../services/api'
+import {
+  createBusiness,
+  createInvoice,
+  fetchAppointmentById,
+  fetchAppointmentStaff,
+  searchCustomers,
+  setBusinessAppointmentsEnabled,
+  setBusinessMembershipsEnabled,
+  updateAppointmentStaff,
+  updateAppointmentStatus,
+  updateInvoiceStatus,
+  type AppointmentStaffOption,
+  type AppointmentStatus,
+  type AppointmentSummary,
+  type DashboardData,
+} from '../../services/api'
 import { addProfile, getCurrentUser, logoutUser, switchAccount, type Role } from '../../services/auth'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import type { RootState } from '../../store/store'
@@ -102,7 +117,6 @@ export function BusinessDashboard() {
   }))
   const [invoiceMessage, setInvoiceMessage] = useState('')
   const [invoiceMessageSeverity, setInvoiceMessageSeverity] = useState<'error' | 'success'>('success')
-  const [isInvoiceSuccessToastOpen, setIsInvoiceSuccessToastOpen] = useState(false)
   const [isInvoiceSubmitting, setIsInvoiceSubmitting] = useState(false)
   const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false)
   const [isProductsViewOpen, setIsProductsViewOpen] = useState(false)
@@ -508,7 +522,6 @@ export function BusinessDashboard() {
       if (status === 'SENT') {
         setInvoiceMessage('')
         setIsInvoiceFormOpen(false)
-        setIsInvoiceSuccessToastOpen(true)
       } else {
         setInvoiceMessageSeverity('success')
         setInvoiceMessage(
@@ -869,7 +882,23 @@ setInvoiceMessage(error instanceof Error ? error.message : 'Invoice generation f
           </>
         )}
 
-        <BottomNavBar activeTab={activeTab} onChangeTab={(tab) => dispatch(setActiveTab(tab))} />
+        <AppointmentDetailDialog
+          open={Boolean(selectedAppointmentForDetails)}
+          appointment={selectedAppointmentForDetails}
+          businesses={data.businesses}
+          customers={data.customers}
+          role="BUSINESS"
+          staffOptions={staffOptions}
+          onClose={clearAppointmentUrlParam}
+          onStatusChange={handleStatusChangeFromDialog}
+          onStaffAssign={handleStaffAssignFromDialog}
+        />
+
+        <BottomNavBar
+          activeTab={activeTab}
+          membershipsEnabled={membershipsEnabled}
+          onChangeTab={handleChangeTab}
+        />
       </Paper>
     </Container>
   </Box>

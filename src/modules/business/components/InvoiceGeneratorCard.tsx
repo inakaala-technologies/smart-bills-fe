@@ -89,6 +89,8 @@ export function InvoiceGeneratorCard({
 
   useEffect(() => {
     if (!open) {
+      // Reset local dialog state after the parent closes this dialog.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsBillPreviewOpen(false)
       setInvoiceModeOverride(null)
       setSelectedMembershipId('')
@@ -103,6 +105,8 @@ export function InvoiceGeneratorCard({
 
   useEffect(() => {
     if (!open || !selectedCustomer) {
+      // The displayed balance belongs to the selected customer only.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoyaltyState(null)
       setLoyaltyError('')
       return
@@ -128,6 +132,8 @@ export function InvoiceGeneratorCard({
   }, [businessId, dispatch, membershipPlanState?.loaded, membershipPlanState?.loading, open])
   useEffect(() => {
   if (!open || !businessId) {
+    // Clear products when the dialog no longer has a business context.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setBusinessProducts([])
     return
   }

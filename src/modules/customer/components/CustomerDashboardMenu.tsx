@@ -65,7 +65,7 @@ export function CustomerDashboardMenu({
               key={tab.key}
               selected={activeTab === tab.key}
               onClick={() => {
-                dispatch(setActiveTab(tab.key))
+                onChangeTab(tab.key)
                 onClose()
               }}
               sx={{ gap: 1, py: 1.1, fontWeight: 600 }}

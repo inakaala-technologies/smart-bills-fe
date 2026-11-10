@@ -29,26 +29,22 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { AppointmentDetailDialog } from '../../components/AppointmentDetailDialog'
-import { DashboardListRow } from '../../components/DashboardListRow'
-import { BusinessTypeFilter } from '../../components/BusinessTypeFilter'
-import { BusinessTypeIcon } from '../../components/BusinessTypeIcon'
 import { EmptyState } from '../../components/EmptyState'
 import { ProfileManagerDialog } from '../../components/ProfileManagerDialog'
-import { CustomerLocationCard } from './components/CustomerLocationCard'
+import { BusinessesTabView } from './components/BusinessesTabView'
 import { HeroBanner, SummaryCards } from './components/CustomerDashboardOverview'
 import { CustomerDashboardMenu } from './components/CustomerDashboardMenu'
 import { CustomerInvoicesList } from './components/CustomerInvoicesList'
 import { CustomerProfilePanel } from './components/CustomerProfilePanel'
 import { CustomerAppointmentsPanel } from './components/CustomerAppointmentsPanel'
-import { fetchNearbyOffers, type DashboardData } from '../../services/api'
+import { FamilyManagementDialog } from './components/FamilyManagementDialog'
+import { fetchNearbyOffers, type DashboardData, type AppointmentSummary } from '../../services/api'
 import { addProfile, logoutUser, switchAccount, type Role } from '../../services/auth'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import type { RootState } from '../../store/store'
 import { setAuthUser } from '../../store/authSlice'
-import { setActiveTab, setSelectedBusinessId, fetchCustomerDashboard } from '../../store/customerDashboardSlice'
+import { setActiveTab, setSelectedBusinessId } from '../../store/customerDashboardSlice'
 import type { DashboardTab } from '../types'
-import { getBusinessTypeLabel, normalizeBusinessType } from '../../constants/businessTypes'
-import { FamilyManagementDialog } from './components/FamilyManagementDialog'
 
 const roleNav: Array<{ key: DashboardTab; label: string; icon: LucideIcon }> = [
   { key: 'overview', label: 'Home', icon: Home },
@@ -59,7 +55,6 @@ const roleNav: Array<{ key: DashboardTab; label: string; icon: LucideIcon }> = [
   { key: 'profile', label: 'Profile', icon: UserRound },
 ]
 
-const customerDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'appointments', 'rewards', 'memberships', 'profile']
 
 function formatCurrency(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
@@ -68,7 +63,6 @@ function formatCurrency(value?: number) {
 
 export function CustomerDashboard() {
   const navigate = useNavigate()
-  const { tab: routeTab } = useParams()
   const dispatch = useAppDispatch()
   const authUser = useAppSelector((state: RootState) => state.auth.authUser)
   const accountRoles = new Set((authUser?.accounts ?? []).map((account) => account.role).concat(authUser?.role ?? 'CUSTOMER'))
@@ -77,19 +71,15 @@ export function CustomerDashboard() {
   const { data, loading, activeTab, selectedCustomerId } = useAppSelector((state: RootState) => state.customerDashboard)
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
   const [managerOpen, setManagerOpen] = useState(false)
-  const [businessTypeFilter, setBusinessTypeFilter] = useState('ALL')
+  const [familyDialogOpen, setFamilyDialogOpen] = useState(false)
   const [nearbyOffersCount, setNearbyOffersCount] = useState(0)
   const [activityNow] = useState(Date.now)
   const [explicitAppointment, setExplicitAppointment] = useState<AppointmentSummary | null>(null)
   const setSelectedAppointment = setExplicitAppointment
   const [selectedInvoice, setSelectedInvoice] = useState<DashboardData['invoices'][number] | null>(null)
   const isMenuOpen = Boolean(menuAnchorEl)
-  const filteredBusinesses = data.businesses.filter((business) =>
-    businessTypeFilter === 'ALL' || normalizeBusinessType(business.businessType) === businessTypeFilter,
-  )
   const customerLatitude = data.customers[0]?.latitude
   const customerLongitude = data.customers[0]?.longitude
-  const [familyDialogOpen, setFamilyDialogOpen] = useState(false)
 
   useEffect(() => {
     if (customerLatitude === undefined || customerLongitude === undefined) return
@@ -210,7 +200,6 @@ export function CustomerDashboard() {
               anchorEl={menuAnchorEl}
               isOpen={isMenuOpen}
               onClose={() => setMenuAnchorEl(null)}
-              onChangeTab={handleChangeTab}
               currentRole={authUser?.role ?? 'CUSTOMER'}
               availableAccounts={availableAccounts}
               missingProfileRoles={missingProfileRoles}
@@ -259,6 +248,12 @@ export function CustomerDashboard() {
                   window.location.reload()
                 }
               }}
+            />
+
+            <FamilyManagementDialog
+              open={familyDialogOpen}
+              onClose={() => setFamilyDialogOpen(false)}
+              currentUserId={Number(authUser?.id)}
             />
 
             {activeTab === 'overview' && (
@@ -486,54 +481,37 @@ export function CustomerDashboard() {
                     <Button onClick={() => setSelectedInvoice(null)} sx={{ color: 'primary.main', fontWeight: 700, textTransform: 'none' }}>Close</Button>
                   </DialogActions>
                 </Dialog>
+                <AppointmentDetailDialog
+                  open={Boolean(explicitAppointment)}
+                  appointment={explicitAppointment}
+                  businesses={data.businesses}
+                  customers={data.customers}
+                  role="CUSTOMER"
+                  onClose={() => setExplicitAppointment(null)}
+                />
               </Box>
             )}
 
             {activeTab === 'businesses' && (
-              <Box sx={{ backgroundColor: 'action.hover', borderRadius: '24px', p: 2, border: '1px solid var(--mui-palette-divider)' }}>
-                <CustomerLocationCard
-                  key={`${data.customers[0]?.locationAddress ?? ''}:${data.customers[0]?.latitude ?? ''}:${data.customers[0]?.longitude ?? ''}`}
-                  locationAddress={data.customers[0]?.locationAddress}
-                  latitude={data.customers[0]?.latitude}
-                  longitude={data.customers[0]?.longitude}
-                />
-                <Box sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 800, color: 'text.primary' }}>My businesses</Typography>
-                  <BusinessTypeFilter id="my-business-type" value={businessTypeFilter} onChange={setBusinessTypeFilter} />
-                </Box>
-                {data.businesses.length > 0 ? (
-                  filteredBusinesses.length > 0 ? <Stack spacing={1.2}>
-                    {filteredBusinesses.map((business) => (
-                      <Box
-                        key={business.id}
-                        onClick={() => {
-                          dispatch(setSelectedBusinessId(business.id))
-                          navigate(`/business/${business.id}`)
-                        }}
-                        sx={{
-                          cursor: 'pointer',
-                          borderRadius: '16px',
-                          transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                          '&:hover': { transform: 'translateY(-1px)', boxShadow: '0 10px 20px rgba(0,0,0,0.18)' },
-                        }}
-                      >
-                        <DashboardListRow
-                          leading={<BusinessTypeIcon businessType={business.businessType} />}
-                          title={business.businessName ?? business.name ?? `Business ${business.id}`}
-                          subtitle={`${getBusinessTypeLabel(business.businessType)}${business.email ? ` · ${business.email}` : ''}`}
-                          trailing={<Chip label={business.status ?? 'active'} size="small" sx={{ bgcolor: 'success.light', color: 'success.dark', fontWeight: 700 }} />}
-                        />
-                      </Box>
-                    ))}
-                  </Stack> : <EmptyState title="No businesses in this category" description="Choose another business type to see more results." />
-                ) : (
-                  <EmptyState title="No businesses" description="Business records will appear here." />
-                )}
-              </Box>
+              <BusinessesTabView
+                key={`${data.customers[0]?.locationAddress ?? ''}:${data.customers[0]?.latitude ?? ''}:${data.customers[0]?.longitude ?? ''}`}
+                locationAddress={data.customers[0]?.locationAddress}
+                latitude={data.customers[0]?.latitude}
+                longitude={data.customers[0]?.longitude}
+                data={data}
+              />
             )}
 
             {activeTab === 'invoices' && <CustomerInvoicesList invoices={data.invoices} businesses={data.businesses} />}
-            {activeTab === 'appointments' && <CustomerAppointmentsPanel appointments={data.appointments} businesses={data.businesses} />}
+            {activeTab === 'appointments' && (
+              <CustomerAppointmentsPanel
+                appointments={data.appointments}
+                businesses={data.businesses}
+                customerId={selectedCustomerId ?? data.customers[0]?.id ?? null}
+                selectedAppointmentId={explicitAppointment?.id ?? null}
+                onSelectAppointment={(app) => setExplicitAppointment(app)}
+              />
+            )}
             {activeTab === 'memberships' && (
               <Stack spacing={1.2}>
                 <Box>
@@ -574,6 +552,7 @@ export function CustomerDashboard() {
                 onOpenManageDialog={() => setManagerOpen(true)}
                 onOpenBusinesses={() => dispatch(setActiveTab('businesses'))}
                 onOpenDocuments={() => dispatch(setActiveTab('invoices'))}
+                onOpenFamily={() => setFamilyDialogOpen(true)}
                 onOpenBusiness={(businessId) => {
                   dispatch(setSelectedBusinessId(businessId))
                   navigate(`/business/${businessId}`)

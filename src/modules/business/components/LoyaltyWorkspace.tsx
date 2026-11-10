@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, Stack, Switch, TextField, Typography } from '@mui/material'
 import { Award, Pencil, Plus } from 'lucide-react'
 import {
@@ -64,7 +64,7 @@ export function LoyaltyWorkspace({ businessId, products }: LoyaltyWorkspaceProps
     return options.find((option) => option.id === rule.targetId)?.label ?? `${typeLabels[rule.targetType]} #${rule.targetId}`
   }
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
       const [loadedRules, loadedServices, loadedPlans, loadedSettings] = await Promise.all([
@@ -87,9 +87,13 @@ export function LoyaltyWorkspace({ businessId, products }: LoyaltyWorkspaceProps
     } finally {
       setLoading(false)
     }
-  }
+  }, [businessId])
 
-  useEffect(() => { void load() }, [businessId])
+  useEffect(() => {
+    // This effect intentionally loads external data when the selected business changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load()
+  }, [load])
 
   const openRuleDialog = (rule?: LoyaltyRule) => {
     setEditingRule(rule ?? null)

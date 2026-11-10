@@ -20,6 +20,9 @@ import { fetchLoyaltyBalance, fetchLoyaltySettings, type LoyaltyProgramSettings 
 type CustomerAppointmentsPanelProps = {
   appointments: DashboardData['appointments']
   businesses: DashboardData['businesses']
+  customerId?: number | null
+  selectedAppointmentId?: number | null
+  onSelectAppointment?: (appointment: AppointmentSummary) => void
 }
 
 function getDefaultAppointmentDateTime() {
@@ -28,7 +31,13 @@ function getDefaultAppointmentDateTime() {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 }
 
-export function CustomerAppointmentsPanel({ appointments, businesses }: CustomerAppointmentsPanelProps) {
+export function CustomerAppointmentsPanel({
+  appointments,
+  businesses,
+  customerId,
+  selectedAppointmentId,
+  onSelectAppointment,
+}: CustomerAppointmentsPanelProps) {
   const dispatch = useAppDispatch()
   const [now] = useState(Date.now)
   const [businessId, setBusinessId] = useState('')
@@ -58,7 +67,7 @@ export function CustomerAppointmentsPanel({ appointments, businesses }: Customer
   const selectedBusinessId = Number(businessId) || appointmentBusinesses[0]?.id || 0
   const services = servicesState.businessId === selectedBusinessId ? servicesState.services : []
   const selectedService = services.find((service) => service.id === Number(serviceId))
-  const currentLoyaltyInfo = loyaltyInfo?.customerId === customerId && loyaltyInfo.businessId === selectedBusinessId ? loyaltyInfo : null
+  const currentLoyaltyInfo = loyaltyInfo?.customerId === customerId && loyaltyInfo?.businessId === selectedBusinessId ? loyaltyInfo : null
   const requestedPoints = Math.max(0, Math.floor(Number(loyaltyPointsToRedeem) || 0))
   const loyaltyDiscount = currentLoyaltyInfo?.settings.configured && currentLoyaltyInfo.settings.pointsPerCurrencyUnit && selectedService
     ? Math.min(
@@ -95,6 +104,8 @@ export function CustomerAppointmentsPanel({ appointments, businesses }: Customer
 
   useEffect(() => {
     if (!customerId || !selectedBusinessId) {
+      // The displayed balance is scoped to the currently selected customer and business.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoyaltyInfo(null)
       setLoyaltyError('')
       setLoyaltyPointsToRedeem('0')

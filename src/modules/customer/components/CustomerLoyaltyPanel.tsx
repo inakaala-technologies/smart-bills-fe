@@ -20,6 +20,8 @@ export function CustomerLoyaltyPanel({ customerId, businesses }: CustomerLoyalty
 
   useEffect(() => {
     if (customerId == null || businesses.length === 0) {
+      // Clear data that belongs to an unavailable customer/business selection.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setBalances([])
       setLoading(false)
       return

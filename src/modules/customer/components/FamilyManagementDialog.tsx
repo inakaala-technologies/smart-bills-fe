@@ -48,6 +48,8 @@ export function FamilyManagementDialog({
         if (!open) return
 
         let active = true
+        // Opening the dialog initiates a new request and its loading state.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setLoading(true)
         setError('')
 

@@ -115,6 +115,8 @@ onProductCountChange?.(activeProducts.length)
   }, [businessId, onProductCountChange])
 
   useEffect(() => {
+    // This effect intentionally loads external data when the selected business changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadProducts()
   }, [loadProducts])
 
