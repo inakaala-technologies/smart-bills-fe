@@ -12,47 +12,58 @@ import {
   DialogContent,
   DialogTitle,
   Paper,
+  Snackbar,
   Stack,
   Typography,
 } from '@mui/material'
 import {
   CalendarCheck2,
   ChevronRight,
-  Award,
-  FileText,
-  Home,
-  LayoutGrid,
+  ShieldCheck,
   ShoppingCart,
-  UserRound,
-  type LucideIcon,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
+import { parseDateOnly } from '../../utils/date'
 import { AppointmentDetailDialog } from '../../components/AppointmentDetailDialog'
 import { EmptyState } from '../../components/EmptyState'
 import { ProfileManagerDialog } from '../../components/ProfileManagerDialog'
-import { BusinessesTabView } from './components/BusinessesTabView'
+import { CustomerLocationCard } from './components/CustomerLocationCard'
 import { HeroBanner, SummaryCards } from './components/CustomerDashboardOverview'
-import { CustomerDashboardMenu } from './components/CustomerDashboardMenu'
+import { CustomerProfileMenuPage } from './components/CustomerProfileMenuPage'
+import { CustomerPayslipsPage } from './components/CustomerPayslipsPage'
+import { CustomerInsights } from './components/CustomerInsights'
+import { CustomerLoyaltyPanel } from './components/CustomerLoyaltyPanel'
+import { CustomerBottomNavBar } from './components/CustomerBottomNavBar'
 import { CustomerInvoicesList } from './components/CustomerInvoicesList'
 import { CustomerProfilePanel } from './components/CustomerProfilePanel'
 import { CustomerAppointmentsPanel } from './components/CustomerAppointmentsPanel'
-import { FamilyManagementDialog } from './components/FamilyManagementDialog'
-import { fetchNearbyOffers, type DashboardData, type AppointmentSummary } from '../../services/api'
+import { fetchNearbyOffers, type AppointmentSummary, type DashboardData } from '../../services/api'
 import { addProfile, logoutUser, switchAccount, type Role } from '../../services/auth'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import type { RootState } from '../../store/store'
 import { setAuthUser } from '../../store/authSlice'
 import { setActiveTab, setSelectedBusinessId } from '../../store/customerDashboardSlice'
 import type { DashboardTab } from '../types'
+import { FamilyManagementDialog } from './components/FamilyManagementDialog'
+import { CustomerBillsPage } from './components/CustomerBillsPage'
+import { CustomerReceiptsPage } from './components/CustomerReceiptsPage'
+import { getDashboardPath } from '../../routes/dashboardPaths'
 
-const roleNav: Array<{ key: DashboardTab; label: string; icon: LucideIcon }> = [
-  { key: 'overview', label: 'Home', icon: Home },
-  { key: 'businesses', label: 'Businesses', icon: LayoutGrid },
-  { key: 'invoices', label: 'Documents', icon: FileText },
-  { key: 'appointments', label: 'Bookings', icon: CalendarCheck2 },
-  { key: 'rewards', label: 'Rewards', icon: Award },
-  { key: 'profile', label: 'Profile', icon: UserRound },
+// 'offers' is added so /dashboard/offers is a valid route.
+const customerDashboardTabs: DashboardTab[] = [
+  'overview',
+  'businesses',
+  'offers',
+  'invoices',
+  'receipts',
+  'appointments',
+  'rewards',
+  'memberships',
+  'bills',
+  'insights',
+  'payslips',
+  'profile',
 ]
 
 
@@ -63,58 +74,158 @@ function formatCurrency(value?: number) {
 
 export function CustomerDashboard() {
   const navigate = useNavigate()
+  const { tab: routeTab } = useParams()
   const dispatch = useAppDispatch()
   const authUser = useAppSelector((state: RootState) => state.auth.authUser)
   const accountRoles = new Set((authUser?.accounts ?? []).map((account) => account.role).concat(authUser?.role ?? 'CUSTOMER'))
   const availableAccounts = (authUser?.accounts ?? []).filter((account) => account.role !== authUser?.role)
   const missingProfileRoles = (['BUSINESS', 'CUSTOMER'] as Role[]).filter((role) => role !== authUser?.role && !accountRoles.has(role))
-  const { data, loading, activeTab, selectedCustomerId } = useAppSelector((state: RootState) => state.customerDashboard)
-  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
+  const { data, loading, activeTab } = useAppSelector((state: RootState) => state.customerDashboard)
+  const [isProfilePageOpen, setIsProfilePageOpen] = useState(false)
   const [managerOpen, setManagerOpen] = useState(false)
-  const [familyDialogOpen, setFamilyDialogOpen] = useState(false)
   const [nearbyOffersCount, setNearbyOffersCount] = useState(0)
   const [activityNow] = useState(Date.now)
   const [explicitAppointment, setExplicitAppointment] = useState<AppointmentSummary | null>(null)
   const setSelectedAppointment = setExplicitAppointment
   const [selectedInvoice, setSelectedInvoice] = useState<DashboardData['invoices'][number] | null>(null)
-  const isMenuOpen = Boolean(menuAnchorEl)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const invoiceIdParam = searchParams.get('invoiceId')
+  const invoiceNumberParam = searchParams.get('invoiceNumber')
+  const isMenuOpen = isProfilePageOpen
+  // Loyalty endpoints expect the customer profile id, which differs from the login user id.
+  const customerProfileEmail = authUser?.email?.trim().toLowerCase()
+  const customerProfileId = (
+    data.customers.find((customer) => customerProfileEmail && customer.email?.trim().toLowerCase() === customerProfileEmail)
+    ?? data.customers[0]
+  )?.id ?? null
   const customerLatitude = data.customers[0]?.latitude
   const customerLongitude = data.customers[0]?.longitude
+  const [familyDialogMode, setFamilyDialogMode] = useState<'closed' | 'manage' | 'invite'>('closed')
+
+  useEffect(() => {
+    const matchingTab = customerDashboardTabs.find((tab) => tab === routeTab)
+    if (matchingTab) {
+      dispatch(setActiveTab(matchingTab))
+    } else {
+      navigate(getDashboardPath('CUSTOMER', 'overview'), { replace: true })
+    }
+  }, [dispatch, navigate, routeTab])
 
   useEffect(() => {
     if (customerLatitude === undefined || customerLongitude === undefined) return
     let isCurrent = true
+
     void fetchNearbyOffers(customerLatitude, customerLongitude)
-      .then((offers) => { if (isCurrent) setNearbyOffersCount(offers.length) })
-      .catch(() => { if (isCurrent) setNearbyOffersCount(0) })
-    return () => { isCurrent = false }
+      .then((offers) => {
+        if (isCurrent) {
+          setNearbyOffersCount(offers.length)
+        }
+      })
+      .catch(() => {
+        if (isCurrent) {
+          setNearbyOffersCount(0)
+        }
+      })
+
+    return () => {
+      isCurrent = false
+    }
   }, [customerLatitude, customerLongitude])
+
+  // A notification links here with ?invoiceId=… and/or ?invoiceNumber=… The invoice is derived straight from the URL
+  // (not copied into state), so the popup can't be lost when the page re-renders. The params are removed when it closes.
+  const hasInvoiceLink = Boolean(invoiceIdParam || invoiceNumberParam)
+  const wantedInvoiceNumber = (invoiceNumberParam ?? '').trim().toLowerCase()
+  const invoiceFromLink = hasInvoiceLink
+    ? data.invoices.find((invoice) => (
+      (invoiceIdParam != null && String(invoice.id) === invoiceIdParam)
+      || (wantedInvoiceNumber !== '' && String(invoice.invoiceNumber ?? '').trim().toLowerCase() === wantedInvoiceNumber)
+    )) ?? null
+    : null
+  const activeInvoice = selectedInvoice ?? invoiceFromLink
+  const [missingInvoiceLabel, setMissingInvoiceLabel] = useState('')
+
+  const closeInvoiceDialog = () => {
+    setSelectedInvoice(null)
+    if (hasInvoiceLink) {
+      const nextParams = new URLSearchParams(searchParams)
+      nextParams.delete('invoiceId')
+      nextParams.delete('invoiceNumber')
+      setSearchParams(nextParams, { replace: true })
+    }
+  }
+
+  useEffect(() => {
+    if (!hasInvoiceLink || invoiceFromLink) return
+    // Invoices may still be loading: only report "not found" once they have loaded and nothing matches.
+    if (loading || data.invoices.length === 0) return
+    void Promise.resolve().then(() => {
+      setMissingInvoiceLabel(invoiceNumberParam ?? `#${invoiceIdParam}`)
+    })
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.delete('invoiceId')
+    nextParams.delete('invoiceNumber')
+    setSearchParams(nextParams, { replace: true })
+  }, [data.invoices.length, hasInvoiceLink, invoiceFromLink, invoiceIdParam, invoiceNumberParam, loading, searchParams, setSearchParams])
 
   const handleChangeTab = (tab: DashboardTab) => {
     dispatch(setActiveTab(tab))
+    navigate(getDashboardPath('CUSTOMER', tab))
   }
 
   const upcomingAppointmentActivities = data.appointments
     .filter((appointment) => {
       const status = appointment.status?.toUpperCase() ?? 'BOOKED'
-      const scheduledTime = new Date(appointment.scheduledAt ?? '').getTime()
-      return status === 'CANCELLED' || (scheduledTime > activityNow && ['BOOKED', 'CONFIRMED'].includes(status))
+      const scheduledTime = new Date(
+        appointment.scheduledAt ?? '',
+      ).getTime()
+
+      return (
+        status === 'CANCELLED' ||
+        (scheduledTime > activityNow &&
+          ['BOOKED', 'CONFIRMED'].includes(status))
+      )
     })
     .sort((first, second) => {
-      const firstTime = new Date(first.scheduledAt ?? '').getTime()
-      const secondTime = new Date(second.scheduledAt ?? '').getTime()
-      const firstIsUpcoming = firstTime > activityNow && first.status?.toUpperCase() !== 'CANCELLED'
-      const secondIsUpcoming = secondTime > activityNow && second.status?.toUpperCase() !== 'CANCELLED'
-      if (firstIsUpcoming !== secondIsUpcoming) return firstIsUpcoming ? -1 : 1
-      return firstIsUpcoming ? firstTime - secondTime : secondTime - firstTime
+      const firstTime = new Date(
+        first.scheduledAt ?? '',
+      ).getTime()
+
+      const secondTime = new Date(
+        second.scheduledAt ?? '',
+      ).getTime()
+
+      const firstIsUpcoming =
+        firstTime > activityNow &&
+        first.status?.toUpperCase() !== 'CANCELLED'
+
+      const secondIsUpcoming =
+        secondTime > activityNow &&
+        second.status?.toUpperCase() !== 'CANCELLED'
+
+      if (firstIsUpcoming !== secondIsUpcoming) {
+        return firstIsUpcoming ? -1 : 1
+      }
+
+      return firstIsUpcoming
+        ? firstTime - secondTime
+        : secondTime - firstTime
     })
     .map((appointment) => {
-      const business = data.businesses.find((item) => item.id === appointment.businessId)
+      const business = data.businesses.find(
+        (item) => item.id === appointment.businessId,
+      )
+
       return {
         id: `appointment-${appointment.id}`,
-        title: business?.businessName ?? business?.name ?? 'Business',
+        title:
+          business?.businessName ??
+          business?.name ??
+          'Business',
         subtitle: appointment.serviceName ?? 'Appointment',
-        date: new Date(appointment.scheduledAt ?? '').toLocaleString('en-IN', {
+        date: new Date(
+          appointment.scheduledAt ?? '',
+        ).toLocaleString('en-IN', {
           day: 'numeric',
           month: 'short',
           hour: 'numeric',
@@ -128,18 +239,27 @@ export function CustomerDashboard() {
     })
 
   const invoiceActivities = data.invoices.map((invoice) => {
-    const business = data.businesses.find((item) => item.id === invoice.businessId) ?? data.businesses[0]
-    const businessName = business?.businessName ?? business?.name ?? 'Business'
+    const business =
+      data.businesses.find(
+        (item) => item.id === invoice.businessId,
+      ) ?? data.businesses[0]
+
+    const businessName =
+      business?.businessName ?? business?.name ?? 'Business'
+
     return {
       id: `invoice-${invoice.id}`,
       title: businessName,
       subtitle: `Invoice #${invoice.invoiceNumber ?? invoice.id}`,
       date: invoice.issueDate
-        ? new Date(invoice.issueDate).toLocaleDateString('en-IN', {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
-        })
+        ? parseDateOnly(invoice.issueDate)?.toLocaleDateString(
+          'en-IN',
+          {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          },
+        ) ?? '—'
         : '—',
       amount: formatCurrency(invoice.totalAmount),
       icon: ShoppingCart,
@@ -147,7 +267,56 @@ export function CustomerDashboard() {
       invoice,
     }
   })
-  const displayActivities = [...upcomingAppointmentActivities, ...invoiceActivities].slice(0, 5)
+
+  const displayActivities = [
+    ...upcomingAppointmentActivities,
+    ...invoiceActivities,
+  ].slice(0, 5)
+
+  if (isProfilePageOpen) {
+    return (
+      <CustomerProfileMenuPage
+        authUser={authUser}
+        currentRole={authUser?.role ?? 'CUSTOMER'}
+        availableAccounts={availableAccounts}
+        missingProfileRoles={missingProfileRoles}
+        onBack={() => setIsProfilePageOpen(false)}
+        onNavigateTab={(tab) => {
+          setIsProfilePageOpen(false)
+          handleChangeTab(tab)
+        }}
+        onOpenFamily={() => {
+          setIsProfilePageOpen(false)
+          setFamilyDialogMode('manage')
+        }}
+        onInviteFamily={() => {
+          setIsProfilePageOpen(false)
+          setFamilyDialogMode('invite')
+        }}
+        onSwitchAccount={(role: Role) => {
+          const updated = switchAccount(role)
+          if (updated) {
+            dispatch(setAuthUser(updated))
+            navigate(getDashboardPath(updated.role))
+            window.location.reload()
+          }
+        }}
+        onAddProfile={(role: Role) => {
+          const updated = addProfile(role)
+          if (updated) {
+            dispatch(setAuthUser(updated))
+            navigate(getDashboardPath(updated.role))
+            window.location.reload()
+          }
+        }}
+        onLogout={() => {
+          logoutUser()
+          navigate('/')
+        }}
+        onProfilePictureUpdated={(user) => dispatch(setAuthUser(user))}
+      />
+    )
+  }
 
   return (
     <Box
@@ -166,12 +335,19 @@ export function CustomerDashboard() {
       <Container maxWidth="xs" disableGutters sx={{ px: 0 }}>
         <Paper
           elevation={0}
+          data-app-frame
           sx={{
             width: '100%',
             maxWidth: 412,
             mx: 'auto',
-            height: { xs: '100dvh', sm: 'calc(100dvh - 64px)' },
-            maxHeight: { xs: '100dvh', sm: 'calc(100dvh - 64px)' },
+            height: {
+              xs: '100dvh',
+              sm: 'calc(100dvh - 64px)',
+            },
+            maxHeight: {
+              xs: '100dvh',
+              sm: 'calc(100dvh - 64px)',
+            },
             borderRadius: { xs: 0, sm: '24px' },
             backgroundColor: 'background.paper',
             border: '1px solid var(--mui-palette-divider)',
@@ -188,12 +364,12 @@ export function CustomerDashboard() {
             roleLabel="Customer"
             menuId="customer-menu"
             isMenuOpen={isMenuOpen}
-            onOpenMenu={(event) => setMenuAnchorEl(event.currentTarget)}
+            onOpenMenu={() => setIsProfilePageOpen(true)}
           />
 
           {/* Main Content Area */}
           <Box sx={{ px: { xs: 2, sm: 2.2 }, pt: { xs: 2, sm: 2.2 }, pb: 'calc(96px + env(safe-area-inset-bottom))', flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehaviorY: 'contain' }}>
-            <CustomerDashboardMenu
+            {/* <CustomerDashboardMenu
               tabs={roleNav}
               activeTab={activeTab}
               onChangeTab={handleChangeTab}
@@ -208,7 +384,7 @@ export function CustomerDashboard() {
                 if (updated) {
                   dispatch(setAuthUser(updated))
                   setMenuAnchorEl(null)
-                  navigate('/dashboard')
+                  navigate(getDashboardPath(updated.role))
                   window.location.reload()
                 }
               }}
@@ -217,11 +393,12 @@ export function CustomerDashboard() {
                 if (updated) {
                   dispatch(setAuthUser(updated))
                   setMenuAnchorEl(null)
-                  navigate('/dashboard')
+                  navigate(getDashboardPath(updated.role))
                   window.location.reload()
                 }
               }}
-            />
+              onInviteFamily={() => setFamilyDialogMode('invite')}
+            /> */}
 
             {/* Profile Dialog for easy profile switching */}
             <ProfileManagerDialog
@@ -232,39 +409,105 @@ export function CustomerDashboard() {
               missingProfileRoles={missingProfileRoles}
               onSwitchAccount={(role: Role) => {
                 const updated = switchAccount(role)
+
                 if (updated) {
                   dispatch(setAuthUser(updated))
                   setManagerOpen(false)
-                  navigate('/dashboard')
+                  navigate(getDashboardPath(updated.role))
                   window.location.reload()
                 }
               }}
               onAddProfile={(role: Role) => {
                 const updated = addProfile(role)
+
                 if (updated) {
                   dispatch(setAuthUser(updated))
                   setManagerOpen(false)
-                  navigate('/dashboard')
+                  navigate(getDashboardPath(updated.role))
                   window.location.reload()
                 }
               }}
             />
 
             <FamilyManagementDialog
-              open={familyDialogOpen}
-              onClose={() => setFamilyDialogOpen(false)}
+              open={familyDialogMode !== 'closed'}
+              mode={familyDialogMode === 'closed' ? 'manage' : familyDialogMode}
+              onClose={() => setFamilyDialogMode('closed')}
               currentUserId={Number(authUser?.id)}
             />
 
+            {activeTab === 'bills' && <CustomerBillsPage />}
+
             {activeTab === 'overview' && (
               <Box>
-                {/* 1. Hero Card */}
                 <HeroBanner />
 
-                {/* 2. Category Summary Cards */}
-                <SummaryCards data={data} loading={loading} offersCount={nearbyOffersCount} onSelectTab={handleChangeTab} />
+                {/* The Offers tile in SummaryCards is the single entry to offers. */}
+                <SummaryCards
+                  data={data}
+                  loading={loading}
+                  offersCount={nearbyOffersCount}
+                  onSelectTab={handleChangeTab}
+                />
 
-                {/* 3. Recent Activity Section */}
+                {/* Insurance entry */}
+                <Box
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Open insurance"
+                  onClick={() => navigate('/insurance')}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      navigate('/insurance')
+                    }
+                  }}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 1.6,
+                    mb: 2.4,
+                    backgroundColor: 'background.paper',
+                    borderRadius: '22px',
+                    p: '14px 16px',
+                    border: '1px solid var(--mui-palette-divider)',
+                    cursor: 'pointer',
+                    '&:focus-visible': {
+                      outline: '3px solid var(--mui-palette-primary-main)',
+                      outlineOffset: 2,
+                    },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.6, minWidth: 0 }}>
+                    <Box
+                      sx={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #065f46 0%, #0d9488 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#ffffff',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <ShieldCheck size={22} strokeWidth={2.2} />
+                    </Box>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography sx={{ fontWeight: 700, color: 'text.primary', fontSize: '15px', lineHeight: 1.25 }}>
+                        Insurance
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '13px', display: 'block', mt: 0.2 }}>
+                        Health, vehicle, life, travel and more
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <ChevronRight size={20} strokeWidth={2.2} color="var(--mui-palette-text-disabled)" />
+                </Box>
+
+                {/* Recent Activity */}
                 <Box sx={{ mt: 1 }}>
                   <Box
                     sx={{
@@ -286,6 +529,7 @@ export function CustomerDashboard() {
                     >
                       Recent activity
                     </Typography>
+
                     <Typography
                       variant="body2"
                       onClick={() => handleChangeTab('invoices')}
@@ -294,32 +538,75 @@ export function CustomerDashboard() {
                         fontWeight: 700,
                         fontSize: '14px',
                         cursor: 'pointer',
-                        '&:hover': { textDecoration: 'underline' },
+                        '&:hover': {
+                          textDecoration: 'underline',
+                        },
                       }}
                     >
                       See all
                     </Typography>
                   </Box>
 
-                  {/* Activity Items matching reference design */}
                   {displayActivities.length > 0 ? (
                     <Stack spacing={1.4}>
                       {displayActivities.map((entry) => {
                         const Icon = entry.icon
+
                         return (
                           <Box
                             key={entry.id}
-                            role={entry.appointment || entry.invoice ? 'button' : undefined}
-                            tabIndex={entry.appointment || entry.invoice ? 0 : undefined}
-                            aria-label={entry.invoice ? `View invoice details for ${entry.invoice.invoiceNumber ?? entry.invoice.id}` : entry.appointment ? `View appointment details for ${entry.title}` : undefined}
-                            onClick={entry.invoice ? () => setSelectedInvoice(entry.invoice) : entry.appointment ? () => setSelectedAppointment(entry.appointment) : undefined}
-                            onKeyDown={entry.appointment || entry.invoice ? (event) => {
-                              if (event.key === 'Enter' || event.key === ' ') {
-                                event.preventDefault()
-                                if (entry.invoice) setSelectedInvoice(entry.invoice)
-                                else if (entry.appointment) setSelectedAppointment(entry.appointment)
-                              }
-                            } : undefined}
+                            role={
+                              entry.appointment || entry.invoice
+                                ? 'button'
+                                : undefined
+                            }
+                            tabIndex={
+                              entry.appointment || entry.invoice
+                                ? 0
+                                : undefined
+                            }
+                            aria-label={
+                              entry.invoice
+                                ? `View invoice details for ${entry.invoice.invoiceNumber ??
+                                entry.invoice.id
+                                }`
+                                : entry.appointment
+                                  ? `View appointment details for ${entry.title}`
+                                  : undefined
+                            }
+                            onClick={
+                              entry.invoice
+                                ? () =>
+                                  setSelectedInvoice(entry.invoice)
+                                : entry.appointment
+                                  ? () =>
+                                    setSelectedAppointment(
+                                      entry.appointment,
+                                    )
+                                  : undefined
+                            }
+                            onKeyDown={
+                              entry.appointment || entry.invoice
+                                ? (event) => {
+                                  if (
+                                    event.key === 'Enter' ||
+                                    event.key === ' '
+                                  ) {
+                                    event.preventDefault()
+
+                                    if (entry.invoice) {
+                                      setSelectedInvoice(
+                                        entry.invoice,
+                                      )
+                                    } else if (entry.appointment) {
+                                      setSelectedAppointment(
+                                        entry.appointment,
+                                      )
+                                    }
+                                  }
+                                }
+                                : undefined
+                            }
                             sx={{
                               display: 'flex',
                               alignItems: 'center',
@@ -327,37 +614,66 @@ export function CustomerDashboard() {
                               backgroundColor: 'background.paper',
                               borderRadius: '22px',
                               p: '14px 16px',
-                              border: '1px solid var(--mui-palette-divider)',
-                              boxShadow: '0 4px 14px rgba(0, 0, 0, 0.12)',
+                              border:
+                                '1px solid var(--mui-palette-divider)',
+                              boxShadow:
+                                '0 4px 14px rgba(0, 0, 0, 0.12)',
                               transition: 'all 0.18s ease',
-                              cursor: entry.appointment || entry.invoice ? 'pointer' : 'default',
+                              cursor:
+                                entry.appointment || entry.invoice
+                                  ? 'pointer'
+                                  : 'default',
                               '&:hover': {
                                 transform: 'translateY(-1px)',
-                                boxShadow: '0 6px 18px rgba(0, 0, 0, 0.18)',
+                                boxShadow:
+                                  '0 6px 18px rgba(0, 0, 0, 0.18)',
                               },
-                              '&:focus-visible': entry.appointment || entry.invoice ? { outline: '3px solid var(--mui-palette-primary-main)', outlineOffset: 2 } : undefined,
+                              '&:focus-visible':
+                                entry.appointment || entry.invoice
+                                  ? {
+                                    outline:
+                                      '3px solid var(--mui-palette-primary-main)',
+                                    outlineOffset: 2,
+                                  }
+                                  : undefined,
                             }}
                           >
-                            {/* Left: Round Teal Icon + Text */}
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.6, flex: 1, minWidth: 0 }}>
+                            {/* Activity icon and text */}
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1.6,
+                                flex: 1,
+                                minWidth: 0,
+                              }}
+                            >
                               <Box
                                 sx={{
                                   width: 48,
                                   height: 48,
                                   borderRadius: '50%',
-                                  background: 'linear-gradient(135deg, #065f46 0%, #0d9488 100%)',
+                                  background: 'linear-gradient(135deg, #4E2BCC 0%, #905BF4 100%)',
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
                                   color: '#ffffff',
                                   flexShrink: 0,
-                                  boxShadow: '0 4px 10px rgba(6, 95, 70, 0.2)',
+                                  boxShadow: '0 4px 10px rgba(78, 43, 204, 0.22)',
                                 }}
                               >
-                                <Icon size={22} strokeWidth={2.2} />
+                                <Icon
+                                  size={22}
+                                  strokeWidth={2.2}
+                                />
                               </Box>
 
-                              <Box sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                              <Box
+                                sx={{
+                                  minWidth: 0,
+                                  overflowWrap: 'anywhere',
+                                }}
+                              >
                                 <Typography
                                   sx={{
                                     fontWeight: 700,
@@ -368,6 +684,7 @@ export function CustomerDashboard() {
                                 >
                                   {entry.title}
                                 </Typography>
+
                                 <Typography
                                   variant="caption"
                                   sx={{
@@ -380,6 +697,7 @@ export function CustomerDashboard() {
                                 >
                                   {entry.subtitle}
                                 </Typography>
+
                                 <Typography
                                   variant="caption"
                                   sx={{
@@ -395,7 +713,7 @@ export function CustomerDashboard() {
                               </Box>
                             </Box>
 
-                            {/* Right: Amount or Chevron */}
+                            {/* Amount or chevron */}
                             {entry.amount ? (
                               <Typography
                                 sx={{
@@ -409,8 +727,17 @@ export function CustomerDashboard() {
                                 {entry.amount}
                               </Typography>
                             ) : (
-                              <Box sx={{ color: 'text.disabled', display: 'flex', alignItems: 'center' }}>
-                                <ChevronRight size={20} strokeWidth={2.2} />
+                              <Box
+                                sx={{
+                                  color: 'text.disabled',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                }}
+                              >
+                                <ChevronRight
+                                  size={20}
+                                  strokeWidth={2.2}
+                                />
                               </Box>
                             )}
                           </Box>
@@ -418,132 +745,250 @@ export function CustomerDashboard() {
                       })}
                     </Stack>
                   ) : (
-                    <EmptyState title="No recent activity" description="Upcoming appointments and invoices will appear here." />
+                    <EmptyState
+                      title="No recent activity"
+                      description="Upcoming appointments and invoices will appear here."
+                    />
                   )}
                 </Box>
-                <Dialog open={Boolean(selectedInvoice)} onClose={() => setSelectedInvoice(null)} fullWidth maxWidth="xs">
-                  <DialogTitle sx={{ color: 'text.primary', fontWeight: 800 }}>Invoice details</DialogTitle>
-                  {selectedInvoice && (
-                    <DialogContent dividers>
-                      <Stack spacing={1.5}>
-                        <Box>
-                          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Invoice number</Typography>
-                          <Typography sx={{ color: 'text.primary', fontWeight: 700 }}>{selectedInvoice.invoiceNumber ?? `INV-${selectedInvoice.id}`}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Business</Typography>
-                          <Typography sx={{ color: 'text.primary', fontWeight: 700 }}>
-                            {data.businesses.find((business) => business.id === selectedInvoice.businessId)?.businessName
-                              ?? data.businesses.find((business) => business.id === selectedInvoice.businessId)?.name
-                              ?? 'Business'}
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Status</Typography>
-                          <Box><Chip label={selectedInvoice.status ?? 'SENT'} size="small" color="success" sx={{ mt: 0.4, fontWeight: 800 }} /></Box>
-                        </Box>
-                        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-                          <Box>
-                            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Issue date</Typography>
-                            <Typography sx={{ color: 'text.primary' }}>{selectedInvoice.issueDate ? new Date(`${selectedInvoice.issueDate}T00:00:00`).toLocaleDateString('en-IN', { dateStyle: 'medium' }) : 'Not provided'}</Typography>
-                          </Box>
-                          <Box>
-                            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Due date</Typography>
-                            <Typography sx={{ color: 'text.primary' }}>{selectedInvoice.dueDate ? new Date(`${selectedInvoice.dueDate}T00:00:00`).toLocaleDateString('en-IN', { dateStyle: 'medium' }) : 'Not provided'}</Typography>
-                          </Box>
-                        </Box>
-                        <Box sx={{ borderTop: '1px solid var(--mui-palette-divider)', pt: 1.2 }}>
-                          <Stack spacing={0.6}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                              <Typography sx={{ color: 'text.secondary' }}>Subtotal</Typography>
-                              <Typography sx={{ color: 'text.primary' }}>{formatCurrency(selectedInvoice.subtotal)}</Typography>
-                            </Box>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                              <Typography sx={{ color: 'text.secondary' }}>GST</Typography>
-                              <Typography sx={{ color: 'text.primary' }}>{formatCurrency(selectedInvoice.gstAmount)}</Typography>
-                            </Box>
-                            {(selectedInvoice.loyaltyPointsRedeemed ?? 0) > 0 && (
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                                <Typography sx={{ color: 'success.main' }}>Loyalty discount ({selectedInvoice.loyaltyPointsRedeemed} points)</Typography>
-                                <Typography sx={{ color: 'success.main' }}>−{formatCurrency(selectedInvoice.loyaltyDiscountAmount)}</Typography>
-                              </Box>
-                            )}
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, pt: 0.7, borderTop: '1px solid var(--mui-palette-divider)' }}>
-                              <Typography sx={{ color: 'text.primary', fontWeight: 800 }}>Total</Typography>
-                              <Typography sx={{ color: 'primary.main', fontWeight: 800 }}>{formatCurrency(selectedInvoice.totalAmount)}</Typography>
-                            </Box>
-                          </Stack>
-                        </Box>
-                      </Stack>
-                    </DialogContent>
-                  )}
-                  <DialogActions>
-                    <Button onClick={() => setSelectedInvoice(null)} sx={{ color: 'primary.main', fontWeight: 700, textTransform: 'none' }}>Close</Button>
-                  </DialogActions>
-                </Dialog>
-                <AppointmentDetailDialog
-                  open={Boolean(explicitAppointment)}
-                  appointment={explicitAppointment}
-                  businesses={data.businesses}
-                  customers={data.customers}
-                  role="CUSTOMER"
-                  onClose={() => setExplicitAppointment(null)}
+              </Box>
+            )}
+
+            {/* Businesses Tab: Show business details only */}
+            {activeTab === 'businesses' && (
+              <Box
+                sx={{
+                  backgroundColor: 'action.hover',
+                  borderRadius: '24px',
+                  p: 2,
+                  border: '1px solid var(--mui-palette-divider)',
+                }}
+              >
+                <CustomerLocationCard
+                  key={`businesses:${data.customers[0]?.locationAddress ?? ''}:${data.customers[0]?.latitude ?? ''}:${data.customers[0]?.longitude ?? ''}`}
+                  locationAddress={
+                    data.customers[0]?.locationAddress
+                  }
+                  latitude={data.customers[0]?.latitude}
+                  longitude={data.customers[0]?.longitude}
+                  view="businesses"
+                  myBusinesses={data.businesses}
                 />
               </Box>
             )}
 
-            {activeTab === 'businesses' && (
-              <BusinessesTabView
-                key={`${data.customers[0]?.locationAddress ?? ''}:${data.customers[0]?.latitude ?? ''}:${data.customers[0]?.longitude ?? ''}`}
-                locationAddress={data.customers[0]?.locationAddress}
-                latitude={data.customers[0]?.latitude}
-                longitude={data.customers[0]?.longitude}
-                data={data}
-              />
+            {/* Offers Tab: nearby offers from businesses */}
+            {activeTab === 'offers' && (
+              <Box
+                sx={{
+                  backgroundColor: 'action.hover',
+                  borderRadius: '24px',
+                  p: 2,
+                  border: '1px solid var(--mui-palette-divider)',
+                }}
+              >
+                <CustomerLocationCard
+                  key={`offers:${data.customers[0]?.locationAddress ?? ''}:${data.customers[0]?.latitude ?? ''}:${data.customers[0]?.longitude ?? ''}`}
+                  locationAddress={
+                    data.customers[0]?.locationAddress
+                  }
+                  latitude={data.customers[0]?.latitude}
+                  longitude={data.customers[0]?.longitude}
+                  view="offers"
+                  myBusinesses={data.businesses}
+                />
+              </Box>
             )}
 
             {activeTab === 'invoices' && <CustomerInvoicesList invoices={data.invoices} businesses={data.businesses} />}
+            {activeTab === 'receipts' && <CustomerReceiptsPage />}
+            {activeTab === 'rewards' && <CustomerLoyaltyPanel customerId={customerProfileId} businesses={data.businesses} />}
+            {activeTab === 'payslips' && <CustomerPayslipsPage />}
+            {activeTab === 'insights' && <CustomerInsights invoices={data.invoices} businesses={data.businesses} customerId={customerProfileId} />}
             {activeTab === 'appointments' && (
               <CustomerAppointmentsPanel
                 appointments={data.appointments}
                 businesses={data.businesses}
-                customerId={selectedCustomerId ?? data.customers[0]?.id ?? null}
-                selectedAppointmentId={explicitAppointment?.id ?? null}
-                onSelectAppointment={(app) => setExplicitAppointment(app)}
+                customerId={customerProfileId ?? Number(authUser?.id ?? 0)}
+                selectedAppointmentId={explicitAppointment?.id}
+                onSelectAppointment={setSelectedAppointment}
               />
             )}
+
+            {/* Memberships Tab */}
             {activeTab === 'memberships' && (
               <Stack spacing={1.2}>
                 <Box>
-                  <Typography sx={{ color: 'text.primary', fontSize: 19, fontWeight: 900 }}>My memberships</Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>Subscriptions and messages from your businesses</Typography>
+                  <Typography
+                    sx={{
+                      color: 'text.primary',
+                      fontSize: 19,
+                      fontWeight: 900,
+                    }}
+                  >
+                    My memberships
+                  </Typography>
+
+                  <Typography
+                    variant="caption"
+                    sx={{ color: 'text.secondary' }}
+                  >
+                    Subscriptions and messages from your businesses
+                  </Typography>
                 </Box>
+
                 {data.memberships.map((membership) => {
-                  const business = data.businesses.find((item) => item.id === membership.businessId)
-                  const daysRemaining = membership.endDate ? Math.ceil((new Date(`${membership.endDate}T23:59:59`).getTime() - activityNow) / 86400000) : null
-                  const membershipMessages = data.membershipNotifications.filter((notification) => notification.membershipId === membership.id)
+                  const business = data.businesses.find(
+                    (item) =>
+                      item.id === membership.businessId,
+                  )
+
+                  const daysRemaining = membership.endDate
+                    ? Math.ceil(
+                      (
+                        new Date(
+                          `${membership.endDate}T23:59:59`,
+                        ).getTime() - activityNow
+                      ) / 86400000,
+                    )
+                    : null
+
+                  const membershipMessages =
+                    data.membershipNotifications.filter(
+                      (notification) =>
+                        notification.membershipId ===
+                        membership.id,
+                    )
+
                   return (
-                    <Card key={membership.id} variant="outlined" sx={{ borderRadius: 2, borderColor: 'divider' }}>
+                    <Card
+                      key={membership.id}
+                      variant="outlined"
+                      sx={{
+                        borderRadius: 2,
+                        borderColor: 'divider',
+                      }}
+                    >
                       <CardContent sx={{ p: 1.4 }}>
-                        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
+                        <Stack
+                          direction="row"
+                          sx={{
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                            gap: 1,
+                          }}
+                        >
                           <Box sx={{ minWidth: 0 }}>
-                            <Typography sx={{ color: 'text.primary', fontWeight: 900 }}>{membership.planName}</Typography>
-                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>{business?.businessName ?? business?.name ?? `Business #${membership.businessId}`}</Typography>
+                            <Typography
+                              sx={{
+                                color: 'text.primary',
+                                fontWeight: 900,
+                              }}
+                            >
+                              {membership.planName}
+                            </Typography>
+
+                            <Typography
+                              variant="caption"
+                              sx={{ color: 'text.secondary' }}
+                            >
+                              {business?.businessName ??
+                                business?.name ??
+                                `Business #${membership.businessId}`}
+                            </Typography>
                           </Box>
-                          <Chip size="small" label={membership.status ?? 'PENDING'} color={membership.status === 'ACTIVE' ? 'success' : membership.status === 'PENDING' ? 'warning' : 'default'} />
+
+                          <Chip
+                            size="small"
+                            label={membership.status ?? 'PENDING'}
+                            color={
+                              membership.status === 'ACTIVE'
+                                ? 'success'
+                                : membership.status === 'PENDING'
+                                  ? 'warning'
+                                  : 'default'
+                            }
+                          />
                         </Stack>
-                        <Typography sx={{ mt: 1, color: 'primary.main', fontWeight: 800 }}>{formatCurrency(membership.price)}</Typography>
-                        <Typography variant="body2" sx={{ mt: 0.3, color: 'text.secondary' }}>Valid {membership.startDate ?? '—'} to {membership.endDate ?? '—'}</Typography>
-                        {daysRemaining !== null && membership.status === 'ACTIVE' && <Typography variant="caption" sx={{ display: 'block', mt: 0.4, color: daysRemaining <= 7 ? 'warning.main' : 'text.secondary', fontWeight: 700 }}>{daysRemaining < 0 ? 'Expired' : `Expires in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}`}</Typography>}
-                        <Typography variant="caption" sx={{ display: 'block', mt: 0.35, color: 'text.secondary' }}>Payment recorded as {membership.paymentStatus ?? 'PENDING'}</Typography>
-                        {membershipMessages.map((notification) => <Alert key={notification.id} severity="info" sx={{ mt: 1, borderRadius: 1.5 }}>{notification.message}</Alert>)}
+
+                        <Typography
+                          sx={{
+                            mt: 1,
+                            color: 'primary.main',
+                            fontWeight: 800,
+                          }}
+                        >
+                          {formatCurrency(membership.price)}
+                        </Typography>
+
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            mt: 0.3,
+                            color: 'text.secondary',
+                          }}
+                        >
+                          Valid {membership.startDate ?? '—'} to{' '}
+                          {membership.endDate ?? '—'}
+                        </Typography>
+
+                        {daysRemaining !== null &&
+                          membership.status === 'ACTIVE' && (
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                display: 'block',
+                                mt: 0.4,
+                                color:
+                                  daysRemaining <= 7
+                                    ? 'warning.main'
+                                    : 'text.secondary',
+                                fontWeight: 700,
+                              }}
+                            >
+                              {daysRemaining < 0
+                                ? 'Expired'
+                                : `Expires in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'
+                                }`}
+                            </Typography>
+                          )}
+
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            display: 'block',
+                            mt: 0.35,
+                            color: 'text.secondary',
+                          }}
+                        >
+                          Payment recorded as{' '}
+                          {membership.paymentStatus ?? 'PENDING'}
+                        </Typography>
+
+                        {membershipMessages.map((notification) => (
+                          <Alert
+                            key={notification.id}
+                            severity="info"
+                            sx={{ mt: 1, borderRadius: 1.5 }}
+                          >
+                            {notification.message}
+                          </Alert>
+                        ))}
                       </CardContent>
                     </Card>
                   )
                 })}
-                {data.memberships.length === 0 && <EmptyState title="No memberships yet" description="Memberships linked to your BHive profile will appear here." />}
+
+                {data.memberships.length === 0 && (
+                  <EmptyState
+                    title="No memberships yet"
+                    description="Memberships linked to your BHive profile will appear here."
+                  />
+                )}
               </Stack>
             )}
+
+            {/* Profile Tab */}
             {activeTab === 'profile' && (
               <CustomerProfilePanel
                 authUser={authUser}
@@ -552,7 +997,7 @@ export function CustomerDashboard() {
                 onOpenManageDialog={() => setManagerOpen(true)}
                 onOpenBusinesses={() => dispatch(setActiveTab('businesses'))}
                 onOpenDocuments={() => dispatch(setActiveTab('invoices'))}
-                onOpenFamily={() => setFamilyDialogOpen(true)}
+                onOpenFamily={() => setFamilyDialogMode('manage')}
                 onOpenBusiness={(businessId) => {
                   dispatch(setSelectedBusinessId(businessId))
                   navigate(`/business/${businessId}`)
@@ -565,62 +1010,241 @@ export function CustomerDashboard() {
             )}
           </Box>
 
-          {/* Bottom Navigation Bar matching the reference */}
-          <Box
-            sx={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              backgroundColor: 'background.paper',
-              borderTop: '1px solid var(--mui-palette-divider)',
-              display: 'grid',
-              gridTemplateColumns: `repeat(${roleNav.length}, minmax(0, 1fr))`,
-              py: 1.2,
-              px: 1,
-              zIndex: 10,
-            }}
-          >
-            {roleNav.map((tab) => {
-              const isActive = activeTab === tab.key
-              const Icon = tab.icon
+          <Snackbar open={Boolean(missingInvoiceLabel)} autoHideDuration={5000} onClose={() => setMissingInvoiceLabel('')} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
+            <Alert severity="info" variant="filled" onClose={() => setMissingInvoiceLabel('')} sx={{ width: '100%' }}>
+              Couldn’t find invoice {missingInvoiceLabel} in your account.
+            </Alert>
+          </Snackbar>
 
-              return (
-                <Box
-                  key={tab.key}
-                  onClick={() => handleChangeTab(tab.key)}
-                  sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 0.6,
-                    cursor: 'pointer',
-                    color: isActive ? 'primary.main' : 'text.secondary',
-                    transition: 'color 0.18s ease',
-                    py: 0.5,
-                  }}
-                >
-                  <Icon
-                    size={22}
-                    strokeWidth={isActive ? 2.6 : 2}
-                    color={isActive ? 'var(--mui-palette-primary-main)' : 'var(--mui-palette-text-secondary)'}
-                  />
-                  <Typography
-                    variant="caption"
+          {/* Invoice details: lives outside the Home tab so it can open from any tab (e.g. from a notification) */}
+          <Dialog open={Boolean(activeInvoice)} onClose={closeInvoiceDialog} fullWidth maxWidth="xs">
+            <DialogTitle sx={{ color: 'text.primary', fontWeight: 800 }}>Invoice details</DialogTitle>
+            {activeInvoice && (
+              <DialogContent dividers>
+                <Stack spacing={1.5}>
+                  <Box>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: 'text.secondary',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Invoice number
+                    </Typography>
+
+                    <Typography
+                      sx={{
+                        color: 'text.primary',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {activeInvoice.invoiceNumber ??
+                        `INV-${activeInvoice.id}`}
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: 'text.secondary',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Business
+                    </Typography>
+
+                    <Typography
+                      sx={{
+                        color: 'text.primary',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {data.businesses.find(
+                        (business) =>
+                          business.id ===
+                          activeInvoice.businessId,
+                      )?.businessName ??
+                        data.businesses.find(
+                          (business) =>
+                            business.id ===
+                            activeInvoice.businessId,
+                        )?.name ??
+                        'Business'}
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: 'text.secondary',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Status
+                    </Typography>
+
+                    <Box>
+                      <Chip
+                        label={
+                          ['SENT', 'PENDING', 'UNPAID'].includes(
+                            String(activeInvoice.status ?? 'SENT').toUpperCase(),
+                          )
+                            ? 'Unpaid'
+                            : activeInvoice.status ?? 'SENT'
+                        }
+                        size="small"
+                        color="success"
+                        sx={{ mt: 0.4, fontWeight: 800 }}
+                      />
+                    </Box>
+                  </Box>
+
+                  <Box
                     sx={{
-                      fontWeight: isActive ? 800 : 600,
-                      fontSize: '11px',
-                      lineHeight: 1,
-                      letterSpacing: '-0.01em',
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: 1.5,
                     }}
                   >
-                    {tab.label}
-                  </Typography>
-                </Box>
-              )
-            })}
-          </Box>
+                    <Box>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: 'text.secondary',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Issue date
+                      </Typography>
+
+                      <Typography sx={{ color: 'text.primary' }}>
+                        {activeInvoice.issueDate
+                          ? new Date(
+                            `${activeInvoice.issueDate}T00:00:00`,
+                          ).toLocaleDateString('en-IN', {
+                            dateStyle: 'medium',
+                          })
+                          : 'Not provided'}
+                      </Typography>
+                    </Box>
+
+                    <Box>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: 'text.secondary',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Due date
+                      </Typography>
+
+                      <Typography sx={{ color: 'text.primary' }}>
+                        {activeInvoice.dueDate
+                          ? new Date(
+                            `${activeInvoice.dueDate}T00:00:00`,
+                          ).toLocaleDateString('en-IN', {
+                            dateStyle: 'medium',
+                          })
+                          : 'Not provided'}
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  <Box
+                    sx={{
+                      borderTop:
+                        '1px solid var(--mui-palette-divider)',
+                      pt: 1.2,
+                    }}
+                  >
+                    <Stack spacing={0.6}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 1,
+                        }}
+                      >
+                        <Typography sx={{ color: 'text.secondary' }}>
+                          Subtotal
+                        </Typography>
+
+                        <Typography sx={{ color: 'text.primary' }}>
+                          {formatCurrency(
+                            activeInvoice.subtotal,
+                          )}
+                        </Typography>
+                      </Box>
+
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 1,
+                        }}
+                      >
+                        <Typography sx={{ color: 'text.secondary' }}>
+                          GST
+                        </Typography>
+
+                        <Typography sx={{ color: 'text.primary' }}>
+                          {formatCurrency(
+                            activeInvoice.gstAmount,
+                          )}
+                        </Typography>
+                      </Box>
+                      {(activeInvoice.invoiceDiscountAmount ?? 0) > 0 && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                          <Typography sx={{ color: 'success.main' }}>
+                            Discount{activeInvoice.invoiceDiscountType === 'PERCENTAGE' ? ` (${activeInvoice.invoiceDiscountValue}%)` : ''}
+                          </Typography>
+                          <Typography sx={{ color: 'success.main' }}>−{formatCurrency(activeInvoice.invoiceDiscountAmount)}</Typography>
+                        </Box>
+                      )}
+                      {(activeInvoice.loyaltyPointsRedeemed ?? 0) > 0 && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                          <Typography sx={{ color: 'success.main' }}>Loyalty discount ({activeInvoice.loyaltyPointsRedeemed} points)</Typography>
+                          <Typography sx={{ color: 'success.main' }}>−{formatCurrency(activeInvoice.loyaltyDiscountAmount)}</Typography>
+                        </Box>
+                      )}
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, pt: 0.7, borderTop: '1px solid var(--mui-palette-divider)' }}>
+                        <Typography sx={{ color: 'text.primary', fontWeight: 800 }}>Total</Typography>
+                        <Typography sx={{ color: 'primary.main', fontWeight: 800 }}>{formatCurrency(activeInvoice.totalAmount)}</Typography>
+                      </Box>
+                    </Stack>
+                  </Box>
+                </Stack>
+              </DialogContent>
+            )}
+
+            <DialogActions>
+              <Button
+                onClick={closeInvoiceDialog}
+                sx={{
+                  color: 'primary.main',
+                  fontWeight: 700,
+                  textTransform: 'none',
+                }}
+              >
+                Close
+              </Button>
+            </DialogActions>
+          </Dialog>
+
+          <AppointmentDetailDialog
+            open={Boolean(explicitAppointment)}
+            appointment={explicitAppointment}
+            businesses={data.businesses}
+            customers={data.customers}
+            role="CUSTOMER"
+            onClose={() => setSelectedAppointment(null)}
+          />
+
+          <CustomerBottomNavBar activeTab={activeTab} onChangeTab={handleChangeTab} />
         </Paper>
       </Container>
     </Box>

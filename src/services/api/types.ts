@@ -9,6 +9,7 @@ export type BusinessSummary = {
   gstin?: string
   pan?: string
   imageUrl?: string
+  bannerImageUrl?: string | null
   email?: string
   phone?: string
   address?: string
@@ -20,6 +21,9 @@ export type BusinessSummary = {
   status?: string
   appointmentsEnabled?: boolean
   membershipsEnabled?: boolean
+  payslipsEnabled?: boolean
+  homeServicesEnabled?: boolean
+  homeVisitCharge?: number
 }
 
 export type CustomerSummary = {
@@ -45,6 +49,8 @@ export type NearbyBusinessSummary = {
   latitude: number
   longitude: number
   distanceKm: number
+  appointmentsEnabled?: boolean
+  homeServicesEnabled?: boolean
 }
 
 export type BusinessOffer = {
@@ -57,6 +63,8 @@ export type BusinessOffer = {
   endsAt: string
   active: boolean
   targetSegment?: CustomerSegment
+   imageUrl?: string | null
+   attachmentType?: 'IMAGE' | 'PDF' | null
 }
 
 export type CustomerSegment = 'ALL' | 'NEW' | 'LOYAL' | 'AT_RISK' | 'MEMBERS'
@@ -71,6 +79,8 @@ export type NearbyOfferSummary = {
   discountLabel: string
   endsAt: string
   distanceKm: number
+  imageUrl?: string | null
+  attachmentType?: 'IMAGE' | 'PDF' | null
 }
 
 export type ProductSummary = {
@@ -82,6 +92,16 @@ export type ProductSummary = {
   status?: string
 }
 
+export type InvoiceLineItemSummary = {
+  id: number
+  productName: string
+  quantity: number
+  unitPrice: number
+  gstRate: number
+}
+
+export type InvoiceLineItemInput = Omit<InvoiceLineItemSummary, 'id'>
+
 export type InvoiceSummary = {
   id: number
   invoiceNumber?: string
@@ -89,9 +109,14 @@ export type InvoiceSummary = {
   customerId?: number
   issueDate?: string
   dueDate?: string
+  createdAt?: string
+  items?: InvoiceLineItemSummary[]
   subtotal?: number
   gstAmount?: number
   totalAmount?: number
+  invoiceDiscountAmount?: number
+  invoiceDiscountType?: 'PERCENTAGE' | 'AMOUNT'
+  invoiceDiscountValue?: number
   loyaltyPointsRedeemed?: number
   loyaltyDiscountAmount?: number
   status?: string
@@ -113,12 +138,16 @@ export type AppointmentSummary = {
   id: number
   businessId?: number
   customerId?: number
+  staffId?: number
   staffUserId?: number
   appointmentServiceId?: number
   serviceName?: string
   servicePrice?: number
   loyaltyPointsRedeemed?: number
   loyaltyDiscountAmount?: number
+  homeVisit?: boolean
+  visitingCharge?: number
+  visitAddress?: string
   scheduledAt?: string
   durationMinutes?: number
   status?: string
@@ -142,8 +171,11 @@ export type AppointmentServiceSummary = {
   enabled: boolean
 }
 
-export type AppointmentStaffOption = { userId: number; label: string }
+export type AppointmentStaffOption = { staffId: number; label: string; userId?: number }
+export type AppointmentStaffView = AppointmentStaffOption & { email?: string; phone?: string; userId?: number }
 export type AppointmentAvailability = { date: string; availableSlots: string[]; staff: AppointmentStaffOption[] }
+
+export type BusinessInsightsInterval = 'DAILY' | 'WEEKLY' | 'MONTHLY'
 
 export type BusinessInsights = {
   revenueTrend: Array<{ label: string; amount: number }>
@@ -209,6 +241,8 @@ export type LoyaltyProgramSettings = {
   configured: boolean
   pointsPerCurrencyUnit: number | null
   maxRedemptionPercent: number | null
+  invoiceEarningMode: 'FIXED_POINTS' | 'PERCENTAGE' | null
+  invoiceEarningValue: number | null
 }
 
 export type MembershipNotificationSummary = {
@@ -262,8 +296,11 @@ export type DashboardData = {
 
 export type BusinessDashboardSummary = {
   totalRevenue: number
+  billableRevenue?: number
+  completedRevenue?: number
   activeMembers: number
   pendingPayments: number
+  pendingPaymentCount?: number
   newCustomers: number
   invoiceCount: number
   appointmentCount: number
@@ -307,17 +344,22 @@ export type InvoiceCreateRequest = {
   subtotal: number
   gstAmount: number
   totalAmount: number
+  invoiceDiscountAmount?: number
+  invoiceDiscountType?: 'PERCENTAGE' | 'AMOUNT'
+  invoiceDiscountValue?: number
+  items?: InvoiceLineItemInput[]
   status?: 'DRAFT' | 'SENT' | 'PAID'
-  loyaltyPointsToRedeem?: number
 }
 
 export type AppointmentCreateRequest = {
   businessId: number
   appointmentServiceId: number
   scheduledAt: string
-  staffUserId?: number
+  staffId?: number
   notes?: string
   loyaltyPointsToRedeem?: number
+  homeVisit?: boolean
+  visitAddress?: string
 }
 
 export type AppointmentServiceRequest = Omit<AppointmentServiceSummary, 'id' | 'businessId'> & {

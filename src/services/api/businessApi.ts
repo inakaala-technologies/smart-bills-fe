@@ -1,14 +1,63 @@
 import { apiClient, getErrorMessage } from './httpClient'
+import { bustCache } from './imageUrl'
 import { normalizeBusiness } from './normalizers'
+import { normalizeOfferAsset } from './offerNormalizers'
 import type { BusinessCreateRequest, BusinessInsights, BusinessOffer, BusinessSummary } from './types'
 
-export async function fetchBusinessOffers(businessId: number): Promise<BusinessOffer[]> {
-  return (await apiClient.get<BusinessOffer[]>(`/api/v1/businesses/${businessId}/offers`)).data
+export async function uploadBusinessBanner(businessId: number, file: File): Promise<BusinessSummary> {
+  const formData = new FormData()
+  formData.append('file', file)
+  try {
+    const response = await apiClient.post<Partial<BusinessSummary> & Record<string, unknown>>(
+      `/api/v1/businesses/${businessId}/banner`,
+      formData,
+      { timeout: 60000 },
+    )
+    const business = normalizeBusiness(response.data)
+    // Cache-bust so the new banner shows immediately instead of the cached one.
+    return { ...business, bannerImageUrl: bustCache(business.bannerImageUrl) }
+  } catch (error) {
+    throw new Error(getErrorMessage(error, 'Could not upload the banner image.'), { cause: error })
+  }
 }
 
-export async function createBusinessOffer(businessId: number, offer: Omit<BusinessOffer, 'id' | 'businessId' | 'active'>): Promise<BusinessOffer> {
+export async function fetchBusinessOffers(businessId: number): Promise<BusinessOffer[]> {
+  const { data } = await apiClient.get<BusinessOffer[]>(`/api/v1/businesses/${businessId}/offers`)
+  // The backend sends the file as `attachmentUrl`; map it to `imageUrl`.
+  return data.map(normalizeOfferAsset)
+}
+
+export async function createBusinessOffer(
+  businessId: number,
+  offer: Omit<BusinessOffer, 'id' | 'businessId' | 'active' | 'imageUrl' | 'attachmentType'>,
+  image?: File | null,
+): Promise<BusinessOffer> {
   try {
-    return (await apiClient.post<BusinessOffer>(`/api/v1/businesses/${businessId}/offers`, offer)).data
+    const url = `/api/v1/businesses/${businessId}/offers`
+
+    // No file: plain JSON request, same as before.
+    if (!image) {
+      return normalizeOfferAsset((await apiClient.post<BusinessOffer>(url, offer)).data)
+    }
+
+    // With a file: send multipart.
+    const formData = new FormData()
+    formData.append(
+      'offer',
+      new Blob([JSON.stringify(offer)], { type: 'application/json' }),
+    )
+    formData.append('image', image)
+
+    const { data } = await apiClient.post<BusinessOffer>(url, formData, {
+        timeout: 60000,
+        // If apiClient defaults to "Content-Type: application/json", axios would
+        // serialize this FormData to JSON and the file would be lost. Declaring
+        // multipart here overrides that default; the browser still adds the
+        // boundary automatically.
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+
+    return normalizeOfferAsset(data)
   } catch (error) {
     throw new Error(getErrorMessage(error, 'Could not publish this offer.'), { cause: error })
   }
@@ -42,6 +91,33 @@ export async function setBusinessMembershipsEnabled(businessId: number, enabled:
     return { ok: true, business: normalizeBusiness(data) }
   } catch (error) {
     return { ok: false, message: getErrorMessage(error, 'Could not update membership availability.') }
+  }
+}
+
+export async function setBusinessPayslipsEnabled(businessId: number, enabled: boolean): Promise<{ ok: boolean; business?: BusinessSummary; message?: string }> {
+  try {
+    const { data } = await apiClient.put<Record<string, unknown>>(`/api/v1/businesses/${businessId}/payslips-enabled`, undefined, { params: { enabled } })
+    return { ok: true, business: normalizeBusiness(data) }
+  } catch (error) {
+    return { ok: false, message: getErrorMessage(error, 'Could not update payslips.') }
+  }
+}
+
+export async function setBusinessHomeServicesEnabled(businessId: number, enabled: boolean): Promise<{ ok: boolean; business?: BusinessSummary; message?: string }> {
+  try {
+    const { data } = await apiClient.put<Record<string, unknown>>(`/api/v1/businesses/${businessId}/home-services-enabled`, undefined, { params: { enabled } })
+    return { ok: true, business: normalizeBusiness(data) }
+  } catch (error) {
+    return { ok: false, message: getErrorMessage(error, 'Could not update home services.') }
+  }
+}
+
+export async function setBusinessHomeVisitCharge(businessId: number, charge: number): Promise<{ ok: boolean; business?: BusinessSummary; message?: string }> {
+  try {
+    const { data } = await apiClient.put<Record<string, unknown>>(`/api/v1/businesses/${businessId}/home-visit-charge`, undefined, { params: { charge } })
+    return { ok: true, business: normalizeBusiness(data) }
+  } catch (error) {
+    return { ok: false, message: getErrorMessage(error, 'Could not update the visiting charge.') }
   }
 }
 

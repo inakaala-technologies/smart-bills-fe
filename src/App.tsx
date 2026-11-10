@@ -1,6 +1,7 @@
 import { CssBaseline, ThemeProvider } from '@mui/material'
 import { useEffect, useRef } from 'react'
 import { BrowserRouter } from 'react-router-dom'
+import './theme/common.css'
 import AppRoutes from './routes/AppRoutes'
 import { bhiveTheme } from './theme/theme'
 

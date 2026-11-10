@@ -1,5 +1,4 @@
-import { Box, Button, Container, Paper, Stack, Typography } from '@mui/material'
-import { alpha } from '@mui/material/styles'
+import { Box, Button, Container, Paper, Stack, Typography, type Theme } from '@mui/material'
 import {
   ArrowLeft,
   Building2,
@@ -21,6 +20,7 @@ import { setActiveTab as setBusinessTab } from '../store/businessDashboardSlice'
 import { setActiveTab as setCustomerTab } from '../store/customerDashboardSlice'
 import type { BusinessSummary } from '../services/api'
 import type { DashboardTab } from '../modules/types'
+import { getDashboardPath } from '../routes/dashboardPaths'
 
 type BusinessDetailPageProps = {
   business: BusinessSummary
@@ -50,6 +50,45 @@ const bottomNavTabs: Array<{ key: DashboardTab; label: string }> = [
   { key: 'profile', label: 'Profile' },
 ]
 
+/* ---- Dark-mode safe style helpers (theme tokens + applyStyles, no theme.palette) ---- */
+const violetText = (theme: Theme) => ({
+  color: '#4E2BCC',
+  ...theme.applyStyles('dark', { color: '#B9A4F8' }),
+})
+
+const violetTint = (theme: Theme) => ({
+  bgcolor: 'rgba(78,43,204,0.1)',
+  color: '#4E2BCC',
+  ...theme.applyStyles('dark', { bgcolor: 'rgba(144,91,244,0.22)', color: '#C9B3FA' }),
+})
+
+const groupPanelSx = (theme: Theme) => ({
+  mt: 0.1,
+  borderRadius: '16px',
+  border: '1px solid',
+  borderColor: 'divider',
+  p: 1.2,
+  bgcolor: '#F7F5FD',
+  ...theme.applyStyles('dark', { bgcolor: 'rgba(255,255,255,0.04)' }),
+})
+
+const sectionCardSx = {
+  bgcolor: 'background.paper',
+  backgroundImage: 'none',
+  borderRadius: '16px',
+  border: '1px solid',
+  borderColor: 'divider',
+  p: 1.4,
+}
+
+const rowCardSx = {
+  bgcolor: 'background.paper',
+  backgroundImage: 'none',
+  border: '1px solid',
+  borderColor: 'divider',
+  borderRadius: '16px',
+}
+
 export function BusinessDetailPage({
   business,
   invoiceCount,
@@ -77,7 +116,7 @@ export function BusinessDetailPage({
     if (window.history.length > 1) {
       navigate(-1)
     } else {
-      navigate('/dashboard')
+      navigate(getDashboardPath(role))
     }
   }
   const handleNavigateTab = (tab: DashboardTab) => {
@@ -88,7 +127,7 @@ export function BusinessDetailPage({
     } else {
       dispatch(setBusinessTab(tab))
     }
-    navigate('/dashboard')
+    navigate(getDashboardPath(role, tab))
   }
 
   const primaryDetails = [
@@ -135,35 +174,37 @@ export function BusinessDetailPage({
     <Container maxWidth="sm" sx={{ py: 3, pb: 10 }}>
       <Paper
         elevation={0}
-        sx={(theme) => ({
+        sx={{
           width: '100%',
           maxWidth: 390,
           mx: 'auto',
           borderRadius: 2.5,
-          background: theme.palette.common.white,
-          border: `1px solid ${alpha(theme.palette.text.primary, 0.09)}`,
+          bgcolor: 'background.paper',
+          backgroundImage: 'none',
+          border: '1px solid',
+          borderColor: 'divider',
           overflow: 'hidden',
-          boxShadow: `0 18px 42px ${alpha(theme.palette.common.black, 0.08)}`,
-        })}
+          boxShadow: '0 18px 42px rgba(0,0,0,0.08)',
+        }}
       >
         <Box sx={{ px: 2.1, py: 2.1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
             <Button
               variant="text"
               onClick={handleBack}
-              sx={(theme) => ({
+              sx={{
                 minWidth: 0,
                 p: 0,
-                color: theme.palette.text.primary,
+                color: 'text.primary',
                 fontWeight: 700,
                 textTransform: 'none',
                 '&:hover': { background: 'transparent' },
-              })}
+              }}
             >
               <ArrowLeft size={18} style={{ marginRight: 8 }} />
               Business Details
             </Button>
-            <Box sx={(theme) => ({ width: 8, height: 8, borderRadius: '50%', background: theme.palette.text.primary, opacity: 0.8 })} />
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'text.primary', opacity: 0.8 }} />
           </Box>
 
           <Box
@@ -173,25 +214,27 @@ export function BusinessDetailPage({
               borderRadius: 1.25,
               overflow: 'hidden',
               background: 'linear-gradient(135deg, rgba(21,89,59,0.78), rgba(186,230,253,0.7), rgba(255,255,255,0.4)), url("https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1200&q=80") center/cover',
-              border: '1px solid rgba(15,23,42,0.06)',
+              border: '1px solid',
+              borderColor: 'divider',
             }}
           >
+            {/* Sits on top of a photo, so it stays white with dark ink in both modes */}
             <Box
-              sx={(theme) => ({
+              sx={{
                 position: 'absolute',
                 left: 18,
                 bottom: 18,
                 width: 58,
                 height: 58,
                 borderRadius: 18,
-                background: alpha(theme.palette.common.white, 0.94),
+                background: 'rgba(255,255,255,0.94)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: theme.palette.text.primary,
+                color: '#0F032D',
                 fontWeight: 900,
-                boxShadow: `0 12px 24px ${alpha(theme.palette.common.black, 0.18)}`,
-              })}
+                boxShadow: '0 12px 24px rgba(0,0,0,0.18)',
+              }}
             >
               {initials}
             </Box>
@@ -206,54 +249,42 @@ export function BusinessDetailPage({
                 px: 1.15,
                 py: 0.38,
                 borderRadius: 999,
-                background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.12)}, ${alpha(theme.palette.success.main, 0.08)})`,
-                border: `1px solid ${alpha(theme.palette.success.main, 0.18)}`,
-                color: theme.palette.primary.main,
                 fontWeight: 800,
                 fontSize: '0.72rem',
                 mb: 1.15,
+                ...violetTint(theme),
               })}
             >
-              <Box sx={(theme) => ({ width: 6.5, height: 6.5, borderRadius: '50%', background: theme.palette.success.main, boxShadow: `0 0 0 2px ${alpha(theme.palette.success.main, 0.18)}` })} />
+              <Box sx={{ width: 6.5, height: 6.5, borderRadius: '50%', bgcolor: 'success.main' }} />
               Active
             </Box>
 
             <Typography
-              sx={(theme) => ({
+              sx={{
                 fontWeight: 900,
                 letterSpacing: '-0.075em',
-                color: theme.palette.text.primary,
+                color: 'text.primary',
                 lineHeight: 1.02,
                 fontSize: 'clamp(2.1rem, 6.9vw, 3rem)',
-              })}
+              }}
             >
               {businessName}
             </Typography>
           </Box>
 
-          <Box
-            sx={(theme) => ({
-              mt: 0.1,
-              background: `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.06)} 0%, ${theme.palette.common.white} 100%)`,
-              borderRadius: 1.25,
-              border: `1px solid ${alpha(theme.palette.text.primary, 0.05)}`,
-              p: 1.2,
-              boxShadow: `0 14px 30px ${alpha(theme.palette.common.black, 0.03)}`,
-            })}
-          >
+          <Box sx={groupPanelSx}>
             <Box sx={{ display: 'grid', gap: 0.8 }}>
               {primaryDetails.map(({ value, icon: Icon }) => (
                 <Box
                   key={value}
                   sx={{
+                    ...rowCardSx,
                     display: 'flex',
                     alignItems: 'center',
                     gap: 0.9,
                     px: 0.8,
                     py: 0.75,
                     borderRadius: 2.4,
-                    background: '#fff',
-                    border: '1px solid rgba(15,23,42,0.04)',
                     minHeight: 52,
                   }}
                 >
@@ -262,25 +293,24 @@ export function BusinessDetailPage({
                       width: 32,
                       height: 32,
                       borderRadius: 2,
-                      background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.08)} 0%, ${alpha(theme.palette.success.main, 0.16)} 100%)`,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: theme.palette.primary.main,
                       flexShrink: 0,
+                      ...violetTint(theme),
                     })}
                   >
                     <Icon size={16} />
                   </Box>
 
                   <Typography
-                    sx={(theme) => ({
+                    sx={{
                       fontWeight: 800,
-                      color: theme.palette.text.primary,
+                      color: 'text.primary',
                       lineHeight: 1.25,
                       letterSpacing: '-0.03em',
                       wordBreak: 'break-word',
-                    })}
+                    }}
                   >
                     {value}
                   </Typography>
@@ -288,117 +318,134 @@ export function BusinessDetailPage({
               ))}
             </Box>
 
-            <Typography variant="caption" sx={(theme) => ({ display: 'block', textAlign: 'right', color: theme.palette.text.secondary, fontWeight: 700, mt: 0.9 })}>
+            <Typography variant="caption" sx={{ display: 'block', textAlign: 'right', color: 'text.secondary', fontWeight: 700, mt: 0.9 }}>
               last updated: 10 mins ago
             </Typography>
           </Box>
 
-          <Box sx={(theme) => ({ mt: 1.8, background: theme.palette.common.white, borderRadius: 1.25, border: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`, p: 1.4 })}>
+          <Box sx={{ ...sectionCardSx, mt: 1.8 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.2 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>Complement info</Typography>
-              <Typography variant="caption" sx={(theme) => ({ color: theme.palette.primary.main, fontWeight: 800 })}>More</Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 900, color: 'text.primary' }}>Complement info</Typography>
+              <Typography variant="caption" sx={(theme) => ({ fontWeight: 800, ...violetText(theme) })}>More</Typography>
             </Box>
 
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1 }}>
               {complementDetails.map(({ label, value, meta, icon: Icon }) => (
                 <Box
                   key={label}
-                  sx={(theme) => ({
+                  sx={{
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 0.55,
                     p: 0.9,
                     borderRadius: 2.4,
-                    border: `1px solid ${alpha(theme.palette.text.primary, 0.04)}`,
-                    background: theme.palette.common.white,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    bgcolor: 'action.hover',
                     minHeight: 92,
-                  })}
+                  }}
                 >
-                  <Box sx={(theme) => ({ display: 'flex', alignItems: 'center', gap: 0.7, color: theme.palette.primary.main })}>
+                  <Box sx={(theme) => ({ display: 'flex', alignItems: 'center', gap: 0.7, ...violetText(theme) })}>
                     <Icon size={14} />
-                    <Typography variant="caption" sx={(theme) => ({ fontWeight: 800, color: theme.palette.primary.main, textTransform: 'uppercase', letterSpacing: '0.08em' })}>
+                    <Typography variant="caption" sx={{ fontWeight: 800, color: 'inherit', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                       {label}
                     </Typography>
                   </Box>
 
-                  <Typography sx={(theme) => ({ fontWeight: 900, color: theme.palette.text.primary, lineHeight: 1.25, wordBreak: 'break-word' })}>{value}</Typography>
-                  <Typography variant="caption" sx={(theme) => ({ color: theme.palette.text.secondary, fontWeight: 700 })}>{meta}</Typography>
+                  <Typography sx={{ fontWeight: 900, color: 'text.primary', lineHeight: 1.25, wordBreak: 'break-word' }}>{value}</Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>{meta}</Typography>
                 </Box>
               ))}
             </Box>
           </Box>
 
           <Box
-            sx={(theme) => ({
+            sx={{
               mt: 1.6,
-              background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.success.main} 100%)`,
-              color: theme.palette.common.white,
+              background: 'linear-gradient(135deg, #4E2BCC 0%, #905BF4 100%)',
+              color: '#ffffff',
               borderRadius: 3,
               p: 1.1,
               textAlign: 'center',
               fontWeight: 800,
-              boxShadow: `0 12px 24px ${alpha(theme.palette.primary.main, 0.22)}`,
-            })}
+              boxShadow: '0 12px 24px rgba(78,43,204,0.22)',
+            }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
               <MapPinned size={17} />
-              <Typography sx={{ fontWeight: 800 }}>{business.address ?? 'Business location'}</Typography>
+              <Typography sx={{ fontWeight: 800, color: '#ffffff' }}>{business.address ?? 'Business location'}</Typography>
             </Box>
           </Box>
 
-          <Box sx={(theme) => ({ mt: 2, background: theme.palette.common.white, borderRadius: 1.25, border: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`, p: 1.4 })}>
+          <Box sx={{ ...sectionCardSx, mt: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.2 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>Recent invoices</Typography>
-              <Typography variant="caption" sx={(theme) => ({ color: theme.palette.primary.main, fontWeight: 800 })}>{recentInvoices.length} total</Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 900, color: 'text.primary' }}>Recent invoices</Typography>
+              <Typography variant="caption" sx={(theme) => ({ fontWeight: 800, ...violetText(theme) })}>{recentInvoices.length} total</Typography>
             </Box>
 
             {recentInvoices.length > 0 ? (
               <Stack spacing={1}>
                 {recentInvoices.map((invoice) => (
-                  <Box key={invoice.id} sx={(theme) => ({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, py: 0.8, px: 0.9, borderRadius: 2.3, background: theme.palette.common.white, border: `1px solid ${alpha(theme.palette.text.primary, 0.04)}` })}>
+                  <Box key={invoice.id} sx={{ ...rowCardSx, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, py: 0.8, px: 0.9, borderRadius: 2.3 }}>
                     <Box>
-                      <Typography sx={(theme) => ({ fontWeight: 800, color: theme.palette.text.primary })}>{invoice.title}</Typography>
-                      <Typography variant="caption" sx={(theme) => ({ color: theme.palette.text.secondary, fontWeight: 700 })}>{invoice.date}</Typography>
+                      <Typography sx={{ fontWeight: 800, color: 'text.primary' }}>{invoice.title}</Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>{invoice.date}</Typography>
                     </Box>
                     <Box sx={{ textAlign: 'right' }}>
-                      <Typography sx={(theme) => ({ fontWeight: 800, color: theme.palette.text.primary })}>{invoice.amount}</Typography>
-                      <Typography variant="caption" sx={(theme) => ({ color: theme.palette.primary.main, fontWeight: 700 })}>{invoice.status}</Typography>
+                      <Typography sx={{ fontWeight: 800, color: 'text.primary' }}>{invoice.amount}</Typography>
+                      <Typography variant="caption" sx={(theme) => ({ fontWeight: 700, ...violetText(theme) })}>{invoice.status}</Typography>
                     </Box>
                   </Box>
                 ))}
               </Stack>
             ) : (
-              <Typography variant="body2" sx={(theme) => ({ color: theme.palette.text.secondary, fontWeight: 700 })}>No recent invoices yet.</Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>No recent invoices yet.</Typography>
             )}
           </Box>
 
-          <Box sx={(theme) => ({ mt: 1.5, background: theme.palette.common.white, borderRadius: 1.25, border: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`, p: 1.4 })}>
+          <Box sx={{ ...sectionCardSx, mt: 1.5 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.2 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>Upcoming appointments</Typography>
-              <Typography variant="caption" sx={(theme) => ({ color: theme.palette.primary.main, fontWeight: 800 })}>{recentAppointments.length} now</Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 900, color: 'text.primary' }}>Upcoming appointments</Typography>
+              <Typography variant="caption" sx={(theme) => ({ fontWeight: 800, ...violetText(theme) })}>{recentAppointments.length} now</Typography>
             </Box>
 
             {recentAppointments.length > 0 ? (
               <Stack spacing={1}>
                 {recentAppointments.map((appointment) => (
-                  <Box key={appointment.id} sx={(theme) => ({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, py: 0.8, px: 0.9, borderRadius: 2.3, background: theme.palette.common.white, border: `1px solid ${alpha(theme.palette.text.primary, 0.04)}` })}>
+                  <Box key={appointment.id} sx={{ ...rowCardSx, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, py: 0.8, px: 0.9, borderRadius: 2.3 }}>
                     <Box>
-                      <Typography sx={(theme) => ({ fontWeight: 800, color: theme.palette.text.primary })}>{appointment.title}</Typography>
-                      <Typography variant="caption" sx={(theme) => ({ color: theme.palette.text.secondary, fontWeight: 700 })}>{appointment.subtitle}</Typography>
+                      <Typography sx={{ fontWeight: 800, color: 'text.primary' }}>{appointment.title}</Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>{appointment.subtitle}</Typography>
                     </Box>
-                    <Typography variant="caption" sx={(theme) => ({ color: theme.palette.primary.main, fontWeight: 800 })}>{appointment.status}</Typography>
+                    <Typography variant="caption" sx={(theme) => ({ fontWeight: 800, ...violetText(theme) })}>{appointment.status}</Typography>
                   </Box>
                 ))}
               </Stack>
             ) : (
-              <Typography variant="body2" sx={(theme) => ({ color: theme.palette.text.secondary, fontWeight: 700 })}>No appointments scheduled yet.</Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>No appointments scheduled yet.</Typography>
             )}
           </Box>
         </Box>
       </Paper>
 
-      <Box sx={(theme) => ({ position: 'sticky', bottom: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center', px: 1.5, pb: 1.2, pt: 1, background: `linear-gradient(180deg, rgba(255,255,255,0), ${alpha(theme.palette.common.white, 0.96)} 30%)` })}>
-        <Box sx={(theme) => ({ width: '100%', maxWidth: 360, background: theme.palette.common.white, border: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`, borderRadius: 1.25, boxShadow: `0 -5px 18px ${alpha(theme.palette.common.black, 0.06)}`, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', overflow: 'hidden' })}>
+      {/* Floating pill nav: transparent wrapper (no white fade band), themed pill, violet active tab */}
+      <Box sx={{ position: 'sticky', bottom: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center', px: 1.5, pb: 1.2, pt: 1, background: 'transparent' }}>
+        <Box
+          sx={{
+            width: '100%',
+            maxWidth: 360,
+            bgcolor: 'background.paper',
+            backgroundImage: 'none',
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: '999px',
+            boxShadow: '0 8px 24px rgba(78,43,204,0.18)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, minmax(0,1fr))',
+            gap: 0.4,
+            p: 0.6,
+          }}
+        >
           {bottomNavTabs.map((tab) => {
             const isActive = activeTab === tab.key
             const Icon = tab.key === 'overview' ? Home : tab.key === 'businesses' ? Building2 : tab.key === 'invoices' ? ReceiptText : UserRound
@@ -406,23 +453,33 @@ export function BusinessDetailPage({
             return (
               <Box
                 key={tab.key}
+                role="button"
+                tabIndex={0}
                 onClick={() => handleNavigateTab(tab.key)}
-                sx={(theme) => ({
-                  py: 1.2,
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    handleNavigateTab(tab.key)
+                  }
+                }}
+                sx={{
+                  py: 0.9,
                   px: 0.5,
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  gap: 0.5,
-                  background: isActive ? alpha(theme.palette.success.main, 0.12) : theme.palette.common.white,
-                  color: isActive ? theme.palette.primary.main : theme.palette.text.secondary,
+                  gap: 0.4,
+                  borderRadius: '999px',
+                  bgcolor: isActive ? '#4E2BCC' : 'transparent',
+                  color: isActive ? '#ffffff' : 'text.secondary',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
                   fontWeight: 700,
-                })}
+                  '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 1 },
+                }}
               >
                 <Icon size={18} />
-                <Typography variant="caption" sx={{ fontWeight: 700, fontSize: 11 }}>{tab.label}</Typography>
+                <Typography variant="caption" sx={{ fontWeight: 700, fontSize: 11, color: 'inherit' }}>{tab.label}</Typography>
               </Box>
             )
           })}

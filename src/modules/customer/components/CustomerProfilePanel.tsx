@@ -108,7 +108,7 @@ export function CustomerProfilePanel({ authUser, data, onProfileUpdated, onOpenM
   return (
     <Stack spacing={1.35}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.3, px: 0.4, py: 0.4 }}>
-        <Avatar sx={{ width: 62, height: 62, flexShrink: 0, bgcolor: 'success.light', color: 'success.dark', border: '2px solid var(--mui-palette-background-paper)', boxShadow: '0 2px 8px rgba(0,0,0,0.18)', fontSize: 18, fontWeight: 800 }}>
+        <Avatar src={authUser?.profilePictureUrl || undefined} alt={authUser?.name ? `${authUser.name} profile picture` : 'Profile picture'} sx={{ width: 62, height: 62, flexShrink: 0, bgcolor: 'success.light', color: 'success.dark', border: '2px solid var(--mui-palette-background-paper)', boxShadow: '0 2px 8px rgba(0,0,0,0.18)', fontSize: 18, fontWeight: 800 }}>
           {initials || 'C'}
         </Avatar>
         <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -140,8 +140,8 @@ export function CustomerProfilePanel({ authUser, data, onProfileUpdated, onOpenM
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setEditOpen(false)} disabled={savingProfile} sx={{ color: 'text.secondary', textTransform: 'none' }}>Cancel</Button>
-          <Button variant="contained" startIcon={<Save size={16} />} onClick={() => void saveProfile()} disabled={savingProfile || !editName.trim() || !editLocation.country || !editLocation.region || !editLocation.city}>
-            {savingProfile ? 'Saving…' : 'Save changes'}
+          <Button variant="contained" startIcon={<Save size={16} />} onClick={() => void saveProfile()} loading={savingProfile} disabled={!editName.trim() || !editLocation.country || !editLocation.region || !editLocation.city}>
+            Save changes
           </Button>
         </DialogActions>
       </Dialog>

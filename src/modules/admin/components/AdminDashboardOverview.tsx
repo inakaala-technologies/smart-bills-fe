@@ -20,18 +20,39 @@ export function AdminSummaryCards() {
   ]
 
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: { xs: 1.1, sm: 1.4 }, my: 2.2 }}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(4, minmax(0, 1fr))' }, gap: { xs: 1.2, sm: 1.6 }, my: 2.2 }}>
       {summaryCards.map(({ label, count, icon: Icon }) => (
-        <Box key={label} sx={{ backgroundColor: 'background.paper', borderRadius: '20px', py: 1.4, px: 0.8, minHeight: 98, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)', border: '1px solid var(--mui-palette-divider)', transition: 'transform 0.18s ease, box-shadow 0.18s ease', '&:hover': { transform: 'translateY(-2px)', boxShadow: '0 8px 20px rgba(0, 0, 0, 0.18)' } }}>
-          <Box sx={{ position: 'relative', mb: 1.1 }}>
-            <Box sx={{ width: 40, height: 40, borderRadius: '12px', backgroundColor: 'success.light', color: 'success.dark', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Box
+          key={label}
+          sx={(theme) => ({
+            minWidth: 0,
+            minHeight: 104,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            p: { xs: 1.4, sm: 2 },
+            backgroundColor: 'background.paper',
+            borderRadius: 3,
+            border: `1px solid ${theme.palette.divider}`,
+            boxShadow: '0 5px 18px rgba(15, 3, 45, 0.045)',
+            transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+            '&:hover': {
+              transform: 'translateY(-2px)',
+              boxShadow: '0 10px 24px rgba(15, 3, 45, 0.09)',
+            },
+          })}
+        >
+          <Box sx={(theme) => ({ flexShrink: 0, width: 46, height: 46, borderRadius: 2, backgroundColor: alpha(theme.palette.primary.main, 0.09), color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' })}>
               <Icon size={20} strokeWidth={2.2} />
-            </Box>
-            <Box sx={{ position: 'absolute', top: -5, right: -6, minWidth: 18, height: 18, borderRadius: '999px', backgroundColor: 'warning.main', color: 'warning.contrastText', border: '2px solid var(--mui-palette-background-paper)', display: 'flex', alignItems: 'center', justifyContent: 'center', px: 0.4, boxShadow: '0 2px 4px color-mix(in srgb, var(--mui-palette-warning-main) 30%, transparent)' }}>
-              <Typography sx={{ fontSize: '10px', fontWeight: 800, lineHeight: 1 }}>{loading ? '…' : count}</Typography>
-            </Box>
           </Box>
-          <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.primary', fontSize: '11px', textAlign: 'center', lineHeight: 1.2 }}>{label}</Typography>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="body2" noWrap sx={{ color: 'text.secondary', fontWeight: 600 }}>
+              {label}
+            </Typography>
+            <Typography variant="h5" sx={{ mt: 0.25, color: 'text.primary', fontWeight: 800, letterSpacing: '-0.04em' }}>
+              {loading ? '—' : count.toLocaleString('en-IN')}
+            </Typography>
+          </Box>
         </Box>
       ))}
     </Box>
@@ -44,11 +65,16 @@ export function AdminOverviewSection({ onOpenBusiness }: { onOpenBusiness: (busi
   const recentInvoices = data.invoices.slice(0, 3)
 
   return (
-    <Stack spacing={1.8}>
-      <Box sx={(theme) => ({ background: theme.palette.background.paper, borderRadius: 3, p: 1.5, border: `1px solid ${theme.palette.divider}` })}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1.1fr) minmax(0, 0.9fr)' }, gap: 2, alignItems: 'stretch' }}>
+      <Box sx={(theme) => ({ minWidth: 0, background: theme.palette.background.paper, borderRadius: 3, p: { xs: 1.7, sm: 2.2 }, border: `1px solid ${theme.palette.divider}` })}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Business snapshot</Typography>
-          <Chip label={selectedBusiness?.status ?? 'active'} size="small" sx={(theme) => ({ bgcolor: alpha(theme.palette.success.main, 0.14), color: theme.palette.success.dark, fontWeight: 700 })} />
+          <Chip
+            label={selectedBusiness?.status ?? (selectedBusiness ? 'active' : 'No businesses')}
+            size="small"
+            color={selectedBusiness ? 'success' : 'default'}
+            sx={{ fontWeight: 700 }}
+          />
         </Box>
         {data.businesses.length > 0 ? (
           <Stack spacing={1.2}>
@@ -56,10 +82,10 @@ export function AdminOverviewSection({ onOpenBusiness }: { onOpenBusiness: (busi
               <DashboardListRow key={business.id} title={business.businessName ?? business.name ?? `Business ${business.id}`} subtitle={business.email ?? 'No email'} trailing={<Button size="small" variant="text" onClick={() => onOpenBusiness(business.id)}>View</Button>} />
             ))}
           </Stack>
-        ) : <EmptyState title="No businesses" description="Create or connect a business to continue." />}
+        ) : <EmptyState title="No businesses" description="Business records will appear here when an account is onboarded." />}
       </Box>
 
-      <Box sx={(theme) => ({ background: theme.palette.background.paper, borderRadius: 3, p: 1.5, border: `1px solid ${theme.palette.divider}` })}>
+      <Box sx={(theme) => ({ minWidth: 0, background: theme.palette.background.paper, borderRadius: 3, p: { xs: 1.7, sm: 2.2 }, border: `1px solid ${theme.palette.divider}` })}>
         <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1.5 }}>Recent invoices</Typography>
         {recentInvoices.length > 0 ? (
           <Stack spacing={1.1}>
@@ -69,6 +95,6 @@ export function AdminOverviewSection({ onOpenBusiness }: { onOpenBusiness: (busi
           </Stack>
         ) : <EmptyState title="No activity" description="Financial activity will show here." />}
       </Box>
-    </Stack>
+    </Box>
   )
 }

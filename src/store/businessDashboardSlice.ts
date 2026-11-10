@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import { fetchBusinessDashboardSummary, fetchDashboardData, fetchMembershipPlans, type BusinessDashboardSummary, type DashboardData, type MembershipPlanSummary } from '../services/api'
 import type { DashboardTab } from '../modules/types'
+import { emptyFreshness, markLoaded, type DashboardFreshness } from './dashboardFreshness'
 
 const emptyDashboardData: DashboardData = {
   businesses: [],
@@ -14,7 +15,7 @@ const emptyDashboardData: DashboardData = {
   documents: [],
 }
 
-type BusinessDashboardState = {
+type BusinessDashboardState = DashboardFreshness & {
   data: DashboardData
   summary: BusinessDashboardSummary | null
   membershipPlansByBusiness: Record<number, { plans: MembershipPlanSummary[]; loading: boolean; loaded: boolean; error: string | null }>
@@ -26,6 +27,7 @@ type BusinessDashboardState = {
 }
 
 const initialState: BusinessDashboardState = {
+  ...emptyFreshness,
   data: emptyDashboardData,
   summary: null,
   membershipPlansByBusiness: {},
@@ -85,11 +87,23 @@ const businessDashboardSlice = createSlice({
       }
       state.selectedBusinessId = action.payload
     },
-    setBusinessFeatures: (state, action: PayloadAction<{ businessId: number; appointmentsEnabled: boolean; membershipsEnabled: boolean }>) => {
+    setBusinessFeatures: (state, action: PayloadAction<{ businessId: number; appointmentsEnabled: boolean; membershipsEnabled: boolean; homeServicesEnabled?: boolean; payslipsEnabled?: boolean }>) => {
       const business = state.data.businesses.find((item) => item.id === action.payload.businessId)
       if (!business) return
+      business.payslipsEnabled = action.payload.payslipsEnabled ?? business.payslipsEnabled ?? false
       business.appointmentsEnabled = action.payload.appointmentsEnabled
+      business.homeServicesEnabled = action.payload.homeServicesEnabled ?? false
       business.membershipsEnabled = action.payload.membershipsEnabled
+    },
+    setBusinessHomeVisitCharge: (state, action: PayloadAction<{ businessId: number; homeVisitCharge: number }>) => {
+      const business = state.data.businesses.find((item) => item.id === action.payload.businessId)
+      if (business) business.homeVisitCharge = action.payload.homeVisitCharge
+    },
+    // NEW: store the freshly uploaded (cache-busted) banner URL so every screen updates immediately.
+    // Make sure `bannerImageUrl?: string | null` exists on the business type (BusinessSummary).
+    setBusinessBanner: (state, action: PayloadAction<{ businessId: number; bannerImageUrl?: string | null }>) => {
+      const business = state.data.businesses.find((item) => item.id === action.payload.businessId)
+      if (business) business.bannerImageUrl = action.payload.bannerImageUrl
     },
     resetBusinessDashboard: () => initialState,
   },
@@ -112,9 +126,11 @@ const businessDashboardSlice = createSlice({
           state.summary = null
           state.summaryLoading = false
         }
+        Object.assign(state, markLoaded(`business:${state.selectedBusinessId ?? ''}`))
       })
       .addCase(fetchBusinessDashboard.rejected, (state, action) => {
         state.loading = false
+        Object.assign(state, emptyFreshness)
         state.error = action.error.message ?? 'Unable to load the business dashboard.'
         state.data = emptyDashboardData
       })
@@ -159,5 +175,13 @@ const businessDashboardSlice = createSlice({
   },
 })
 
-export const { setActiveTab, setBusinessMembershipPlans, setSelectedBusinessId, setBusinessFeatures, resetBusinessDashboard } = businessDashboardSlice.actions
+export const {
+  setActiveTab,
+  setBusinessMembershipPlans,
+  setSelectedBusinessId,
+  setBusinessFeatures,
+  setBusinessHomeVisitCharge,
+  setBusinessBanner,
+  resetBusinessDashboard,
+} = businessDashboardSlice.actions
 export default businessDashboardSlice.reducer

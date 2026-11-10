@@ -4,6 +4,7 @@ import type {
   BusinessSummary,
   CustomerSummary,
   DocumentSummary,
+  InvoiceLineItemSummary,
   InvoiceSummary,
   MembershipNotificationSummary,
   MembershipPlanSummary,
@@ -24,6 +25,7 @@ export function normalizeBusiness(raw: Partial<BusinessSummary> & Record<string,
     gstin: typeof raw.gstin === 'string' ? raw.gstin : undefined,
     pan: typeof raw.pan === 'string' ? raw.pan : undefined,
     imageUrl: typeof raw.imageUrl === 'string' ? raw.imageUrl : typeof raw.coverImageUrl === 'string' ? raw.coverImageUrl : undefined,
+    bannerImageUrl: typeof raw.bannerImageUrl === 'string' ? raw.bannerImageUrl : undefined,
     email: typeof raw.email === 'string' ? raw.email : undefined,
     phone: typeof raw.phone === 'string' ? raw.phone : undefined,
     address: typeof raw.address === 'string' ? raw.address : undefined,
@@ -35,6 +37,9 @@ export function normalizeBusiness(raw: Partial<BusinessSummary> & Record<string,
     status: typeof raw.status === 'string' ? raw.status : 'active',
     appointmentsEnabled: raw.appointmentsEnabled === true,
     membershipsEnabled: raw.membershipsEnabled !== false,
+    payslipsEnabled: raw.payslipsEnabled === true,
+    homeServicesEnabled: raw.homeServicesEnabled === true,
+    homeVisitCharge: Number(raw.homeVisitCharge ?? 0),
   }
 }
 
@@ -75,6 +80,19 @@ export function normalizeProduct(raw: Partial<ProductSummary> & Record<string, u
   }
 }
 
+function normalizeInvoiceLineItem(raw: unknown): InvoiceLineItemSummary | null {
+  if (typeof raw !== 'object' || raw === null) return null
+
+  const item = raw as Record<string, unknown>
+  return {
+    id: Number(item.id ?? 0),
+    productName: typeof item.productName === 'string' ? item.productName : 'Product',
+    quantity: Number(item.quantity ?? 0),
+    unitPrice: Number(item.unitPrice ?? 0),
+    gstRate: Number(item.gstRate ?? 0),
+  }
+}
+
 export function normalizeInvoice(raw: Partial<InvoiceSummary> & Record<string, unknown>): InvoiceSummary {
   return {
     id: Number(raw.id ?? 0),
@@ -83,9 +101,16 @@ export function normalizeInvoice(raw: Partial<InvoiceSummary> & Record<string, u
     customerId: typeof raw.customerId === 'number' ? raw.customerId : undefined,
     issueDate: typeof raw.issueDate === 'string' ? raw.issueDate : undefined,
     dueDate: typeof raw.dueDate === 'string' ? raw.dueDate : undefined,
+    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
     subtotal: typeof raw.subtotal === 'number' ? raw.subtotal : Number(raw.subtotal ?? 0),
     gstAmount: typeof raw.gstAmount === 'number' ? raw.gstAmount : Number(raw.gstAmount ?? 0),
     totalAmount: typeof raw.totalAmount === 'number' ? raw.totalAmount : Number(raw.totalAmount ?? 0),
+    invoiceDiscountAmount: Number(raw.invoiceDiscountAmount ?? 0),
+    invoiceDiscountType: raw.invoiceDiscountType === 'PERCENTAGE' || raw.invoiceDiscountType === 'AMOUNT' ? raw.invoiceDiscountType : undefined,
+    invoiceDiscountValue: Number(raw.invoiceDiscountValue ?? 0),
+    items: Array.isArray(raw.items)
+      ? raw.items.map(normalizeInvoiceLineItem).filter((item): item is InvoiceLineItemSummary => item !== null)
+      : [],
     loyaltyPointsRedeemed: Number(raw.loyaltyPointsRedeemed ?? 0),
     loyaltyDiscountAmount: Number(raw.loyaltyDiscountAmount ?? 0),
     status: typeof raw.status === 'string' ? raw.status : 'DRAFT',
@@ -111,12 +136,16 @@ export function normalizeAppointment(raw: Partial<AppointmentSummary> & Record<s
     id: Number(raw.id ?? 0),
     businessId: typeof raw.businessId === 'number' ? raw.businessId : undefined,
     customerId: typeof raw.customerId === 'number' ? raw.customerId : undefined,
+    staffId: typeof raw.staffId === 'number' ? raw.staffId : undefined,
     staffUserId: typeof raw.staffUserId === 'number' ? raw.staffUserId : undefined,
     appointmentServiceId: typeof raw.appointmentServiceId === 'number' ? raw.appointmentServiceId : undefined,
     serviceName: typeof raw.serviceName === 'string' ? raw.serviceName : 'Appointment service',
     servicePrice: typeof raw.servicePrice === 'number' ? raw.servicePrice : Number(raw.servicePrice ?? 0),
     loyaltyPointsRedeemed: Number(raw.loyaltyPointsRedeemed ?? 0),
     loyaltyDiscountAmount: Number(raw.loyaltyDiscountAmount ?? 0),
+    homeVisit: raw.homeVisit === true,
+    visitingCharge: Number(raw.visitingCharge ?? 0),
+    visitAddress: typeof raw.visitAddress === 'string' ? raw.visitAddress : undefined,
     scheduledAt: typeof raw.scheduledAt === 'string' ? raw.scheduledAt : undefined,
     durationMinutes: typeof raw.durationMinutes === 'number' ? raw.durationMinutes : Number(raw.durationMinutes ?? 0),
     status: typeof raw.status === 'string' ? raw.status : 'BOOKED',

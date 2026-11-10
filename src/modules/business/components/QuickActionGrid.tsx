@@ -12,9 +12,13 @@ export type QuickActionCardProps = {
   badge?: number
 }
 
+// Figma: Create Invoice = lime #CDF27E, every other action = white. 20px radius, 88px tall.
+const LIME = '#CDF27E'
+const INK = '#0F032D'
+
 export function QuickActionGrid({ actions }: { actions: QuickActionCardProps[] }) {
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 0.8 }}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${actions.length}, minmax(0,1fr))`, gap: 0.8 }}>
       {actions.map(({ id, label, icon: Icon, onClick, disabled, badge }) => (
         <ButtonBase
           key={id}
@@ -24,27 +28,27 @@ export function QuickActionGrid({ actions }: { actions: QuickActionCardProps[] }
           disabled={disabled}
           sx={{
             minWidth: 0,
-            minHeight: 76,
+            height: 88,
+            minHeight: 88,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: 'var(--mui-palette-background-paper)',
-            borderRadius: 1,
-            p: 0.7,
-            border: '1px solid var(--mui-palette-divider)',
+            backgroundColor: id === 'invoice' ? LIME : '#FFFFFF',
+            borderRadius: '20px',
+            p: 0.5,
             textAlign: 'center',
-            transition: 'border-color 150ms ease, background-color 150ms ease, transform 150ms ease',
+            transition: 'filter 150ms ease, transform 150ms ease',
             '&:hover': {
-              borderColor: 'var(--mui-palette-primary-main)',
-              backgroundColor: 'color-mix(in srgb, var(--mui-palette-primary-main) 5%, var(--mui-palette-background-paper))',
+              filter: 'brightness(0.96)',
             },
             '&:active': { transform: 'scale(0.97)' },
             '&.Mui-focusVisible': { outline: '2px solid var(--mui-palette-primary-main)', outlineOffset: 2 },
-            '&.Mui-disabled': { opacity: 0.5 },
+            // Keep the Figma colours readable while the backend is still loading a business
+            '&.Mui-disabled': { opacity: 0.7 },
           }}
         >
-          <Box sx={{ mx: 'auto', width: 31, height: 31, borderRadius: '50%', backgroundColor: 'color-mix(in srgb, var(--mui-palette-primary-main) 14%, var(--mui-palette-background-paper))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--mui-palette-primary-main)', mb: 0.55 }}>
+          <Box sx={{ mx: 'auto', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', color: INK, mb: 0.35 }}>
             <Badge
               badgeContent={badge}
               color="error"
@@ -52,10 +56,10 @@ export function QuickActionGrid({ actions }: { actions: QuickActionCardProps[] }
               invisible={!badge}
               sx={{ '& .MuiBadge-badge': { fontSize: 9, fontWeight: 800, minWidth: 16, height: 16, px: 0.4 } }}
             >
-              <Icon size={16} />
+              <Icon size={20} />
             </Badge>
           </Box>
-          <Typography sx={{ fontWeight: 700, color: 'var(--mui-palette-text-primary)', fontSize: 10, lineHeight: 1.2 }}>{label}</Typography>
+          <Typography sx={{ fontWeight: 400, color: INK, fontSize: 12, lineHeight: 1.1, maxWidth: 64 }}>{label}</Typography>
         </ButtonBase>
       ))}
     </Box>

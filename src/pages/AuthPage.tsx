@@ -2,12 +2,14 @@ import { Alert, Box, Button, Container, Paper, Stack, TextField, Typography } fr
 import { ArrowRight, Building2, UserRound } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { markWalkthroughPending } from '../components/appWalkthroughState'
 import { LocationPicker, type LocationValue } from '../components/LocationPicker'
 import { ThemeModeToggle } from '../components/ThemeModeToggle'
 import { loginUser, signUpUser, type Role } from '../services/auth'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import type { RootState } from '../store/store'
 import { clearAuthError, resetAuthForms, setAuthError, setAuthUser, setLoginForm, setSignupForm } from '../store/authSlice'
+import { getDashboardPath } from '../routes/dashboardPaths'
 
 export function AuthPage() {
   const navigate = useNavigate()
@@ -48,7 +50,7 @@ export function AuthPage() {
       dispatch(clearAuthError())
       dispatch(setAuthUser(result.user))
       dispatch(resetAuthForms())
-      navigate('/dashboard')
+      navigate(getDashboardPath(result.user.role))
     } finally {
       submittingRef.current = false
       setIsSubmitting(false)
@@ -73,9 +75,10 @@ export function AuthPage() {
       }
 
       dispatch(clearAuthError())
+      markWalkthroughPending(result.user.id)
       dispatch(setAuthUser(result.user))
       dispatch(resetAuthForms())
-      navigate('/dashboard')
+      navigate(getDashboardPath(result.user.role))
     } finally {
       submittingRef.current = false
       setIsSubmitting(false)
@@ -147,13 +150,16 @@ export function AuthPage() {
 
               {authError ? <Alert severity="error" sx={{ borderRadius: 2 }}>{authError}</Alert> : null}
 
-              <Button variant="contained" size="large" endIcon={<ArrowRight size={18} />} onClick={handleLogin} disabled={isSubmitting} sx={{ borderRadius: 1.25, textTransform: 'none', fontWeight: 700, py: 1.2 }}>
-                Continue
+              <Button variant="contained" size="large" endIcon={<ArrowRight size={18} />} loading={isSubmitting} loadingPosition="end" onClick={handleLogin} sx={{ borderRadius: 1.25, textTransform: 'none', fontWeight: 700, py: 1.2 }}>
+                {isSubmitting ? 'Signing in…' : 'Continue'}
               </Button>
             </Stack>
 
             <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'center', display: 'block' }}>
               Don’t have an account? <Box component="span" sx={(theme) => ({ color: theme.palette.primary.main, fontWeight: 700, cursor: 'pointer' })} onClick={startSignupFlow}>Sign Up</Box>
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'center', display: 'block' }}>
+              POS provider? <Box component="span" sx={(theme) => ({ color: theme.palette.primary.main, fontWeight: 700, cursor: 'pointer' })} onClick={() => navigate('/partner/onboarding')}>Apply to integrate with BHive</Box>
             </Typography>
           </Stack>
         </Box>
@@ -243,7 +249,7 @@ export function AuthPage() {
                   sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.25, backgroundColor: 'background.paper' } }}
                 />
                 {authError ? <Alert severity="error" sx={{ borderRadius: 2 }}>{authError}</Alert> : null}
-                <Button variant="outlined" onClick={handleSignup} disabled={isSubmitting} sx={(theme) => ({ borderRadius: 1.25, borderColor: theme.palette.divider, color: theme.palette.text.primary, textTransform: 'none', fontWeight: 700, py: 1.15 })}>
+                <Button variant="outlined" onClick={handleSignup} loading={isSubmitting} loadingPosition="start" sx={(theme) => ({ borderRadius: 1.25, borderColor: theme.palette.divider, color: theme.palette.text.primary, textTransform: 'none', fontWeight: 700, py: 1.15 })}>
                   {isSubmitting ? 'Creating account…' : 'Create account'}
                 </Button>
               </Stack>

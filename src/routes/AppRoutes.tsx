@@ -1,14 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Box } from '@mui/material'
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
-import { DetailView } from '../components/DetailView'
-import { BusinessDetailPage } from '../components/BusinessDetailPage'
-import { CustomerBusinessDetailPage } from '../components/CustomerBusinessDetailPage'
+import { PageLoader, TopProgressBar } from '../components/PageLoader'
 import { AuthPage } from '../pages/AuthPage'
-import { AdminDashboard } from '../modules/admin/AdminDashboard'
-import { BusinessDashboard } from '../modules/business/BusinessDashboard'
-import { CustomerDashboard } from '../modules/customer/CustomerDashboard'
+import { AppWalkthrough } from '../components/AppWalkthrough'
 import { fetchBusinessById, fetchDashboardData, type BusinessSummary, type MembershipSummary, type PaymentSummary } from '../services/api'
+import { fetchLoyaltyBalance } from '../services/api/loyaltyApi'
 import { getCurrentUser, getCurrentUserProfile, type Role } from '../services/auth'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import type { RootState } from '../store/store'
@@ -17,10 +14,30 @@ import { fetchBusinessDashboard, fetchBusinessSummary } from '../store/businessD
 import { fetchCustomerDashboard } from '../store/customerDashboardSlice'
 import { appStyles } from '../theme/styles'
 import { setAuthUser } from '../store/authSlice'
+import { getDashboardPath, isDashboardPathname } from './dashboardPaths'
+import { isDashboardFresh } from '../store/dashboardFreshness'
+import { parseDateOnly } from '../utils/date'
+
+const DetailView = lazy(() => import('../components/DetailView').then((m) => ({ default: m.DetailView })))
+const BusinessDetailPage = lazy(() => import('../components/BusinessDetailPage').then((m) => ({ default: m.BusinessDetailPage })))
+const CustomerBusinessDetailPage = lazy(() => import('../components/CustomerBusinessDetailPage').then((m) => ({ default: m.CustomerBusinessDetailPage })))
+const AdminDashboard = lazy(() => import('../modules/admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard })))
+const BusinessDashboard = lazy(() => import('../modules/business/BusinessDashboard').then((m) => ({ default: m.BusinessDashboard })))
+const CustomerDashboard = lazy(() => import('../modules/customer/CustomerDashboard').then((m) => ({ default: m.CustomerDashboard })))
+const InsuranceHomePage = lazy(() => import('../pages/InsurancePages').then((m) => ({ default: m.InsuranceHomePage })))
+const InsuranceCategoryPage = lazy(() => import('../pages/InsurancePages').then((m) => ({ default: m.InsuranceCategoryPage })))
+const PartnerOnboardingPage = lazy(() => import('../pages/PartnerOnboardingPage').then((m) => ({ default: m.PartnerOnboardingPage })))
+const DevReceiptSenderPage = import.meta.env.DEV
+  ? lazy(() => import('../pages/DevReceiptSenderPage').then((m) => ({ default: m.DevReceiptSenderPage })))
+  : null
 
 function AuthenticatedRoute({ children }: { children: ReactNode }) {
   const authUser = useAppSelector((state: RootState) => state.auth.authUser)
   return authUser?.accessToken ? <>{children}</> : <Navigate to="/" replace />
+}
+
+function RoleRoute({ allow, role, children }: { allow: Role; role: Role; children: ReactNode }) {
+  return role === allow ? <>{children}</> : <Navigate to={getDashboardPath(role)} replace />
 }
 
 function BusinessDetailRoute({
@@ -42,6 +59,7 @@ function BusinessDetailRoute({
   const [nextAppointmentLabel, setNextAppointmentLabel] = useState<string | undefined>()
   const [recentInvoices, setRecentInvoices] = useState<Array<{ id: number; title: string; amount: string; status: string; date: string }>>([])
   const [recentAppointments, setRecentAppointments] = useState<Array<{ id: number; title: string; subtitle: string; status: string }>>([])
+  const [loyaltyPoints, setLoyaltyPoints] = useState<number | null>(null)
   const businessId = Number(id)
 
   useEffect(() => {
@@ -85,6 +103,11 @@ function BusinessDetailRoute({
         setPaymentCount(payments.length)
         setPayments(payments)
         setMemberships(customerMemberships)
+        if (role === 'CUSTOMER' && currentCustomer?.id) {
+          fetchLoyaltyBalance(businessId, currentCustomer.id)
+            .then((result) => setLoyaltyPoints(Number(result.balance ?? 0)))
+            .catch(() => setLoyaltyPoints(null))
+        }
         setAppointmentCount(appointments.length)
         setTotalRevenue(resolvedRevenue)
         setNextAppointmentLabel(
@@ -99,7 +122,7 @@ function BusinessDetailRoute({
             amount: `₹${Number(invoice.totalAmount ?? 0).toLocaleString('en-IN')}`,
             status: invoice.status ?? 'PAID',
             date: invoice.issueDate
-              ? new Date(invoice.issueDate).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+              ? parseDateOnly(invoice.issueDate)?.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) ?? 'Recently'
               : 'Recently',
           })),
         )
@@ -128,15 +151,15 @@ function BusinessDetailRoute({
   }, [businessId, fallbackBusiness, role])
 
   if (!Number.isFinite(businessId)) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to={getDashboardPath(role)} replace />
   }
 
   if (loadedBusinessId !== businessId) {
-    return <Box sx={{ minHeight: '50vh' }} />
+    return <PageLoader label="Loading business…" />
   }
 
   if (!business) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to={getDashboardPath(role)} replace />
   }
 
   return (
@@ -151,6 +174,7 @@ function BusinessDetailRoute({
         nextAppointmentLabel={nextAppointmentLabel}
         recentInvoices={recentInvoices}
         recentAppointments={recentAppointments}
+        loyaltyPoints={loyaltyPoints}
       />
     ) : (
       <BusinessDetailPage
@@ -169,7 +193,21 @@ function BusinessDetailRoute({
 
 function AppointmentRouteRedirect() {
   const { id } = useParams()
-  return <Navigate to={id ? `/dashboard?tab=appointments&appointmentId=${id}` : '/dashboard?tab=appointments'} replace />
+  const role = getCurrentUser()?.role ?? 'BUSINESS'
+  const target = getDashboardPath(role, 'appointments')
+  return <Navigate to={id ? `${target}?appointmentId=${id}` : target} replace />
+}
+
+function LegacyDashboardRedirect({ role }: { role: Role }) {
+  const { tab } = useParams()
+  const location = useLocation()
+  const searchParams = new URLSearchParams(location.search)
+  const targetTab = tab ?? searchParams.get('tab') ?? undefined
+  searchParams.delete('tab')
+  const query = searchParams.toString()
+  const target = getDashboardPath(role, targetTab)
+
+  return <Navigate to={query ? `${target}?${query}` : target} replace />
 }
 
 export default function AppRoutes() {
@@ -212,54 +250,116 @@ export default function AppRoutes() {
   const data = dashboardRole === 'ADMIN' ? adminState.data : dashboardRole === 'CUSTOMER' ? customerState.data : businessState.data
   const selectedBusinessId = dashboardRole === 'ADMIN' ? adminState.selectedBusinessId : dashboardRole === 'CUSTOMER' ? customerState.selectedBusinessId : businessState.selectedBusinessId
 
+  const onDashboardPath = isDashboardPathname(location.pathname)
+  const onBusinessOverview = location.pathname === getDashboardPath('BUSINESS', 'overview')
+  const businessSummaryLoaded = businessState.summary !== null
+
+  // Re-fetch only when the cached dashboard is missing, stale, or invalidated by a write.
   useEffect(() => {
-    if (!authUser?.id || !location.pathname.startsWith('/dashboard')) {
+    if (!authUser?.id || !onDashboardPath) {
       return
     }
 
     if (dashboardRole === 'ADMIN') {
-      dispatch(fetchAdminDashboard())
+      if (!isDashboardFresh(adminState, 'admin')) dispatch(fetchAdminDashboard())
       return
     }
 
     if (dashboardRole === 'CUSTOMER') {
-      dispatch(fetchCustomerDashboard())
+      if (!isDashboardFresh(customerState, 'customer')) dispatch(fetchCustomerDashboard())
       return
     }
 
-    dispatch(fetchBusinessDashboard(selectedBusinessId ?? undefined))
-    if (location.pathname === '/dashboard/overview' && selectedBusinessId !== null) {
+    const dashboardFresh = isDashboardFresh(businessState, `business:${selectedBusinessId ?? ''}`)
+    if (!dashboardFresh) dispatch(fetchBusinessDashboard(selectedBusinessId ?? undefined))
+    if (dashboardRole === 'BUSINESS'
+      && onBusinessOverview
+      && selectedBusinessId !== null
+      && (!dashboardFresh || !businessSummaryLoaded)) {
       dispatch(fetchBusinessSummary(selectedBusinessId))
     }
-  }, [authUser?.id, dashboardRole, dispatch, location.key, location.pathname, selectedBusinessId])
+    // The freshness fields are read on purpose but must not retrigger the effect themselves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUser?.id, dashboardRole, dispatch, location.pathname, onDashboardPath, onBusinessOverview, selectedBusinessId, businessSummaryLoaded])
 
   const businessDetail = useMemo(
     () => data.businesses.find((business) => business.id === selectedBusinessId) ?? data.businesses[0] ?? null,
     [data.businesses, selectedBusinessId],
   )
 
+  const dashboardLoading = onDashboardPath && (
+    dashboardRole === 'ADMIN' ? adminState.loading : dashboardRole === 'CUSTOMER' ? customerState.loading : businessState.loading
+  )
+  const isFirstDashboardLoad = dashboardLoading && data.businesses.length === 0
+
   return (
     <Box sx={appStyles.shell}>
+      <TopProgressBar active={dashboardLoading} />
+      {isFirstDashboardLoad && <PageLoader fullScreen label="Loading your workspace…" />}
+      {authUser?.id && onDashboardPath && <AppWalkthrough key={`${authUser.id}:${dashboardRole}`} userId={authUser.id} role={dashboardRole} />}
+      <Suspense fallback={<PageLoader fullScreen />}>
       <Routes>
         <Route
           path="/"
           element={<AuthPage />}
         />
 
+        <Route path="/partner/onboarding" element={<PartnerOnboardingPage />} />
+
         <Route
           path="/dashboard/:tab?"
           element={
             <AuthenticatedRoute>
-              {dashboardRole === 'ADMIN' ? (
-                <AdminDashboard />
-              ) : dashboardRole === 'CUSTOMER' ? (
-                <CustomerDashboard />
-              ) : (
-                <BusinessDashboard />
-              )}
+              <LegacyDashboardRedirect role={dashboardRole} />
             </AuthenticatedRoute>
           }
         />
+
+        <Route
+          path="/customer/dashboard/:tab?"
+          element={
+            <AuthenticatedRoute>
+              <RoleRoute allow="CUSTOMER" role={dashboardRole}>
+                <CustomerDashboard />
+              </RoleRoute>
+            </AuthenticatedRoute>
+          }
+        />
+
+        <Route
+          path="/business/dashboard/:tab?"
+          element={
+            <AuthenticatedRoute>
+              <RoleRoute allow="BUSINESS" role={dashboardRole}>
+                <BusinessDashboard />
+              </RoleRoute>
+            </AuthenticatedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/dashboard/:tab?"
+          element={
+            <AuthenticatedRoute>
+              <RoleRoute allow="ADMIN" role={dashboardRole}>
+                <AdminDashboard />
+              </RoleRoute>
+            </AuthenticatedRoute>
+          }
+        />
+
+        {DevReceiptSenderPage && (
+          <Route
+            path="/dev/receipt-sender"
+            element={
+              <AuthenticatedRoute>
+                <RoleRoute allow="ADMIN" role={dashboardRole}>
+                  <DevReceiptSenderPage />
+                </RoleRoute>
+              </AuthenticatedRoute>
+            }
+          />
+        )}
 
         <Route
           path="/business/:id"
@@ -273,7 +373,7 @@ export default function AppRoutes() {
           }
         />
 
-        <Route
+                <Route
           path="/customer/:id"
           element={
             <AuthenticatedRoute>
@@ -286,7 +386,7 @@ export default function AppRoutes() {
           path="/appointments"
           element={
             <AuthenticatedRoute>
-              <Navigate to="/dashboard?tab=appointments" replace />
+              <Navigate to={getDashboardPath(dashboardRole, 'appointments')} replace />
             </AuthenticatedRoute>
           }
         />
@@ -300,8 +400,31 @@ export default function AppRoutes() {
           }
         />
 
+        <Route
+          path="/insurance"
+          element={
+            <AuthenticatedRoute>
+              <RoleRoute allow="CUSTOMER" role={dashboardRole}>
+                <InsuranceHomePage />
+              </RoleRoute>
+            </AuthenticatedRoute>
+          }
+        />
+
+        <Route
+          path="/insurance/:category"
+          element={
+            <AuthenticatedRoute>
+              <RoleRoute allow="CUSTOMER" role={dashboardRole}>
+                <InsuranceCategoryPage />
+              </RoleRoute>
+            </AuthenticatedRoute>
+          }
+        />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </Box>
   )
 }

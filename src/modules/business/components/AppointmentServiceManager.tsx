@@ -6,20 +6,50 @@ import { fetchAppointmentServices, saveAppointmentServices, setBusinessAppointme
 type AppointmentServiceManagerProps = {
   businessId: number
   appointmentsEnabled: boolean
+  homeServicesEnabled?: boolean
+  homeVisitCharge?: number
+  onToggleHomeServices?: (enabled: boolean) => Promise<{ ok: boolean; message?: string }>
+  onSaveHomeVisitCharge?: (charge: number) => Promise<{ ok: boolean; message?: string }>
   onConfigurationChanged: () => void
+}
+
+function HomeVisitChargeField({ charge, onSave }: { charge: number; onSave: (charge: number) => Promise<{ ok: boolean; message?: string }> }) {
+  const [value, setValue] = useState(String(charge))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const parsed = Number(value)
+  const invalid = value.trim() === '' || !Number.isFinite(parsed) || parsed < 0
+  const handleSave = async () => {
+    setSaving(true)
+    setError('')
+    const result = await onSave(parsed)
+    setSaving(false)
+    if (!result.ok) setError(result.message ?? 'Could not save the visiting charge.')
+  }
+  return (
+    <Box sx={{ p: 1, borderRadius: 1.5, bgcolor: 'action.hover' }}>
+      <Typography variant="body2" sx={{ fontWeight: 750 }}>Home visit charge</Typography>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', mt: 1 }}>
+        <TextField size="small" type="number" label="Visiting charge (₹)" value={value} onChange={(event) => setValue(event.target.value)} error={invalid} helperText="Added to the booking when a customer chooses a home visit." slotProps={{ htmlInput: { min: 0, step: '0.01' } }} sx={{ flex: 1 }} />
+        <Button variant="outlined" size="small" disabled={invalid || saving || parsed === charge} onClick={() => void handleSave()} sx={{ mt: 0.3, textTransform: 'none' }}>{saving ? 'Saving…' : 'Save'}</Button>
+      </Stack>
+      {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
+    </Box>
+  )
 }
 
 function newService(): AppointmentServiceRequest {
   return { name: '', description: '', price: 0, durationMinutes: 30, enabled: true }
 }
 
-export function AppointmentServiceManager({ businessId, appointmentsEnabled, onConfigurationChanged }: AppointmentServiceManagerProps) {
+export function AppointmentServiceManager({ businessId, appointmentsEnabled, homeServicesEnabled = false, homeVisitCharge = 0, onSaveHomeVisitCharge, onToggleHomeServices, onConfigurationChanged }: AppointmentServiceManagerProps) {
   const [enabled, setEnabled] = useState(appointmentsEnabled)
   const [services, setServices] = useState<AppointmentServiceRequest[]>([])
   const [message, setMessage] = useState('')
   const [messageSeverity, setMessageSeverity] = useState<'success' | 'error'>('success')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isTogglingAppointments, setIsTogglingAppointments] = useState(false)
 
   useEffect(() => {
     let isActive = true
@@ -34,13 +64,36 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, onC
         enabled: serviceEnabled,
       })))
       setIsLoading(false)
-    }).catch(() => {
-      if (isActive) setIsLoading(false)
+    }).catch((error: unknown) => {
+      if (!isActive) return
+      setMessage(error instanceof Error ? error.message : 'Could not load appointment services.')
+      setMessageSeverity('error')
+      setIsLoading(false)
     })
     return () => {
       isActive = false
     }
   }, [businessId])
+
+  const [isTogglingHome, setIsTogglingHome] = useState(false)
+
+  const handleHomeServicesToggle = async (next: boolean) => {
+    if (!onToggleHomeServices) return
+    setIsTogglingHome(true)
+    setMessage('')
+    try {
+      const result = await onToggleHomeServices(next)
+      if (!result.ok) {
+        setMessage(result.message ?? 'Could not update home services.')
+        setMessageSeverity('error')
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not update home services.')
+      setMessageSeverity('error')
+    } finally {
+      setIsTogglingHome(false)
+    }
+  }
 
   const handleToggle = async (nextEnabled: boolean) => {
     if (nextEnabled && !services.some((service) => service.enabled)) {
@@ -50,16 +103,24 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, onC
     }
 
     setMessage('')
-    const result = await setBusinessAppointmentsEnabled(businessId, nextEnabled)
-    if (!result.ok) {
-      setMessage(result.message ?? 'Could not update appointment availability.')
+    setIsTogglingAppointments(true)
+    try {
+      const result = await setBusinessAppointmentsEnabled(businessId, nextEnabled)
+      if (!result.ok) {
+        setMessage(result.message ?? 'Could not update appointment availability.')
+        setMessageSeverity('error')
+        return
+      }
+      setEnabled(nextEnabled)
+      setMessage(nextEnabled ? 'Appointments are available to customers.' : 'Appointments are turned off.')
+      setMessageSeverity('success')
+      onConfigurationChanged()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not update appointment availability.')
       setMessageSeverity('error')
-      return
+    } finally {
+      setIsTogglingAppointments(false)
     }
-    setEnabled(nextEnabled)
-    setMessage(nextEnabled ? 'Appointments are available to customers.' : 'Appointments are turned off.')
-    setMessageSeverity('success')
-    onConfigurationChanged()
   }
 
   const updateService = (index: number, changes: Partial<AppointmentServiceRequest>) => {
@@ -83,25 +144,31 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, onC
 
     setIsSaving(true)
     setMessage('')
-    const result = await saveAppointmentServices(businessId, services)
-    setIsSaving(false)
-    if (!result.ok || !result.services) {
-      setMessage(result.message ?? 'Could not save services.')
-      setMessageSeverity('error')
-      return
-    }
+    try {
+      const result = await saveAppointmentServices(businessId, services)
+      if (!result.ok || !result.services) {
+        setMessage(result.message ?? 'Could not save services.')
+        setMessageSeverity('error')
+        return
+      }
 
-    setServices(result.services.map((service: AppointmentServiceSummary) => ({
-      id: service.id,
-      name: service.name,
-      description: service.description ?? '',
-      price: service.price,
-      durationMinutes: service.durationMinutes,
-      enabled: service.enabled,
-    })))
-    setMessage('Service list saved.')
-    setMessageSeverity('success')
-    onConfigurationChanged()
+      setServices(result.services.map((service: AppointmentServiceSummary) => ({
+        id: service.id,
+        name: service.name,
+        description: service.description ?? '',
+        price: service.price,
+        durationMinutes: service.durationMinutes,
+        enabled: service.enabled,
+      })))
+      setMessage('Service list saved.')
+      setMessageSeverity('success')
+      onConfigurationChanged()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not save services.')
+      setMessageSeverity('error')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -118,6 +185,7 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, onC
             </Stack>
             <Chip size="small" label={`${services.filter((service) => service.enabled).length} active`} color={enabled ? 'success' : 'default'} variant="outlined" sx={{ alignSelf: { xs: 'flex-start', sm: 'center' }, fontWeight: 700 }} />
           </Stack>
+          {(isSaving || isTogglingAppointments || isTogglingHome) && <LinearProgress aria-label="Updating appointment settings" />}
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, p: 1, borderRadius: 1.5, bgcolor: 'action.hover' }}>
             <Box sx={{ minWidth: 0 }}>
               <Typography variant="body2" sx={{ fontWeight: 750 }}>Online booking</Typography>
@@ -125,11 +193,29 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, onC
             </Box>
             <FormControlLabel
               sx={{ mr: 0, ml: 0.5, flexShrink: 0 }}
-              control={<Switch checked={enabled} onChange={(event) => handleToggle(event.target.checked)} slotProps={{ input: { 'aria-label': 'Enable online appointments' } }} />}
+              control={<Switch checked={enabled} disabled={isLoading || isTogglingAppointments || isSaving} onChange={(event) => handleToggle(event.target.checked)} slotProps={{ input: { 'aria-label': 'Enable online appointments' } }} />}
               label=""
             />
           </Box>
           {message && <Alert severity={messageSeverity}>{message}</Alert>}
+
+          {onToggleHomeServices && (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, p: 1, borderRadius: 1.5, bgcolor: 'action.hover' }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="body2" sx={{ fontWeight: 750 }}>Home services</Typography>
+                <Typography variant="caption" color="text.secondary">{enabled ? 'Let customers know you visit them at home.' : 'Turn on online booking to offer home services.'}</Typography>
+              </Box>
+              <Switch
+                checked={enabled && homeServicesEnabled}
+                disabled={!enabled || isTogglingHome}
+                onChange={(event) => void handleHomeServicesToggle(event.target.checked)}
+                slotProps={{ input: { 'aria-label': 'Enable home services' } }}
+              />
+            </Box>
+          )}
+          {homeServicesEnabled && onSaveHomeVisitCharge && (
+            <HomeVisitChargeField key={homeVisitCharge} charge={homeVisitCharge} onSave={onSaveHomeVisitCharge} />
+          )}
 
           <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
             <Box>
@@ -139,6 +225,7 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, onC
             <Button
               size="small"
               startIcon={<Plus size={15} />}
+              disabled={isLoading || isSaving}
               onClick={() => setServices((current) => [...current, newService()])}
               sx={{ flexShrink: 0, textTransform: 'none' }}
             >
@@ -206,11 +293,12 @@ export function AppointmentServiceManager({ businessId, appointmentsEnabled, onC
           <Button
             variant="contained"
             startIcon={<Save size={16} />}
+            loading={isSaving}
             onClick={handleSave}
             disabled={isLoading || isSaving}
             sx={{ alignSelf: 'flex-start', textTransform: 'none', fontWeight: 700 }}
           >
-            {isSaving ? 'Saving…' : 'Save services'}
+            Save services
           </Button>
         </Stack>
       </CardContent>

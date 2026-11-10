@@ -242,19 +242,20 @@ export function LocationPicker({ value, onChange, required = true, footer }: Loc
       onChange={(_, nextExpanded) => setExpanded(nextExpanded)}
       disableGutters
       elevation={0}
-      sx={{ border: '1px solid #e1ebe6', borderRadius: '12px !important', '&:before': { display: 'none' } }}
+      // Theme colours so the card is readable in both light and dark mode
+      sx={{ border: '1px solid', borderColor: 'divider', borderRadius: '12px !important', bgcolor: 'background.paper', backgroundImage: 'none', '&:before': { display: 'none' } }}
     >
       <AccordionSummary
         expandIcon={<ChevronDown size={17} />}
-        sx={{ minHeight: 62, '& .MuiAccordionSummary-content': { my: 1.1, minWidth: 0 } }}
+        sx={{ minHeight: 62, color: 'text.primary', '& .MuiAccordionSummary-content': { my: 1.1, minWidth: 0 } }}
       >
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
-          <MapPin size={17} color="#087b65" />
+          <MapPin size={17} color="var(--mui-palette-primary-main)" />
           <Stack spacing={0.15} sx={{ minWidth: 0 }}>
-            <Typography variant="subtitle2" sx={{ color: '#24433b', fontWeight: 800 }}>
+            <Typography variant="subtitle2" sx={{ color: 'text.primary', fontWeight: 800 }}>
               Location{required ? ' *' : ''}
             </Typography>
-            <Typography variant="body2" noWrap sx={{ color: value.locationAddress ? '#49635b' : '#7a8984' }}>
+            <Typography variant="body2" noWrap sx={{ color: 'text.secondary' }}>
               {value.locationAddress || 'Choose a country, region, and city or town'}
             </Typography>
           </Stack>
@@ -265,15 +266,15 @@ export function LocationPicker({ value, onChange, required = true, footer }: Loc
           <Button variant="outlined" startIcon={<Navigation size={16} />} onClick={useCurrentLocation} disabled={resolving} sx={{ alignSelf: 'flex-start', textTransform: 'none', fontWeight: 700 }}>
             Use current location
           </Button>
-          <Typography variant="caption" sx={{ color: '#687d78' }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             GPS uses your device location; selecting a place uses its mapped coordinates.
           </Typography>
           {gpsMessage && <Alert severity={gpsError ? 'warning' : 'info'} sx={{ py: 0 }}>{gpsMessage}</Alert>}
-          <Typography variant="caption" sx={{ color: '#687d78' }}>
-            Location suggestions use <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>.
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            Location suggestions use <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>OpenStreetMap</a>.
           </Typography>
           <Stack spacing={1}>
-            <Typography variant="caption" sx={{ color: '#607570', fontWeight: 700 }}>Select a country, region, and city or town</Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>Select a country, region, and city or town</Typography>
             <Autocomplete
               options={countries}
               value={selectedCountry}

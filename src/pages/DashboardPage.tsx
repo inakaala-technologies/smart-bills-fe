@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { alpha } from '@mui/material/styles'
 import { Box, Button, Card, CardContent, Chip, Container, FormControl, InputLabel, MenuItem, Paper, Select, Stack, TextField, Typography } from '@mui/material'
 import { ArrowRight, Bell, Building2, CalendarCheck2, FileText, LayoutGrid, Plus, Search, UserRound, Users } from 'lucide-react'
 import { EmptyState } from '../components/EmptyState'
 import { addBusinessMembership, createBusiness, createInvoice, type DashboardData } from '../services/api'
 import { getCurrentUser, type Role } from '../services/auth'
+import { getBusinessDateInputValue } from '../utils/date'
 
 export type DashboardTab = 'overview' | 'businesses' | 'customers' | 'appointments'
 
@@ -58,6 +59,26 @@ export function DashboardPage({
   const selectedBusiness = data.businesses.find((business) => business.id === selectedBusinessId) ?? data.businesses[0] ?? null
 
   const activeBusinessLabel = selectedBusiness ? (selectedBusiness.businessName ?? selectedBusiness.name ?? 'Business workspace') : 'No business selected'
+  const [currentTime, setCurrentTime] = useState(new Date())
+
+useEffect(() => {
+  const interval = setInterval(() => {
+    setCurrentTime(new Date())
+  }, 60 * 1000)
+
+  return () => clearInterval(interval)
+}, [])
+
+const hour = currentTime.getHours()
+
+const greeting =
+  hour >= 5 && hour < 13
+    ? 'Good morning,'
+    : hour >= 13 && hour < 16
+      ? 'Good afternoon,'
+      : hour >= 16 && hour < 20
+        ? 'Good evening,'
+        : 'Good night,'
 
   const [invoiceForm, setInvoiceForm] = useState<{ customerId: number | string; productName: string; description: string; quantity: string; unitPrice: string; gstRate: string; dueDate: string; notes: string }>(() => ({
     customerId: data.customers[0]?.id ?? '',
@@ -145,7 +166,7 @@ export function DashboardPage({
     const unitPrice = Number(invoiceForm.unitPrice) || 0
     const gstRate = Number(invoiceForm.gstRate) || 0
 
-    if (!businessId || !customerId || quantity <= 0 || unitPrice <= 0) {
+    if (!businessId || !customerId || !invoiceForm.productName.trim() || quantity <= 0 || unitPrice <= 0) {
       setInvoiceMessage('Select a customer and enter valid product details before generating an invoice.')
       return
     }
@@ -153,7 +174,7 @@ export function DashboardPage({
     const subtotal = quantity * unitPrice
     const gstAmount = subtotal * (gstRate / 100)
     const totalAmount = subtotal + gstAmount
-    const issueDate = new Date().toISOString().slice(0, 10)
+    const issueDate = getBusinessDateInputValue()
 
     const result = await createInvoice({
       businessId,
@@ -164,6 +185,12 @@ export function DashboardPage({
       subtotal,
       gstAmount,
       totalAmount,
+      items: [{
+        productName: invoiceForm.productName.trim(),
+        quantity,
+        unitPrice,
+        gstRate,
+      }],
       status: invoiceForm.dueDate ? 'SENT' : 'PAID',
     })
 
@@ -290,10 +317,10 @@ export function DashboardPage({
       <Paper elevation={0} sx={{ width: '100%', maxWidth: 390, mx: 'auto', borderRadius: 5, background: 'rgba(255,255,255,0.95)', border: '1px solid rgba(15,23,42,0.06)', overflow: 'hidden' }}>
         {dashboardRole !== 'CUSTOMER' && data.businesses.length === 0 && (
           <Box sx={{ px: 2.1, pt: 2.1 }}>
-            <Card variant="outlined" sx={{ borderRadius: 4, border: '1px solid rgba(15,23,42,0.06)', background: 'linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%)' }}>
+            <Card variant="outlined" sx={{ borderRadius: 4, border: '1px solid var(--mui-palette-divider)', background: 'linear-gradient(180deg, var(--mui-palette-primary-light) 0%, var(--mui-palette-background-paper) 100%)' }}>
               <CardContent sx={{ p: 2.1 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, mb: 1.5 }}>
-                  <Box sx={{ width: 42, height: 42, borderRadius: 2.5, background: '#dff7e8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Box sx={{ width: 42, height: 42, borderRadius: 2.5, background: 'var(--mui-palette-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Building2 size={20} color="#14532d" />
                   </Box>
                   <Box>
@@ -328,7 +355,7 @@ export function DashboardPage({
           <Stack spacing={2}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Box>
-                <Typography variant="caption" sx={(theme) => ({ color: theme.palette.text.secondary, letterSpacing: 1.2, fontWeight: 700 })}>Good morning,</Typography>
+                <Typography variant="caption" sx={(theme) => ({ color: theme.palette.text.secondary, letterSpacing: 1.2, fontWeight: 700 })}> {greeting}</Typography>
                 <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.04em' }}>{authUser?.name ?? 'User'}</Typography>
                 <Typography variant="caption" sx={(theme) => ({ color: theme.palette.primary.main, fontWeight: 700 })}>{roleLabels[dashboardRole]} workspace</Typography>
               </Box>

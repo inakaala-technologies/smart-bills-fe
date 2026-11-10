@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import { fetchDashboardData, type DashboardData } from '../services/api'
 import type { DashboardTab } from '../modules/types'
+import { emptyFreshness, markLoaded, type DashboardFreshness } from './dashboardFreshness'
 
 const emptyDashboardData: DashboardData = {
   businesses: [],
@@ -14,7 +15,7 @@ const emptyDashboardData: DashboardData = {
   documents: [],
 }
 
-type AdminDashboardState = {
+type AdminDashboardState = DashboardFreshness & {
   data: DashboardData
   loading: boolean
   selectedBusinessId: number | null
@@ -24,6 +25,7 @@ type AdminDashboardState = {
 }
 
 const initialState: AdminDashboardState = {
+  ...emptyFreshness,
   data: emptyDashboardData,
   loading: false,
   selectedBusinessId: null,
@@ -60,6 +62,7 @@ const adminDashboardSlice = createSlice({
       .addCase(fetchAdminDashboard.fulfilled, (state, action) => {
         state.loading = false
         state.data = action.payload
+        Object.assign(state, markLoaded('admin'))
         if (!state.data.businesses.length) {
           state.selectedBusinessId = null
         } else if (state.selectedBusinessId == null || !state.data.businesses.some((business) => business.id === state.selectedBusinessId)) {
@@ -68,6 +71,7 @@ const adminDashboardSlice = createSlice({
       })
       .addCase(fetchAdminDashboard.rejected, (state, action) => {
         state.loading = false
+        Object.assign(state, emptyFreshness)
         state.error = action.error.message ?? 'Unable to load the admin dashboard.'
         state.data = emptyDashboardData
       })

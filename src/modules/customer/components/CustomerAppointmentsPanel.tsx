@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
-import { Alert, Box, Button, Chip, MenuItem, Skeleton, Stack, TextField, Typography } from '@mui/material'
-import { CalendarCheck2, CalendarDays, CalendarPlus, Clock3, X } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Alert, Box, Button, Chip, FormControlLabel, MenuItem, Skeleton, Stack, Switch, TextField, Typography } from '@mui/material'
+import { alpha, keyframes } from '@mui/material/styles'
+import { CalendarCheck2, CalendarDays, CalendarPlus, Clock3, Gift, MapPin, Sparkles, X } from 'lucide-react'
 import { EmptyState } from '../../../components/EmptyState'
 import {
   createAppointment,
@@ -20,8 +21,8 @@ import { fetchLoyaltyBalance, fetchLoyaltySettings, type LoyaltyProgramSettings 
 type CustomerAppointmentsPanelProps = {
   appointments: DashboardData['appointments']
   businesses: DashboardData['businesses']
-  customerId?: number | null
-  selectedAppointmentId?: number | null
+  customerId: number
+  selectedAppointmentId?: number
   onSelectAppointment?: (appointment: AppointmentSummary) => void
 }
 
@@ -29,6 +30,99 @@ function getDefaultAppointmentDateTime() {
   const date = new Date(Date.now() + 24 * 60 * 60 * 1000)
   date.setSeconds(0, 0)
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+}
+
+const formatINR = (value: number) => `₹${value.toLocaleString('en-IN', {
+  minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+  maximumFractionDigits: 2,
+})}`
+
+const popIn = keyframes`
+  0% { opacity: 0; transform: translateY(8px) scale(0.95); }
+  60% { opacity: 1; transform: translateY(0) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+`
+
+const tick = keyframes`
+  0% { transform: scale(0.9); opacity: 0.4; }
+  100% { transform: scale(1); opacity: 1; }
+`
+
+function PriceRow({ icon, label, amount, tone = 'default' }: { icon: ReactNode; label: string; amount: ReactNode; tone?: 'default' | 'success' }) {
+  return (
+    <Stack direction="row" spacing={1.1} sx={{ alignItems: 'center' }}>
+      <Box
+        sx={{
+          width: 28,
+          height: 28,
+          flexShrink: 0,
+          display: 'grid',
+          placeItems: 'center',
+          borderRadius: '50%',
+          color: tone === 'success' ? 'success.main' : 'primary.main',
+          bgcolor: (theme) => alpha(tone === 'success' ? theme.palette.success.main : theme.palette.primary.main, 0.16),
+        }}
+      >
+        {icon}
+      </Box>
+      <Typography variant="body2" sx={{ flex: 1, minWidth: 0, color: tone === 'success' ? 'success.main' : 'text.secondary', fontWeight: 650 }}>{label}</Typography>
+      <Typography variant="body2" sx={{ color: tone === 'success' ? 'success.main' : 'text.primary', fontWeight: 800 }}>{amount}</Typography>
+    </Stack>
+  )
+}
+
+/* Friendly price breakdown shown for home visits: service + visiting charge (− loyalty discount) = total to pay. */
+function PriceBreakdown({ servicePrice, visitingCharge, loyaltyDiscount }: { servicePrice: number; visitingCharge: number; loyaltyDiscount: number }) {
+  const total = Math.max(0, servicePrice + visitingCharge - loyaltyDiscount)
+  return (
+    <Box
+      role="group"
+      aria-label="Price breakdown"
+      sx={{
+        p: 1.5,
+        borderRadius: 2.5,
+        border: '1px solid',
+        borderColor: (theme) => alpha(theme.palette.primary.main, 0.4),
+        background: (theme) => `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.18)} 0%, ${alpha(theme.palette.primary.main, 0.05)} 100%)`,
+        boxShadow: (theme) => `0 8px 22px ${alpha(theme.palette.primary.main, 0.16)}`,
+        transformOrigin: 'top center',
+        animation: `${popIn} 380ms cubic-bezier(0.22, 1, 0.36, 1)`,
+        '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
+      }}
+    >
+      <Stack spacing={1}>
+        <PriceRow icon={<Sparkles size={14} />} label="Service" amount={formatINR(servicePrice)} />
+        <PriceRow
+          icon={<MapPin size={14} />}
+          label="Home visit charge"
+          amount={visitingCharge > 0 ? `+ ${formatINR(visitingCharge)}` : 'Free'}
+        />
+        {loyaltyDiscount > 0 && (
+          <PriceRow icon={<Gift size={14} />} label="Loyalty discount" amount={`− ${formatINR(loyaltyDiscount)}`} tone="success" />
+        )}
+        <Stack
+          direction="row"
+          sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 0.4, pt: 1.1, borderTop: '1px dashed', borderColor: 'divider' }}
+        >
+          <Typography sx={{ color: 'text.primary', fontWeight: 800, fontSize: 14 }}>Total to pay</Typography>
+          <Typography
+            key={total}
+            sx={{
+              color: 'primary.main',
+              fontWeight: 900,
+              fontSize: 24,
+              lineHeight: 1,
+              letterSpacing: '-0.03em',
+              animation: `${tick} 240ms ease-out`,
+              '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
+            }}
+          >
+            {formatINR(total)}
+          </Typography>
+        </Stack>
+      </Stack>
+    </Box>
+  )
 }
 
 export function CustomerAppointmentsPanel({
@@ -42,15 +136,15 @@ export function CustomerAppointmentsPanel({
   const [now] = useState(Date.now)
   const [businessId, setBusinessId] = useState('')
   const [serviceId, setServiceId] = useState('')
-  const [servicesState, setServicesState] = useState<{ businessId: number; services: AppointmentServiceSummary[] }>({ businessId: 0, services: [] })
+  const [servicesState, setServicesState] = useState<{ businessId: number; services: AppointmentServiceSummary[]; error?: string }>({ businessId: 0, services: [] })
   const [appointmentDate, setAppointmentDate] = useState(() => getDefaultAppointmentDateTime().slice(0, 10))
   const [selectedSlot, setSelectedSlot] = useState('')
-  const [staffUserId, setStaffUserId] = useState('')
+  const [staffId, setStaffId] = useState('')
   const [availabilityState, setAvailabilityState] = useState<{
     businessId: number
     serviceId: number
     date: string
-    staffUserId: number | undefined
+    staffId: number | undefined
     result: AppointmentAvailability
     error?: boolean
   } | null>(null)
@@ -61,13 +155,31 @@ export function CustomerAppointmentsPanel({
   const [updatingId, setUpdatingId] = useState<number | null>(null)
   const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState('0')
   const [loyaltyInfo, setLoyaltyInfo] = useState<{ customerId: number; businessId: number; balance: number; settings: LoyaltyProgramSettings } | null>(null)
-  const [loyaltyError, setLoyaltyError] = useState('')
+  const [loyaltyError, setLoyaltyError] = useState<{ customerId: number; businessId: number; message: string } | null>(null)
 
-  const appointmentBusinesses = businesses.filter((business) => business.appointmentsEnabled)
+  const [homeServicesOnly, setHomeServicesOnly] = useState(false)
+  const [homeVisit, setHomeVisit] = useState(false)
+  const [visitAddress, setVisitAddress] = useState('')
+  const appointmentBusinesses = businesses.filter((business) => business.appointmentsEnabled && (!homeServicesOnly || business.homeServicesEnabled === true))
   const selectedBusinessId = Number(businessId) || appointmentBusinesses[0]?.id || 0
+  const selectedBusiness = appointmentBusinesses.find((business) => business.id === selectedBusinessId)
+  const canVisitHome = selectedBusiness?.homeServicesEnabled === true
+  const isHomeVisit = homeVisit && canVisitHome
+  const visitingCharge = isHomeVisit ? selectedBusiness?.homeVisitCharge ?? 0 : 0
   const services = servicesState.businessId === selectedBusinessId ? servicesState.services : []
+  const servicesLoading = selectedBusinessId > 0 && servicesState.businessId !== selectedBusinessId
+  const servicesError = servicesState.businessId === selectedBusinessId ? servicesState.error ?? '' : ''
   const selectedService = services.find((service) => service.id === Number(serviceId))
-  const currentLoyaltyInfo = loyaltyInfo?.customerId === customerId && loyaltyInfo?.businessId === selectedBusinessId ? loyaltyInfo : null
+  const currentLoyaltyInfo = loyaltyInfo
+    && loyaltyInfo.customerId === customerId
+    && loyaltyInfo.businessId === selectedBusinessId
+    ? loyaltyInfo
+    : null
+  const currentLoyaltyError = loyaltyError
+    && loyaltyError.customerId === customerId
+    && loyaltyError.businessId === selectedBusinessId
+    ? loyaltyError.message
+    : ''
   const requestedPoints = Math.max(0, Math.floor(Number(loyaltyPointsToRedeem) || 0))
   const loyaltyDiscount = currentLoyaltyInfo?.settings.configured && currentLoyaltyInfo.settings.pointsPerCurrencyUnit && selectedService
     ? Math.min(
@@ -78,7 +190,7 @@ export function CustomerAppointmentsPanel({
   const availabilityRequestMatches = availabilityState?.businessId === selectedBusinessId
     && availabilityState.serviceId === selectedService?.id
     && availabilityState.date === appointmentDate
-    && availabilityState.staffUserId === (Number(staffUserId) || undefined)
+    && availabilityState.staffId === (Number(staffId) || undefined)
   const availability = availabilityRequestMatches ? availabilityState.result : null
   const availabilityError = Boolean(availabilityRequestMatches && availabilityState.error)
   const checkingAvailability = Boolean(selectedService && !availability && !availabilityError)
@@ -95,6 +207,13 @@ export function CustomerAppointmentsPanel({
       const available = records.filter((service) => service.enabled)
       setServicesState({ businessId: selectedBusinessId, services: available })
       setServiceId(available[0] ? String(available[0].id) : '')
+    }).catch((error: unknown) => {
+      if (!isActive) return
+      setServicesState({
+        businessId: selectedBusinessId,
+        services: [],
+        error: error instanceof Error ? error.message : 'Could not load appointment services.',
+      })
     })
 
     return () => {
@@ -103,24 +222,24 @@ export function CustomerAppointmentsPanel({
   }, [selectedBusinessId])
 
   useEffect(() => {
-    if (!customerId || !selectedBusinessId) {
-      // The displayed balance is scoped to the currently selected customer and business.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setLoyaltyInfo(null)
-      setLoyaltyError('')
-      setLoyaltyPointsToRedeem('0')
-      return
-    }
+    if (!customerId || !selectedBusinessId) return
     let isCurrent = true
-    setLoyaltyError('')
-    setLoyaltyPointsToRedeem('0')
     Promise.all([
       fetchLoyaltyBalance(selectedBusinessId, customerId),
       fetchLoyaltySettings(selectedBusinessId),
     ]).then(([balance, settings]) => {
-      if (isCurrent) setLoyaltyInfo({ customerId, businessId: selectedBusinessId, balance: balance.balance, settings })
+      if (isCurrent) {
+        setLoyaltyInfo({ customerId, businessId: selectedBusinessId, balance: balance.balance, settings })
+        setLoyaltyError(null)
+      }
     }).catch((error) => {
-      if (isCurrent) setLoyaltyError(error instanceof Error ? error.message : 'Could not load loyalty points.')
+      if (isCurrent) {
+        setLoyaltyError({
+          customerId,
+          businessId: selectedBusinessId,
+          message: error instanceof Error ? error.message : 'Could not load loyalty points.',
+        })
+      }
     })
     return () => { isCurrent = false }
   }, [customerId, selectedBusinessId])
@@ -128,17 +247,17 @@ export function CustomerAppointmentsPanel({
   useEffect(() => {
     if (!selectedBusinessId || !selectedService) return
     let isCurrent = true
-    fetchAppointmentAvailability(selectedBusinessId, selectedService.id, appointmentDate, Number(staffUserId) || undefined)
+    fetchAppointmentAvailability(selectedBusinessId, selectedService.id, appointmentDate, Number(staffId) || undefined)
       .then((result) => {
         if (!isCurrent) return
-        setAvailabilityState({ businessId: selectedBusinessId, serviceId: selectedService.id, date: appointmentDate, staffUserId: Number(staffUserId) || undefined, result })
+        setAvailabilityState({ businessId: selectedBusinessId, serviceId: selectedService.id, date: appointmentDate, staffId: Number(staffId) || undefined, result })
         setSelectedSlot((current) => result.availableSlots.includes(current) ? current : result.availableSlots[0] ?? '')
       })
       .catch(() => {
-        if (isCurrent) setAvailabilityState({ businessId: selectedBusinessId, serviceId: selectedService.id, date: appointmentDate, staffUserId: Number(staffUserId) || undefined, result: { date: appointmentDate, availableSlots: [], staff: [] }, error: true })
+        if (isCurrent) setAvailabilityState({ businessId: selectedBusinessId, serviceId: selectedService.id, date: appointmentDate, staffId: Number(staffId) || undefined, result: { date: appointmentDate, availableSlots: [], staff: [] }, error: true })
       })
     return () => { isCurrent = false }
-  }, [appointmentDate, selectedBusinessId, selectedService, staffUserId])
+  }, [appointmentDate, selectedBusinessId, selectedService, staffId])
 
   const handleBookAppointment = async () => {
     if (!selectedBusinessId || !selectedService || !selectedSlot || new Date(selectedSlot).getTime() <= now) {
@@ -147,17 +266,33 @@ export function CustomerAppointmentsPanel({
       return
     }
 
+    if (isHomeVisit && !visitAddress.trim()) {
+      setMessage('Enter the address for the home visit.')
+      setMessageSeverity('error')
+      return
+    }
+
     setIsSaving(true)
     setMessage('')
-    const result = await createAppointment({
-      businessId: selectedBusinessId,
-      appointmentServiceId: selectedService.id,
-      scheduledAt: selectedSlot,
-      staffUserId: Number(staffUserId) || undefined,
-      notes: notes.trim() || undefined,
-      loyaltyPointsToRedeem: requestedPoints,
-    })
-    setIsSaving(false)
+    let result: Awaited<ReturnType<typeof createAppointment>>
+    try {
+      result = await createAppointment({
+        businessId: selectedBusinessId,
+        appointmentServiceId: selectedService.id,
+        scheduledAt: selectedSlot,
+        staffId: Number(staffId) || undefined,
+        notes: notes.trim() || undefined,
+        loyaltyPointsToRedeem: requestedPoints,
+        homeVisit: isHomeVisit,
+        visitAddress: isHomeVisit ? visitAddress.trim() : undefined,
+      })
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not book this appointment.')
+      setMessageSeverity('error')
+      return
+    } finally {
+      setIsSaving(false)
+    }
 
     if (!result.ok) {
       setMessage(result.message ?? 'Could not book this appointment.')
@@ -167,7 +302,7 @@ export function CustomerAppointmentsPanel({
 
     const business = businesses.find((b) => b.id === selectedBusinessId)
     const bookedAppointment: AppointmentSummary = result.appointment ?? {
-      id: Date.now(),
+      id: now,
       businessId: selectedBusinessId,
       appointmentServiceId: selectedService.id,
       serviceName: selectedService.name,
@@ -176,11 +311,16 @@ export function CustomerAppointmentsPanel({
       scheduledAt: selectedSlot,
       status: 'BOOKED',
       notes: notes.trim() || undefined,
+      homeVisit: isHomeVisit,
+      visitingCharge,
+      visitAddress: isHomeVisit ? visitAddress.trim() : undefined,
       createdAt: new Date().toISOString(),
     }
     notifyAppointmentBooked(bookedAppointment, business?.businessName ?? business?.name)
 
     setNotes('')
+    setVisitAddress('')
+    setHomeVisit(false)
     setLoyaltyPointsToRedeem('0')
     setMessage('Appointment request sent.')
     setMessageSeverity('success')
@@ -242,13 +382,19 @@ export function CustomerAppointmentsPanel({
             </Box>
             {availability?.availableSlots.length ? <Chip size="small" color="success" variant="outlined" label={`${availability.availableSlots.length} times`} /> : null}
           </Stack>
-          {appointmentBusinesses.length === 0 && <Alert severity="info" sx={{ borderRadius: 2 }}>None of your businesses are currently accepting appointment requests.</Alert>}
-          <TextField select label="Business" value={selectedBusinessId ? String(selectedBusinessId) : ''} onChange={(event) => { setBusinessId(event.target.value); setServiceId('') }} disabled={appointmentBusinesses.length === 0} size="small" fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}>
-            {appointmentBusinesses.map((business) => <MenuItem key={business.id} value={String(business.id)}>{business.businessName ?? business.name ?? `Business ${business.id}`}</MenuItem>)}
+          <Chip label="Home services only" size="small" clickable color={homeServicesOnly ? 'success' : 'default'} variant={homeServicesOnly ? 'filled' : 'outlined'} onClick={() => setHomeServicesOnly((current) => !current)} aria-pressed={homeServicesOnly} sx={{ alignSelf: 'flex-start' }} />
+          {appointmentBusinesses.length === 0 && <Alert severity="info" sx={{ borderRadius: 2 }}>{homeServicesOnly ? 'No businesses offering home services are available.' : 'None of your businesses are currently accepting appointment requests.'}</Alert>}
+          <TextField select label="Business" value={selectedBusinessId ? String(selectedBusinessId) : ''} onChange={(event) => { setBusinessId(event.target.value); setServiceId(''); setLoyaltyPointsToRedeem('0') }} disabled={appointmentBusinesses.length === 0} size="small" fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}>
+            {appointmentBusinesses.map((business) => <MenuItem key={business.id} value={String(business.id)}>{business.businessName ?? business.name ?? `Business ${business.id}`}{business.homeServicesEnabled ? ' · 🏠 Home services' : ''}</MenuItem>)}
           </TextField>
-          <TextField select label="Service" value={serviceId} onChange={(event) => setServiceId(event.target.value)} disabled={!services.length} size="small" required fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}>
-            {services.map((service) => <MenuItem key={service.id} value={String(service.id)}>{service.name} · ₹{service.price.toLocaleString('en-IN')} · {service.durationMinutes} min</MenuItem>)}
-          </TextField>
+          {servicesLoading ? (
+            <Skeleton variant="rounded" height={40} />
+          ) : (
+            <TextField select label="Service" value={serviceId} onChange={(event) => setServiceId(event.target.value)} disabled={!services.length} size="small" required fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}>
+              {services.map((service) => <MenuItem key={service.id} value={String(service.id)}>{service.name} · ₹{service.price.toLocaleString('en-IN')} · {service.durationMinutes} min</MenuItem>)}
+            </TextField>
+          )}
+          {servicesError && <Alert severity="error">{servicesError}</Alert>}
           {selectedService && (
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1, p: 1.25, borderRadius: 2, bgcolor: 'action.hover', border: '1px solid var(--mui-palette-divider)' }}>
               <Box sx={{ minWidth: 0 }}>
@@ -260,6 +406,22 @@ export function CustomerAppointmentsPanel({
                 </Stack>
               </Box>
               <Typography sx={{ color: 'primary.main', fontWeight: 900, fontSize: 17, whiteSpace: 'nowrap' }}>₹{selectedService.price.toLocaleString('en-IN')}</Typography>
+            </Box>
+          )}
+          {canVisitHome && selectedService && (
+            <Box sx={{ p: 1.25, borderRadius: 2, border: '1px solid var(--mui-palette-divider)' }}>
+              <FormControlLabel
+                label={<Box><Typography variant="body2" sx={{ fontWeight: 750 }}>Home visit</Typography><Typography variant="caption" color="text.secondary">{(selectedBusiness?.homeVisitCharge ?? 0) > 0 ? `Visiting charge ₹${(selectedBusiness?.homeVisitCharge ?? 0).toLocaleString('en-IN')} applies.` : 'No visiting charge.'}</Typography></Box>}
+                control={<Switch checked={homeVisit} onChange={(event) => setHomeVisit(event.target.checked)} slotProps={{ input: { 'aria-label': 'Book as home visit' } }} />}
+                labelPlacement="start"
+                sx={{ m: 0, justifyContent: 'space-between', width: '100%', '& .MuiFormControlLabel-label': { flex: 1 } }}
+              />
+              {isHomeVisit && (
+                <Stack spacing={0.8} sx={{ mt: 1 }}>
+                  <TextField label="Visit address" value={visitAddress} onChange={(event) => setVisitAddress(event.target.value)} size="small" required multiline minRows={2} fullWidth slotProps={{ htmlInput: { maxLength: 500 } }} />
+                  <PriceBreakdown servicePrice={selectedService.price} visitingCharge={visitingCharge} loyaltyDiscount={loyaltyDiscount} />
+                </Stack>
+              )}
             </Box>
           )}
           {selectedService && currentLoyaltyInfo?.settings.configured && (
@@ -279,18 +441,20 @@ export function CustomerAppointmentsPanel({
               />
               {loyaltyDiscount > 0 && (
                 <Typography variant="body2" sx={{ textAlign: 'right', fontWeight: 750 }}>
-                  {requestedPoints} points discount: −₹{loyaltyDiscount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · Pay ₹{Math.max(0, selectedService.price - loyaltyDiscount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {requestedPoints} points discount: −₹{loyaltyDiscount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {/* For home visits the total (including the visiting charge) is shown in the price card above */}
+                  {!isHomeVisit && <> · Pay ₹{Math.max(0, selectedService.price - loyaltyDiscount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>}
                 </Typography>
               )}
             </Stack>
           )}
-          {loyaltyError && <Alert severity="error">{loyaltyError}</Alert>}
-          {selectedBusinessId > 0 && services.length === 0 && appointmentBusinesses.length > 0 && <Alert severity="info" sx={{ borderRadius: 2 }}>This business has not added any bookable services yet.</Alert>}
+          {currentLoyaltyError && <Alert severity="error">{currentLoyaltyError}</Alert>}
+          {!servicesLoading && !servicesError && selectedBusinessId > 0 && services.length === 0 && appointmentBusinesses.length > 0 && <Alert severity="info" sx={{ borderRadius: 2 }}>This business has not added any bookable services yet.</Alert>}
           <TextField label="Date" type="date" value={appointmentDate} onChange={(event) => { setAppointmentDate(event.target.value); setSelectedSlot('') }} size="small" required fullWidth slotProps={{ inputLabel: { shrink: true } }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }} />
           {availability && availability.staff.length > 0 && (
-            <TextField select label="Staff or resource" value={staffUserId} onChange={(event) => { setStaffUserId(event.target.value); setSelectedSlot('') }} size="small" fullWidth>
+            <TextField select label="Staff or resource" value={staffId} onChange={(event) => { setStaffId(event.target.value); setSelectedSlot('') }} size="small" fullWidth>
               <MenuItem value="">Any available staff</MenuItem>
-              {availability.staff.map((staff) => <MenuItem key={staff.userId} value={String(staff.userId)}>{staff.label}</MenuItem>)}
+              {availability.staff.map((staff) => <MenuItem key={staff.staffId} value={String(staff.staffId)}>{staff.label}</MenuItem>)}
             </TextField>
           )}
           <Box>
@@ -313,7 +477,7 @@ export function CustomerAppointmentsPanel({
             ) : <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>No available times for this day.</Typography>}
           </Box>
           <TextField label="Note (optional)" value={notes} onChange={(event) => setNotes(event.target.value)} size="small" multiline minRows={2} fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }} />
-          <Button variant="contained" startIcon={<CalendarPlus size={17} />} onClick={handleBookAppointment} disabled={!selectedService || !selectedSlot || isSaving} fullWidth sx={{ minHeight: 46, borderRadius: 2, textTransform: 'none', fontWeight: 800 }}>
+          <Button variant="contained" startIcon={<CalendarPlus size={17} />} loading={isSaving} onClick={handleBookAppointment} disabled={!selectedService || !selectedSlot || servicesLoading} fullWidth sx={{ minHeight: 46, borderRadius: 2, textTransform: 'none', fontWeight: 800 }}>
             {isSaving ? 'Sending request…' : 'Request appointment'}
           </Button>
         </Stack>
@@ -364,7 +528,7 @@ export function CustomerAppointmentsPanel({
                   </Stack>
                   <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mt: 0.65, gap: 1 }}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-                      {[appointment.durationMinutes ? `${appointment.durationMinutes} min` : '', appointment.servicePrice !== undefined ? `₹${(appointment.servicePrice - (appointment.loyaltyDiscountAmount ?? 0)).toLocaleString('en-IN')}` : ''].filter(Boolean).join(' · ')}
+                      {[appointment.durationMinutes ? `${appointment.durationMinutes} min` : '', appointment.servicePrice !== undefined ? `₹${(appointment.servicePrice + (appointment.visitingCharge ?? 0) - (appointment.loyaltyDiscountAmount ?? 0)).toLocaleString('en-IN')}` : '', appointment.homeVisit ? `Home visit${appointment.visitingCharge ? ` (+₹${appointment.visitingCharge.toLocaleString('en-IN')})` : ''}` : ''].filter(Boolean).join(' · ')}
                     </Typography>
                     <Stack direction="row" spacing={1}>
                       {onSelectAppointment && (

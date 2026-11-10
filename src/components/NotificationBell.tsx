@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
-import { Badge, Box, Button, ButtonBase, Divider, IconButton, Popover, Stack, Typography } from '@mui/material'
-import { Bell, CalendarCheck2, CheckCheck } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
+import { Badge, Box, Button, ButtonBase, IconButton, Popover, Stack, Typography } from '@mui/material'
+import { Bell, CalendarCheck2, CheckCheck, Clock3, FileText, Users } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import {
   fetchMyNotifications,
@@ -14,9 +15,59 @@ import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { setActiveTab as setBusinessActiveTab } from '../store/businessDashboardSlice'
 import { setActiveTab as setCustomerActiveTab } from '../store/customerDashboardSlice'
 import { setActiveTab as setAdminActiveTab } from '../store/adminDashboardSlice'
+import { getDashboardPath } from '../routes/dashboardPaths'
 
 const emptyFeed: NotificationFeed = { notifications: [], unreadCount: 0 }
 const pollingIntervalMs = 30_000
+const clockTickMs = 60_000
+
+/* Brand palette (home page gradient) */
+const brand = { midnight: '#0F032D', violet: '#4E2BCC', lilac: '#905BF4', mist: '#EFEFEF' }
+
+/* Warm "time is near" accent for upcoming appointments */
+const amber = { main: '#F5A524', deep: '#F97316', soft: 'rgba(245,165,36,0.14)', strong: 'rgba(245,165,36,0.24)' }
+
+/* ------------------------------------------------------------------ */
+/* TODO: connect this to your family-invitation API.                   */
+/* Replace the body with the real accept / decline request. It should  */
+/* resolve on success and throw on failure.                            */
+/* ------------------------------------------------------------------ */
+async function respondToFamilyInvitation(
+  notification: AppNotificationSummary,
+  decision: 'accept' | 'decline',
+): Promise<void> {
+  void notification
+  void decision
+  throw new Error('Family invitation API is not connected yet')
+}
+
+type NotificationGroup = { key: string; label: string; items: AppNotificationSummary[] }
+type Urgency = { level: 'imminent' | 'near'; label: string } | null
+type NotificationFilter = 'all' | 'unread' | 'appointments' | 'invoices'
+
+const filterOptions: { id: NotificationFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'unread', label: 'Unread' },
+  { id: 'appointments', label: 'Appointments' },
+  { id: 'invoices', label: 'Invoices' },
+]
+
+const emptyFilterText: Record<Exclude<NotificationFilter, 'all'>, string> = {
+  unread: 'No unread notifications',
+  appointments: 'No appointment notifications',
+  invoices: 'No invoice notifications',
+}
+
+function isInvoiceNotification(notification: AppNotificationSummary): boolean {
+  return `${notification.type || ''} ${notification.title || ''}`.toLowerCase().includes('invoice')
+}
+
+function matchesFilter(notification: AppNotificationSummary, filter: NotificationFilter): boolean {
+  if (filter === 'unread') return !notification.readAt
+  if (filter === 'appointments') return isAppointmentNotification(notification)
+  if (filter === 'invoices') return isInvoiceNotification(notification)
+  return true
+}
 
 function isAppointmentNotification(notification: AppNotificationSummary): boolean {
   const typeStr = (notification.type || '').toUpperCase()
@@ -33,6 +84,75 @@ function isAppointmentNotification(notification: AppNotificationSummary): boolea
     urlStr.includes('appointment') ||
     Boolean(notification.appointmentId)
   )
+}
+
+function isFamilyInvitation(notification: AppNotificationSummary): boolean {
+  const text = `${notification.type || ''} ${notification.title || ''}`.toLowerCase()
+  return text.includes('family') && text.includes('invitation')
+}
+
+function notificationIcon(notification: AppNotificationSummary): ReactNode {
+  const text = `${notification.type || ''} ${notification.title || ''}`.toLowerCase()
+  if (text.includes('invoice') || text.includes('receipt')) return <FileText size={20} />
+  if (isFamilyInvitation(notification)) return <Users size={20} />
+  if (isAppointmentNotification(notification)) return <CalendarCheck2 size={20} />
+  return <Bell size={20} />
+}
+
+function groupLabel(date: Date): string {
+  const today = new Date()
+  const yesterday = new Date()
+  yesterday.setDate(today.getDate() - 1)
+  if (date.toDateString() === today.toDateString()) return 'TODAY'
+  if (date.toDateString() === yesterday.toDateString()) return 'YESTERDAY'
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toUpperCase()
+}
+
+function groupByDay(notifications: AppNotificationSummary[]): NotificationGroup[] {
+  const groups: NotificationGroup[] = []
+  for (const notification of notifications) {
+    const date = new Date(notification.createdAt)
+    const key = date.toDateString()
+    const last = groups[groups.length - 1]
+    if (last && last.key === key) {
+      last.items.push(notification)
+    } else {
+      groups.push({ key, label: groupLabel(date), items: [notification] })
+    }
+  }
+  return groups
+}
+
+/* Strict lookup (no guessing) so we never highlight the wrong appointment */
+function findAppointmentStrict(
+  notification: AppNotificationSummary,
+  appointments: AppointmentSummary[],
+): AppointmentSummary | undefined {
+  let id: number | null = null
+  if (typeof notification.appointmentId === 'number' && notification.appointmentId > 0) {
+    id = notification.appointmentId
+  } else if (notification.targetUrl) {
+    const match = notification.targetUrl.match(/(?:appointmentId=|appointments\/)(\d+)/i)
+    if (match && match[1]) id = Number(match[1])
+  }
+  return id ? appointments.find((a) => a.id === id) : undefined
+}
+
+function appointmentUrgency(
+  notification: AppNotificationSummary,
+  appointments: AppointmentSummary[],
+  now: number,
+): Urgency {
+  if (!isAppointmentNotification(notification)) return null
+  const appointment = findAppointmentStrict(notification, appointments)
+  if (!appointment?.scheduledAt) return null
+
+  const diff = new Date(appointment.scheduledAt).getTime() - now
+  if (!(diff > 0) || diff > 24 * 60 * 60 * 1000) return null
+
+  const mins = Math.ceil(diff / 60000)
+  const label = mins < 60 ? `In ${mins} min` : `In ${Math.floor(mins / 60)}h${mins % 60 ? ` ${mins % 60}m` : ''}`
+  return { level: mins <= 60 ? 'imminent' : 'near', label }
 }
 
 function resolveAppointmentId(
@@ -96,19 +216,59 @@ function resolveAppointmentId(
   return null
 }
 
-export function NotificationBell() {
+/* Pulls the invoice a notification is about: an explicit id when the API sends one,
+   otherwise the invoice number mentioned in the text (e.g. "Invoice INV-490ACAD7 has been issued…"). */
+function extractInvoiceRef(notification: AppNotificationSummary): { invoiceId: number | null; invoiceNumber: string | null } {
+  const withId = notification as AppNotificationSummary & { invoiceId?: number | null }
+  let invoiceId = typeof withId.invoiceId === 'number' && withId.invoiceId > 0 ? withId.invoiceId : null
+  if (!invoiceId && notification.targetUrl) {
+    const urlMatch = notification.targetUrl.match(/(?:invoiceId=|invoices\/)(\d+)/i)
+    if (urlMatch?.[1]) invoiceId = Number(urlMatch[1])
+  }
+  const numberMatch = `${notification.title ?? ''} ${notification.message ?? ''}`.match(/\bINV-[A-Z0-9]+\b/i)
+  return { invoiceId, invoiceNumber: numberMatch ? numberMatch[0].toUpperCase() : null }
+}
+
+type PanelPlacement = { top: number; left: number; width: number; maxHeight: number }
+
+/* The app renders inside a phone-sized frame (marked with data-app-frame) that is narrower than the browser window.
+   Position the panel inside that frame, not the window, so it can never stick out past the frame's edges. */
+function computePlacement(anchor: HTMLElement): PanelPlacement {
+  const frame = anchor.closest<HTMLElement>('[data-app-frame]')?.getBoundingClientRect()
+  const left = frame?.left ?? 0
+  const frameWidth = frame?.width ?? window.innerWidth
+  const frameBottom = Math.min(frame?.bottom ?? window.innerHeight, window.innerHeight)
+  const gutter = 12
+  const bottomNavReserve = 96
+  const width = Math.min(360, frameWidth - gutter * 2)
+  const top = anchor.getBoundingClientRect().bottom + 8
+  return {
+    top,
+    left: left + (frameWidth - width) / 2,
+    width,
+    maxHeight: Math.max(240, frameBottom - top - bottomNavReserve),
+  }
+}
+
+export function NotificationBell({ contrast = false, prominent = false }: { contrast?: boolean; prominent?: boolean }) {
   const navigate = useNavigate()
   const dispatch = useAppDispatch()
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
+  const [placement, setPlacement] = useState<PanelPlacement | null>(null)
   const [feed, setFeed] = useState<NotificationFeed>(emptyFeed)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [actionError, setActionError] = useState('')
   const [reloadToken, setReloadToken] = useState(0)
+  const [now, setNow] = useState(() => Date.now())
+  const [invitationResult, setInvitationResult] = useState<Record<string, 'accepted' | 'declined'>>({})
+  const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(null)
+  const [filter, setFilter] = useState<NotificationFilter>('all')
 
   const businessAppointments = useAppSelector((state) => state.businessDashboard.data.appointments)
   const customerAppointments = useAppSelector((state) => state.customerDashboard.data.appointments)
   const adminAppointments = useAppSelector((state) => state.adminDashboard.data.appointments)
+  const role = useAppSelector((state) => state.auth.authUser?.role ?? 'BUSINESS')
   const allAppointments = [...businessAppointments, ...customerAppointments, ...adminAppointments]
 
   useEffect(() => {
@@ -150,25 +310,63 @@ export function NotificationBell() {
     }
   }, [reloadToken])
 
-  const open = Boolean(anchorEl)
+  /* Keeps "In 25 min" labels fresh */
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), clockTickMs)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const open = Boolean(anchorEl && placement)
   const close = () => setAnchorEl(null)
+
+  /* Keep the panel inside the frame if the window is resized or rotated while it is open */
+  useEffect(() => {
+    if (!anchorEl) return
+    const update = () => setPlacement(computePlacement(anchorEl))
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [anchorEl])
+
+  const visibleNotifications = useMemo(
+    () => feed.notifications.filter((item) => matchesFilter(item, filter)),
+    [feed.notifications, filter],
+  )
+  const groups = useMemo(() => groupByDay(visibleNotifications), [visibleNotifications])
+
+  const markReadInFeed = async (notification: AppNotificationSummary) => {
+    const updated = await markNotificationRead(notification.id)
+    setFeed((current) => ({
+      unreadCount: Math.max(
+        0,
+        current.unreadCount - (current.notifications.find((item) => item.id === notification.id)?.readAt ? 0 : 1),
+      ),
+      notifications: current.notifications.map((item) => (item.id === notification.id ? updated : item)),
+    }))
+  }
 
   const handleNotificationClick = async (notification: AppNotificationSummary) => {
     try {
-      const updated = await markNotificationRead(notification.id)
-      setFeed((current) => ({
-        unreadCount: Math.max(
-          0,
-          current.unreadCount - (current.notifications.find((item) => item.id === notification.id)?.readAt ? 0 : 1),
-        ),
-        notifications: current.notifications.map((item) => (item.id === notification.id ? updated : item)),
-      }))
+      await markReadInFeed(notification)
       setActionError('')
     } catch {
       setActionError('Could not update this notification. Try again.')
     }
 
     close()
+
+    // Customers: open the invoice this notification is about. The dashboard reads these params,
+    // switches to the Invoices tab and opens that invoice's details.
+    if (role === 'CUSTOMER' && isInvoiceNotification(notification)) {
+      const { invoiceId, invoiceNumber } = extractInvoiceRef(notification)
+      if (invoiceId || invoiceNumber) {
+        const params = new URLSearchParams()
+        if (invoiceId) params.set('invoiceId', String(invoiceId))
+        if (invoiceNumber) params.set('invoiceNumber', invoiceNumber)
+        dispatch(setCustomerActiveTab('invoices'))
+        navigate(`${getDashboardPath(role, 'invoices')}?${params.toString()}`)
+        return
+      }
+    }
 
     if (isAppointmentNotification(notification)) {
       const appointmentId = resolveAppointmentId(notification, allAppointments)
@@ -187,18 +385,35 @@ export function NotificationBell() {
         )
       }
 
-      const query = new URLSearchParams()
-      query.set('tab', 'appointments')
-      if (appointmentId) {
-        query.set('appointmentId', String(appointmentId))
-      }
-      navigate(`/dashboard?${query.toString()}`)
+      const query = appointmentId ? `?appointmentId=${appointmentId}` : ''
+      navigate(`${getDashboardPath(role, 'appointments')}${query}`)
       return
     }
 
     const targetUrl = notification.targetUrl
     if (targetUrl?.startsWith('/') && !targetUrl.startsWith('//')) {
       navigate(targetUrl)
+    }
+  }
+
+  const handleInvitation = async (notification: AppNotificationSummary, decision: 'accept' | 'decline') => {
+    const key = String(notification.id)
+    setPendingInvitationId(key)
+    try {
+      await respondToFamilyInvitation(notification, decision)
+      setInvitationResult((current) => ({ ...current, [key]: decision === 'accept' ? 'accepted' : 'declined' }))
+      if (!notification.readAt) {
+        try {
+          await markReadInFeed(notification)
+        } catch {
+          /* the invitation itself succeeded; read-state will sync on next refresh */
+        }
+      }
+      setActionError('')
+    } catch {
+      setActionError('Could not update the invitation. Try again.')
+    } finally {
+      setPendingInvitationId(null)
     }
   }
 
@@ -216,6 +431,171 @@ export function NotificationBell() {
     }
   }
 
+  const rowShellSx = {
+    display: 'flex',
+    width: '100%',
+    gap: 1.25,
+    px: 1.75,
+    py: 1.25,
+    textAlign: 'left' as const,
+    borderBottom: '1px solid',
+    borderColor: 'divider',
+  }
+
+  const renderIcon = (notification: AppNotificationSummary, unread: boolean, urgency: Urgency) => (
+    <Box
+      sx={{
+        width: 40,
+        height: 40,
+        flexShrink: 0,
+        borderRadius: '50%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: unread || urgency ? '#fff' : 'primary.main',
+        background: urgency
+          ? `linear-gradient(135deg, ${amber.main}, ${amber.deep})`
+          : unread
+            ? `linear-gradient(135deg, ${brand.lilac}, ${brand.violet})`
+            : undefined,
+        bgcolor: unread || urgency ? undefined : 'action.hover',
+      }}
+    >
+      {notificationIcon(notification)}
+    </Box>
+  )
+
+  const renderNotification = (notification: AppNotificationSummary) => {
+    const unread = !notification.readAt
+    const time = new Date(notification.createdAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+
+    /* ---- Family invitation: Accept / Decline ---- */
+    if (isFamilyInvitation(notification)) {
+      const key = String(notification.id)
+      const result = invitationResult[key]
+      const busy = pendingInvitationId === key
+      return (
+        <Box
+          key={notification.id}
+          sx={{ ...rowShellSx, alignItems: 'flex-start', bgcolor: unread ? 'rgba(144,91,244,0.14)' : 'transparent' }}
+        >
+          {renderIcon(notification, unread, null)}
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography sx={{ color: 'text.primary', fontSize: 14, fontWeight: unread ? 600 : 500, lineHeight: 1.3 }}>
+              {notification.title}
+            </Typography>
+            <Typography sx={{ mt: 0.25, color: 'text.secondary', fontSize: 12, lineHeight: 1.4 }}>
+              {notification.message}
+            </Typography>
+            {result ? (
+              <Typography sx={{ mt: 1, color: 'primary.main', fontSize: 12, fontWeight: 600 }}>
+                {result === 'accepted' ? 'Invitation accepted' : 'Invitation declined'}
+              </Typography>
+            ) : (
+              <Stack direction="row" spacing={1} sx={{ mt: 1.25 }}>
+                <Button
+                  size="small"
+                  variant="contained"
+                  disabled={busy}
+                  onClick={() => void handleInvitation(notification, 'accept')}
+                  sx={{
+                    height: 32,
+                    px: 2.25,
+                    borderRadius: '16px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    textTransform: 'none',
+                    boxShadow: 'none',
+                    background: `linear-gradient(135deg, ${brand.lilac}, ${brand.violet})`,
+                    color: '#fff',
+                  }}
+                >
+                  Accept
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={busy}
+                  onClick={() => void handleInvitation(notification, 'decline')}
+                  sx={{ height: 32, px: 2.25, borderRadius: '16px', fontSize: 12, fontWeight: 600, textTransform: 'none' }}
+                >
+                  Decline
+                </Button>
+              </Stack>
+            )}
+            <Typography sx={{ mt: 0.75, color: 'text.secondary', fontSize: 11 }}>{time}</Typography>
+          </Box>
+          <Box
+            aria-hidden
+            sx={{ mt: 0.75, width: 8, height: 8, flexShrink: 0, borderRadius: '50%', bgcolor: unread ? 'primary.main' : 'transparent' }}
+          />
+        </Box>
+      )
+    }
+
+    /* ---- Regular row (invoice, appointment, etc.) ---- */
+    const urgency = appointmentUrgency(notification, allAppointments, now)
+    const baseBg = urgency
+      ? urgency.level === 'imminent'
+        ? amber.strong
+        : amber.soft
+      : unread
+        ? 'rgba(144,91,244,0.14)'
+        : 'transparent'
+
+    return (
+      <ButtonBase
+        key={notification.id}
+        onClick={() => void handleNotificationClick(notification)}
+        sx={{
+          ...rowShellSx,
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          bgcolor: baseBg,
+          boxShadow: urgency ? `inset 3px 0 0 ${amber.main}` : 'none',
+          transition: 'background-color 0.2s ease',
+          '&:hover': { bgcolor: urgency ? amber.strong : 'rgba(144,91,244,0.2)' },
+        }}
+      >
+        {renderIcon(notification, unread, urgency)}
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography sx={{ color: 'text.primary', fontSize: 14, fontWeight: unread || urgency ? 600 : 500, lineHeight: 1.3 }}>
+            {notification.title}
+          </Typography>
+          <Typography sx={{ mt: 0.25, color: 'text.secondary', fontSize: 12, lineHeight: 1.4 }}>
+            {notification.message}
+          </Typography>
+          <Stack direction="row" spacing={1} sx={{ mt: 0.5, alignItems: 'center' }}>
+            <Typography sx={{ color: 'text.secondary', fontSize: 11 }}>{time}</Typography>
+            {urgency && (
+              <Box
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  height: 20,
+                  px: 1,
+                  borderRadius: '10px',
+                  bgcolor: amber.main,
+                  color: brand.midnight,
+                  fontSize: 11,
+                  fontWeight: 700,
+                }}
+              >
+                <Clock3 size={12} />
+                {urgency.label}
+              </Box>
+            )}
+          </Stack>
+        </Box>
+        <Box
+          aria-hidden
+          sx={{ width: 8, height: 8, flexShrink: 0, borderRadius: '50%', bgcolor: unread ? 'primary.main' : 'transparent' }}
+        />
+      </ButtonBase>
+    )
+  }
+
   return (
     <>
       <IconButton
@@ -224,113 +604,182 @@ export function NotificationBell() {
         aria-expanded={open}
         onClick={(event) => {
           setAnchorEl(event.currentTarget)
+          setPlacement(computePlacement(event.currentTarget))
+          setFilter('all')
           setActionError('')
           setReloadToken((current) => current + 1)
         }}
-        sx={{ width: 38, height: 38, color: 'text.secondary' }}
+        sx={{
+          width: prominent ? 44 : 38,
+          height: prominent ? 44 : 38,
+          color: prominent ? '#0F032D' : contrast ? '#ffffff' : 'primary.main',
+          backgroundColor: prominent ? '#ffffff' : contrast ? 'rgba(255,255,255,0.14)' : 'transparent',
+          '&:hover': { backgroundColor: prominent ? '#f5efff' : contrast ? 'rgba(255,255,255,0.24)' : 'action.hover' },
+        }}
       >
         <Badge color="error" badgeContent={feed.unreadCount} max={99}>
           <Bell size={19} strokeWidth={2.2} />
         </Badge>
       </IconButton>
+
+      {/* Positioned from the app frame (see computePlacement) so it stays fully inside it, clear of the bottom nav */}
       <Popover
         open={open}
-        anchorEl={anchorEl}
         onClose={close}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        slotProps={{ paper: { sx: { width: 'min(360px, calc(100vw - 24px))', mt: 1, overflow: 'hidden' } } }}
+        anchorReference="anchorPosition"
+        anchorPosition={placement ? { top: placement.top, left: placement.left } : undefined}
+        marginThreshold={0}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        slotProps={{
+          paper: {
+            sx: {
+              width: placement?.width ?? 360,
+              maxHeight: placement?.maxHeight,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              borderRadius: '20px',
+            },
+          },
+        }}
       >
-        <Stack direction="row" spacing={1} sx={{ px: 1.5, py: 1.25, alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box>
-            <Typography sx={{ color: 'text.primary', fontSize: 14, fontWeight: 800 }}>Notifications</Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>{feed.unreadCount} unread</Typography>
-          </Box>
+        <Stack direction="row" spacing={1} sx={{ px: 2, pt: 1.75, pb: 1.25, alignItems: 'center', flexShrink: 0 }}>
+          <Typography sx={{ color: 'text.primary', fontSize: 17, fontWeight: 600 }}>Notifications</Typography>
+          {feed.unreadCount > 0 && (
+            <Box
+              sx={{
+                height: 22,
+                px: 1.25,
+                borderRadius: '11px',
+                bgcolor: brand.violet,
+                color: brand.mist,
+                fontSize: 11,
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              {feed.unreadCount} new
+            </Box>
+          )}
+          <Box sx={{ flex: 1 }} />
           <Button
             size="small"
             startIcon={<CheckCheck size={14} />}
             onClick={() => void handleMarkAllRead()}
             disabled={feed.unreadCount === 0}
-            sx={{ minWidth: 0, px: 0.8, fontSize: 11 }}
+            sx={{ minWidth: 0, px: 0.8, fontSize: 11, fontWeight: 600, textTransform: 'none' }}
           >
             Mark all read
           </Button>
         </Stack>
-        <Divider />
-        {actionError && <Typography role="alert" sx={{ px: 1.5, py: 1, color: 'error.main', fontSize: 12 }}>{actionError}</Typography>}
-        {loadError && feed.notifications.length > 0 && <Typography role="status" sx={{ px: 1.5, py: 0.8, color: '#8a5a12', fontSize: 11 }}>Could not refresh. Showing the latest loaded notifications.</Typography>}
-        {loadError && feed.notifications.length === 0 ? (
-          <Stack spacing={0.8} sx={{ alignItems: 'center', px: 2, py: 2.5 }}>
-            <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center' }}>Notifications could not be loaded.</Typography>
-            <Button size="small" onClick={() => setReloadToken((current) => current + 1)}>Try again</Button>
-          </Stack>
-        ) : loading && feed.notifications.length === 0 ? (
-          <Typography role="status" sx={{ px: 2, py: 3, color: 'text.secondary', fontSize: 12, textAlign: 'center' }}>Loading notifications...</Typography>
-        ) : feed.notifications.length === 0 ? (
-          <Stack spacing={0.5} sx={{ alignItems: 'center', px: 2, py: 3 }}>
-            <Bell size={20} color="#80918e" />
-            <Typography sx={{ color: 'text.primary', fontSize: 13, fontWeight: 700 }}>You’re all caught up</Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'center' }}>New updates will appear here.</Typography>
-          </Stack>
-        ) : (
-          <Stack sx={{ maxHeight: 420, overflowY: 'auto' }}>
-            {feed.notifications.map((notification) => {
-              const isAppt = isAppointmentNotification(notification)
+
+        {actionError && (
+          <Typography role="alert" sx={{ px: 2, py: 1, color: 'error.main', fontSize: 12 }}>
+            {actionError}
+          </Typography>
+        )}
+        {loadError && feed.notifications.length > 0 && (
+          <Typography role="status" sx={{ px: 2, py: 0.8, color: 'text.secondary', fontSize: 11 }}>
+            Could not refresh. Showing the latest loaded notifications.
+          </Typography>
+        )}
+
+        {feed.notifications.length > 0 && (
+          <Stack
+            direction="row"
+            spacing={1}
+            role="group"
+            aria-label="Filter notifications"
+            sx={{ px: 2, pb: 1.25, flexShrink: 0, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
+          >
+            {filterOptions.map((option) => {
+              const selected = filter === option.id
               return (
                 <ButtonBase
-                  key={notification.id}
-                  onClick={() => void handleNotificationClick(notification)}
+                  key={option.id}
+                  aria-pressed={selected}
+                  onClick={() => setFilter(option.id)}
                   sx={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    justifyContent: 'flex-start',
-                    gap: 1.2,
+                    flexShrink: 0,
+                    height: 30,
                     px: 1.5,
-                    py: 1.2,
-                    textAlign: 'left',
-                    borderBottom: '1px solid var(--mui-palette-divider)',
-                    bgcolor: notification.readAt ? 'background.paper' : 'action.hover',
+                    borderRadius: '15px',
+                    fontFamily: 'inherit',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: selected ? brand.mist : 'text.primary',
+                    bgcolor: selected ? brand.violet : 'action.hover',
+                    border: '1px solid',
+                    borderColor: selected ? brand.violet : 'divider',
                     transition: 'background-color 0.2s ease',
-                    '&:hover': {
-                      bgcolor: 'action.selected',
-                    },
+                    '&:hover': { bgcolor: selected ? brand.violet : 'action.selected' },
                   }}
                 >
-                  <Box
-                    sx={{
-                      width: 7,
-                      height: 7,
-                      mt: 0.8,
-                      flexShrink: 0,
-                      borderRadius: '50%',
-                      bgcolor: notification.readAt ? 'transparent' : 'primary.main',
-                    }}
-                  />
-                  <Box sx={{ minWidth: 0, flex: 1 }}>
-                    <Stack direction="row" spacing={0.6} sx={{ alignItems: 'center' }}>
-                      {isAppt && <CalendarCheck2 size={13} color="#0d9488" style={{ flexShrink: 0 }} />}
-                      <Typography
-                        sx={{
-                          color: 'text.primary',
-                          fontSize: 12,
-                          fontWeight: notification.readAt ? 600 : 800,
-                          lineHeight: 1.3,
-                        }}
-                      >
-                        {notification.title}
-                      </Typography>
-                    </Stack>
-                    <Typography sx={{ mt: 0.25, color: 'text.secondary', fontSize: 11, lineHeight: 1.4 }}>
-                      {notification.message}
-                    </Typography>
-                    <Typography variant="caption" sx={{ display: 'block', mt: 0.4, color: 'text.disabled', fontSize: 10 }}>
-                      {new Date(notification.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
-                    </Typography>
-                  </Box>
+                  {option.label}
+                  {option.id === 'unread' && feed.unreadCount > 0 ? ` · ${feed.unreadCount}` : ''}
                 </ButtonBase>
               )
             })}
           </Stack>
+        )}
+
+        {loadError && feed.notifications.length === 0 ? (
+          <Stack spacing={0.8} sx={{ alignItems: 'center', px: 2, py: 3 }}>
+            <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center' }}>
+              Notifications could not be loaded.
+            </Typography>
+            <Button size="small" onClick={() => setReloadToken((current) => current + 1)}>
+              Try again
+            </Button>
+          </Stack>
+        ) : loading && feed.notifications.length === 0 ? (
+          <Typography role="status" sx={{ px: 2, py: 3, color: 'text.secondary', fontSize: 12, textAlign: 'center' }}>
+            Loading notifications...
+          </Typography>
+        ) : feed.notifications.length === 0 ? (
+          <Stack spacing={0.75} sx={{ alignItems: 'center', px: 2, py: 4 }}>
+            <Box
+              sx={{
+                width: 52,
+                height: 52,
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                bgcolor: 'action.hover',
+                color: 'primary.main',
+              }}
+            >
+              <Bell size={22} />
+            </Box>
+            <Typography sx={{ color: 'text.primary', fontSize: 14, fontWeight: 600 }}>You’re all caught up</Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'center' }}>
+              New updates will appear here.
+            </Typography>
+          </Stack>
+        ) : visibleNotifications.length === 0 ? (
+          <Stack spacing={0.75} sx={{ alignItems: 'center', px: 2, py: 4 }}>
+            <Typography sx={{ color: 'text.primary', fontSize: 14, fontWeight: 600 }}>
+              {emptyFilterText[filter as Exclude<NotificationFilter, 'all'>]}
+            </Typography>
+            <Button size="small" onClick={() => setFilter('all')} sx={{ textTransform: 'none', fontWeight: 600 }}>
+              Show all
+            </Button>
+          </Stack>
+        ) : (
+          <Box sx={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>
+            {groups.map((group) => (
+              <Box key={group.key}>
+                <Typography
+                  sx={{ px: 2, pt: 1.5, pb: 0.75, color: 'text.secondary', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em' }}
+                >
+                  {group.label}
+                </Typography>
+                {group.items.map(renderNotification)}
+              </Box>
+            ))}
+          </Box>
         )}
       </Popover>
     </>
