@@ -3,6 +3,9 @@ import { Alert, Box, Button, Card, CardContent, Stack, TextField, Typography } f
 import { UserPlus, Users } from 'lucide-react'
 import { addAppointmentStaff, fetchAppointmentStaff, type AppointmentStaffView } from '../../../services/api'
 
+// How many staff to show before the "View all" button appears
+const STAFF_PREVIEW_COUNT = 5
+
 export function AppointmentStaffManager({ businessId, onStaffAdded }: { businessId: number; onStaffAdded: () => void }) {
   const [staff, setStaff] = useState<AppointmentStaffView[]>([])
   const [name, setName] = useState('')
@@ -12,6 +15,7 @@ export function AppointmentStaffManager({ businessId, onStaffAdded }: { business
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [messageSeverity, setMessageSeverity] = useState<'success' | 'error'>('success')
+  const [showAllStaff, setShowAllStaff] = useState(false)
 
   useEffect(() => {
     let isCurrent = true
@@ -71,6 +75,8 @@ export function AppointmentStaffManager({ businessId, onStaffAdded }: { business
     setMessageSeverity('success')
     onStaffAdded()
   }
+
+  const visibleStaff = showAllStaff ? staff : staff.slice(0, STAFF_PREVIEW_COUNT)
 
   return (
     <Card variant="outlined" sx={{ borderRadius: 3, borderColor: 'divider' }}>
@@ -141,16 +147,28 @@ export function AppointmentStaffManager({ businessId, onStaffAdded }: { business
             {loading ? (
               <Typography variant="body2" color="text.secondary">Loading staff…</Typography>
             ) : staff.length > 0 ? (
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
-                {staff.map((member) => (
-                  <Box key={member.staffId} sx={{ px: 1.2, py: 0.6, borderRadius: 2, bgcolor: 'action.hover' }}>
-                    <Typography sx={{ fontSize: 13, fontWeight: 750 }}>{member.label}</Typography>
-                    {(member.email || member.phone) && (
-                      <Typography variant="caption" color="text.secondary">{[member.email, member.phone].filter(Boolean).join(' · ')}</Typography>
-                    )}
-                  </Box>
-                ))}
-              </Box>
+              <>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
+                  {visibleStaff.map((member) => (
+                    <Box key={member.staffId} sx={{ px: 1.2, py: 0.6, borderRadius: 2, bgcolor: 'action.hover' }}>
+                      <Typography sx={{ fontSize: 13, fontWeight: 750 }}>{member.label}</Typography>
+                      {(member.email || member.phone) && (
+                        <Typography variant="caption" color="text.secondary">{[member.email, member.phone].filter(Boolean).join(' · ')}</Typography>
+                      )}
+                    </Box>
+                  ))}
+                </Box>
+
+                {staff.length > STAFF_PREVIEW_COUNT && (
+                  <Button
+                    size="small"
+                    onClick={() => setShowAllStaff((current) => !current)}
+                    sx={{ mt: 1, textTransform: 'none', fontWeight: 700 }}
+                  >
+                    {showAllStaff ? 'Show less' : `View all (${staff.length})`}
+                  </Button>
+                )}
+              </>
             ) : (
               <Typography variant="body2" color="text.secondary">No staff profiles have been added yet.</Typography>
             )}

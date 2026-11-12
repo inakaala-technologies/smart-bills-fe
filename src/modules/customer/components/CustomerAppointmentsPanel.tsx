@@ -26,10 +26,12 @@ type CustomerAppointmentsPanelProps = {
   onSelectAppointment?: (appointment: AppointmentSummary) => void
 }
 
-function getDefaultAppointmentDateTime() {
-  const date = new Date(Date.now() + 24 * 60 * 60 * 1000)
-  date.setSeconds(0, 0)
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+// Minimum gap between "now" and the first bookable slot.
+// At 10:00 with 60 the first slot shown is 11:00. Set to 0 to show any slot after now.
+const MIN_LEAD_MINUTES = 60
+
+function toLocalDateString(date: Date) {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 }
 
 const formatINR = (value: number) => `₹${value.toLocaleString('en-IN', {
@@ -133,13 +135,23 @@ export function CustomerAppointmentsPanel({
   onSelectAppointment,
 }: CustomerAppointmentsPanelProps) {
   const dispatch = useAppDispatch()
-  const [now] = useState(Date.now)
+
+  // Keep "now" fresh so today's slots expire while the page stays open.
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+  const todayStr = toLocalDateString(new Date(now))
+  const earliestStart = now + MIN_LEAD_MINUTES * 60_000
+
   const [businessId, setBusinessId] = useState('')
   const [serviceId, setServiceId] = useState('')
   const [servicesState, setServicesState] = useState<{ businessId: number; services: AppointmentServiceSummary[]; error?: string }>({ businessId: 0, services: [] })
-  const [appointmentDate, setAppointmentDate] = useState(() => getDefaultAppointmentDateTime().slice(0, 10))
+  const [appointmentDate, setAppointmentDate] = useState(() => toLocalDateString(new Date()))
   const [selectedSlot, setSelectedSlot] = useState('')
   const [staffId, setStaffId] = useState('')
+  const [staffOptions, setStaffOptions] = useState<{ key: string; list: AppointmentAvailability['staff'] }>({ key: '', list: [] })
   const [availabilityState, setAvailabilityState] = useState<{
     businessId: number
     serviceId: number
@@ -194,6 +206,15 @@ export function CustomerAppointmentsPanel({
   const availability = availabilityRequestMatches ? availabilityState.result : null
   const availabilityError = Boolean(availabilityRequestMatches && availabilityState.error)
   const checkingAvailability = Boolean(selectedService && !availability && !availabilityError)
+
+  // Hide slots that are in the past (or too soon). For today, this shows only later slots.
+  const visibleSlots = (availability?.availableSlots ?? []).filter((slot) => new Date(slot).getTime() >= earliestStart)
+  const activeSlot = visibleSlots.includes(selectedSlot) ? selectedSlot : (visibleSlots[0] ?? '')
+
+  // Stable staff list: built once per business + service, not rebuilt when a staff member is picked.
+  const staffKey = `${selectedBusinessId}-${selectedService?.id ?? 0}`
+  const staffList = staffOptions.key === staffKey ? staffOptions.list : []
+
   const sortedAppointments = [...appointments].sort((first, second) => (
     new Date(second.scheduledAt ?? '').getTime() - new Date(first.scheduledAt ?? '').getTime()
   ))
@@ -250,6 +271,8 @@ export function CustomerAppointmentsPanel({
     fetchAppointmentAvailability(selectedBusinessId, selectedService.id, appointmentDate, Number(staffId) || undefined)
       .then((result) => {
         if (!isCurrent) return
+        // Only capture the staff list when no staff is chosen, so picking one doesn't replace the options.
+        if (!staffId) setStaffOptions({ key: staffKey, list: result.staff })
         setAvailabilityState({ businessId: selectedBusinessId, serviceId: selectedService.id, date: appointmentDate, staffId: Number(staffId) || undefined, result })
         setSelectedSlot((current) => result.availableSlots.includes(current) ? current : result.availableSlots[0] ?? '')
       })
@@ -257,10 +280,10 @@ export function CustomerAppointmentsPanel({
         if (isCurrent) setAvailabilityState({ businessId: selectedBusinessId, serviceId: selectedService.id, date: appointmentDate, staffId: Number(staffId) || undefined, result: { date: appointmentDate, availableSlots: [], staff: [] }, error: true })
       })
     return () => { isCurrent = false }
-  }, [appointmentDate, selectedBusinessId, selectedService, staffId])
+  }, [appointmentDate, selectedBusinessId, selectedService, staffId, staffKey])
 
   const handleBookAppointment = async () => {
-    if (!selectedBusinessId || !selectedService || !selectedSlot || new Date(selectedSlot).getTime() <= now) {
+    if (!selectedBusinessId || !selectedService || !activeSlot || new Date(activeSlot).getTime() < earliestStart) {
       setMessage('Choose a business, service, and available future time.')
       setMessageSeverity('error')
       return
@@ -279,7 +302,7 @@ export function CustomerAppointmentsPanel({
       result = await createAppointment({
         businessId: selectedBusinessId,
         appointmentServiceId: selectedService.id,
-        scheduledAt: selectedSlot,
+        scheduledAt: activeSlot,
         staffId: Number(staffId) || undefined,
         notes: notes.trim() || undefined,
         loyaltyPointsToRedeem: requestedPoints,
@@ -308,7 +331,7 @@ export function CustomerAppointmentsPanel({
       serviceName: selectedService.name,
       servicePrice: selectedService.price,
       durationMinutes: selectedService.durationMinutes,
-      scheduledAt: selectedSlot,
+      scheduledAt: activeSlot,
       status: 'BOOKED',
       notes: notes.trim() || undefined,
       homeVisit: isHomeVisit,
@@ -380,17 +403,36 @@ export function CustomerAppointmentsPanel({
               <Typography variant="subtitle1" sx={{ color: 'text.primary', fontWeight: 800, fontSize: 15 }}>Book a service</Typography>
               <Typography variant="caption" color="text.secondary">Choose a service and an open appointment time.</Typography>
             </Box>
-            {availability?.availableSlots.length ? <Chip size="small" color="success" variant="outlined" label={`${availability.availableSlots.length} times`} /> : null}
+            {visibleSlots.length ? <Chip size="small" color="success" variant="outlined" label={`${visibleSlots.length} times`} /> : null}
           </Stack>
           <Chip label="Home services only" size="small" clickable color={homeServicesOnly ? 'success' : 'default'} variant={homeServicesOnly ? 'filled' : 'outlined'} onClick={() => setHomeServicesOnly((current) => !current)} aria-pressed={homeServicesOnly} sx={{ alignSelf: 'flex-start' }} />
           {appointmentBusinesses.length === 0 && <Alert severity="info" sx={{ borderRadius: 2 }}>{homeServicesOnly ? 'No businesses offering home services are available.' : 'None of your businesses are currently accepting appointment requests.'}</Alert>}
-          <TextField select label="Business" value={selectedBusinessId ? String(selectedBusinessId) : ''} onChange={(event) => { setBusinessId(event.target.value); setServiceId(''); setLoyaltyPointsToRedeem('0') }} disabled={appointmentBusinesses.length === 0} size="small" fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}>
+          <TextField
+            select
+            label="Business"
+            value={selectedBusinessId ? String(selectedBusinessId) : ''}
+            onChange={(event) => { setBusinessId(event.target.value); setServiceId(''); setStaffId(''); setSelectedSlot(''); setLoyaltyPointsToRedeem('0') }}
+            disabled={appointmentBusinesses.length === 0}
+            size="small"
+            fullWidth
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}
+          >
             {appointmentBusinesses.map((business) => <MenuItem key={business.id} value={String(business.id)}>{business.businessName ?? business.name ?? `Business ${business.id}`}{business.homeServicesEnabled ? ' · 🏠 Home services' : ''}</MenuItem>)}
           </TextField>
           {servicesLoading ? (
             <Skeleton variant="rounded" height={40} />
           ) : (
-            <TextField select label="Service" value={serviceId} onChange={(event) => setServiceId(event.target.value)} disabled={!services.length} size="small" required fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}>
+            <TextField
+              select
+              label="Service"
+              value={serviceId}
+              onChange={(event) => { setServiceId(event.target.value); setStaffId(''); setSelectedSlot('') }}
+              disabled={!services.length}
+              size="small"
+              required
+              fullWidth
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}
+            >
               {services.map((service) => <MenuItem key={service.id} value={String(service.id)}>{service.name} · ₹{service.price.toLocaleString('en-IN')} · {service.durationMinutes} min</MenuItem>)}
             </TextField>
           )}
@@ -450,19 +492,41 @@ export function CustomerAppointmentsPanel({
           )}
           {currentLoyaltyError && <Alert severity="error">{currentLoyaltyError}</Alert>}
           {!servicesLoading && !servicesError && selectedBusinessId > 0 && services.length === 0 && appointmentBusinesses.length > 0 && <Alert severity="info" sx={{ borderRadius: 2 }}>This business has not added any bookable services yet.</Alert>}
-          <TextField label="Date" type="date" value={appointmentDate} onChange={(event) => { setAppointmentDate(event.target.value); setSelectedSlot('') }} size="small" required fullWidth slotProps={{ inputLabel: { shrink: true } }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }} />
-          {availability && availability.staff.length > 0 && (
-            <TextField select label="Staff or resource" value={staffId} onChange={(event) => { setStaffId(event.target.value); setSelectedSlot('') }} size="small" fullWidth>
+          <TextField
+            label="Date"
+            type="date"
+            value={appointmentDate}
+            onChange={(event) => {
+              const value = event.target.value
+              if (!value) return
+              setAppointmentDate(value < todayStr ? todayStr : value)
+              setSelectedSlot('')
+            }}
+            size="small"
+            required
+            fullWidth
+            slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: todayStr } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}
+          />
+          {staffList.length > 0 && (
+            <TextField
+              select
+              label="Staff or resource"
+              value={staffId}
+              onChange={(event) => { setStaffId(event.target.value); setSelectedSlot('') }}
+              size="small"
+              fullWidth
+            >
               <MenuItem value="">Any available staff</MenuItem>
-              {availability.staff.map((staff) => <MenuItem key={staff.staffId} value={String(staff.staffId)}>{staff.label}</MenuItem>)}
+              {staffList.map((staff) => <MenuItem key={staff.staffId} value={String(staff.staffId)}>{staff.label}</MenuItem>)}
             </TextField>
           )}
           <Box>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 750 }}>AVAILABLE TIMES</Typography>
-            {availability?.availableSlots.length ? (
+            {visibleSlots.length ? (
               <Box sx={{ mt: 0.7, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(78px, 1fr))', gap: 0.7 }}>
-                {availability.availableSlots.map((slot) => (
-                  <Button key={slot} size="small" variant={selectedSlot === slot ? 'contained' : 'outlined'} onClick={() => setSelectedSlot(slot)} sx={{ textTransform: 'none', minWidth: 0, px: 0.8, whiteSpace: 'nowrap' }}>
+                {visibleSlots.map((slot) => (
+                  <Button key={slot} size="small" variant={activeSlot === slot ? 'contained' : 'outlined'} onClick={() => setSelectedSlot(slot)} sx={{ textTransform: 'none', minWidth: 0, px: 0.8, whiteSpace: 'nowrap' }}>
                     {new Date(slot).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
                   </Button>
                 ))}
@@ -477,7 +541,7 @@ export function CustomerAppointmentsPanel({
             ) : <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>No available times for this day.</Typography>}
           </Box>
           <TextField label="Note (optional)" value={notes} onChange={(event) => setNotes(event.target.value)} size="small" multiline minRows={2} fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }} />
-          <Button variant="contained" startIcon={<CalendarPlus size={17} />} loading={isSaving} onClick={handleBookAppointment} disabled={!selectedService || !selectedSlot || servicesLoading} fullWidth sx={{ minHeight: 46, borderRadius: 2, textTransform: 'none', fontWeight: 800 }}>
+          <Button variant="contained" startIcon={<CalendarPlus size={17} />} loading={isSaving} onClick={handleBookAppointment} disabled={!selectedService || !activeSlot || servicesLoading} fullWidth sx={{ minHeight: 46, borderRadius: 2, textTransform: 'none', fontWeight: 800 }}>
             {isSaving ? 'Sending request…' : 'Request appointment'}
           </Button>
         </Stack>

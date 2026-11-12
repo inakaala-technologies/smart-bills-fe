@@ -1,5 +1,4 @@
-
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Alert,
   Box,
@@ -82,6 +81,15 @@ export function BusinessProductsSection({ businessId, onProductCountChange, }: P
   const [message, setMessage] = useState('')
   const [error, setError] = useState(false)
 
+  // Used to scroll the add/edit form into view when "Edit product" is clicked
+  const formCardRef = useRef<HTMLDivElement | null>(null)
+
+  const scrollToForm = () => {
+    requestAnimationFrame(() => {
+      formCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
   const loadProducts = useCallback(async () => {
     if (!businessId) {
       setProducts([])
@@ -101,11 +109,11 @@ export function BusinessProductsSection({ businessId, onProductCountChange, }: P
       }
 
       const activeProducts = result.products.filter(
-  (product) => product.status === 'ACTIVE',
-)
+        (product) => product.status === 'ACTIVE',
+      )
 
-setProducts(activeProducts)
-onProductCountChange?.(activeProducts.length)
+      setProducts(activeProducts)
+      onProductCountChange?.(activeProducts.length)
     } catch {
       setError(true)
       setMessage('Failed to load products. Please try again.')
@@ -127,6 +135,7 @@ onProductCountChange?.(activeProducts.length)
     if (!businessId) {
       setError(true)
       setMessage('Select a business profile before saving products.')
+      scrollToForm()
       return
     }
 
@@ -215,6 +224,7 @@ onProductCountChange?.(activeProducts.length)
     })
     setMessage('')
     setError(false)
+    scrollToForm()
   }
 
   const handleDeactivate = async (productId: number) => {
@@ -284,7 +294,7 @@ onProductCountChange?.(activeProducts.length)
           }}
         >
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               <Box
                 sx={{
                   width: 40,
@@ -364,12 +374,14 @@ onProductCountChange?.(activeProducts.length)
 
         {/* Add / edit product form */}
         <Card
+          ref={formCardRef}
           variant="outlined"
           sx={{
             borderRadius: 3.5,
             borderColor: 'divider',
             boxShadow: '0 4px 18px rgba(20, 50, 45, 0.035)',
             overflow: 'hidden',
+            scrollMarginTop: 80,
           }}
         >
           <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
@@ -378,7 +390,7 @@ onProductCountChange?.(activeProducts.length)
                 <Stack
                   direction="row"
                   spacing={1}
-                  sx={{ mb: 0.5, alignItems:"center" }}
+                  sx={{ mb: 0.5, alignItems: 'center' }}
                 >
                   <Typography
                     variant="h6"
@@ -698,7 +710,8 @@ onProductCountChange?.(activeProducts.length)
                       sx={{
                         p: 2,
                         border: '1px solid',
-                        borderColor: 'divider',
+                        borderColor:
+                          editingId === product.id ? 'primary.main' : 'divider',
                         borderRadius: 3,
                         backgroundColor: 'background.paper',
                         minWidth: 0,
@@ -739,7 +752,7 @@ onProductCountChange?.(activeProducts.length)
                         <Stack
                           direction="row"
                           useFlexGap
-                          sx={{ flexWrap: "wrap", gap: 1 }}
+                          sx={{ flexWrap: 'wrap', gap: 1 }}
                         >
                           <Box
                             sx={{
@@ -869,7 +882,7 @@ onProductCountChange?.(activeProducts.length)
                         <Stack
                           direction="row"
                           spacing={1}
-                          sx={{ alignItems: "center" }}
+                          sx={{ alignItems: 'center' }}
                         >
                           <Button
                             variant="outlined"

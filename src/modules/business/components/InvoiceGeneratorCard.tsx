@@ -99,6 +99,10 @@ export function InvoiceGeneratorCard({
   const [isAddingCustomer, setIsAddingCustomer] = useState(false)
   const [addCustomerMessage, setAddCustomerMessage] = useState('')
   const invoiceMode = invoiceModeOverride ?? (membershipPlans.length > 0 ? 'membership' : 'products')
+  const isMembership = invoiceMode === 'membership'
+  // Membership invoices only ever use one line item (the member's saved plan).
+  // Products invoices use every row in the form, exactly as before.
+  const items = isMembership ? invoiceForm.items.slice(0, 1) : invoiceForm.items
   const currentProductsState = productsState?.businessId === businessId ? productsState : null
   const businessProducts = currentProductsState?.products ?? []
   const productsLoading = currentProductsState?.loading ?? false
@@ -110,6 +114,13 @@ export function InvoiceGeneratorCard({
     settings: LoyaltyProgramSettings
   } | null>(null)
   const [loyaltyError, setLoyaltyError] = useState<{ customerId: number; message: string } | null>(null)
+
+  // On the Membership tab, drop any leftover rows (e.g. the empty "2 Item").
+  // Removes one row per run so it is safe even if the parent's onRemoveItem uses a stale closure.
+  useEffect(() => {
+    if (!open || !isMembership || invoiceForm.items.length <= 1) return
+    onRemoveItem(invoiceForm.items[invoiceForm.items.length - 1].id)
+  }, [open, isMembership, invoiceForm.items, onRemoveItem])
 
   useEffect(() => {
     if (!open || !selectedCustomer) return
@@ -140,58 +151,59 @@ export function InvoiceGeneratorCard({
       void dispatch(fetchBusinessMembershipPlans(businessId))
     }
   }, [businessId, dispatch, membershipPlanState?.loaded, membershipPlanState?.loading, open])
+
   useEffect(() => {
-  if (!open || !businessId) return
+    if (!open || !businessId) return
 
-  let cancelled = false
+    let cancelled = false
 
-  const loadProducts = async () => {
-    setProductsState((current) => ({
-      businessId,
-      products: current?.businessId === businessId ? current.products : [],
-      loading: true,
-      error: '',
-    }))
-
-    try {
-      const result = await getBusinessProducts(businessId)
-
-      if (cancelled) return
-
-      if (!result.ok) {
-        setProductsState({
-          businessId,
-          products: [],
-          loading: false,
-          error: result.message ?? 'Could not load saved products.',
-        })
-        return
-      }
-
-      setProductsState({
+    const loadProducts = async () => {
+      setProductsState((current) => ({
         businessId,
-        products: result.products.filter((product) => product.status === 'ACTIVE'),
-        loading: false,
+        products: current?.businessId === businessId ? current.products : [],
+        loading: true,
         error: '',
-      })
-    } catch (error) {
-      if (!cancelled) {
+      }))
+
+      try {
+        const result = await getBusinessProducts(businessId)
+
+        if (cancelled) return
+
+        if (!result.ok) {
+          setProductsState({
+            businessId,
+            products: [],
+            loading: false,
+            error: result.message ?? 'Could not load saved products.',
+          })
+          return
+        }
+
         setProductsState({
           businessId,
-          products: [],
+          products: result.products.filter((product) => product.status === 'ACTIVE'),
           loading: false,
-          error: error instanceof Error ? error.message : 'Could not load saved products.',
+          error: '',
         })
+      } catch (error) {
+        if (!cancelled) {
+          setProductsState({
+            businessId,
+            products: [],
+            loading: false,
+            error: error instanceof Error ? error.message : 'Could not load saved products.',
+          })
+        }
       }
     }
-  }
 
-  void loadProducts()
+    void loadProducts()
 
-  return () => {
-    cancelled = true
-  }
-}, [open, businessId])
+    return () => {
+      cancelled = true
+    }
+  }, [open, businessId])
 
   const payLater = payLaterChosen || Boolean(invoiceForm.dueDate)
   const discountOpen = showDiscount || Number(invoiceForm.discountValue) > 0
@@ -208,55 +220,53 @@ export function InvoiceGeneratorCard({
     onClose()
   }
 
-  
-const handleAddCustomer = async () => {
-  const name = newCustomerName.trim()
-  const phone = newCustomerPhone.trim()
-  const email = newCustomerEmail.trim()
+  const handleAddCustomer = async () => {
+    const name = newCustomerName.trim()
+    const phone = newCustomerPhone.trim()
+    const email = newCustomerEmail.trim()
 
-  if (!name || !phone) {
-    setAddCustomerMessage('Enter the customer name and mobile number.')
-    return
-  }
-
-  setIsAddingCustomer(true)
-  setAddCustomerMessage('')
-
-  try {
-    const result = await addCustomerToBusiness(businessId, {
-      name,
-      phone,
-      email: email || undefined,
-    })
-
-    if (!result.ok || !result.customer) {
-      setAddCustomerMessage(result.message ?? 'Could not add this customer.')
+    if (!name || !phone) {
+      setAddCustomerMessage('Enter the customer name and mobile number.')
       return
     }
 
-    onCustomerSelection(result.customer)
-    onInvoiceFieldChange('customerId', String(result.customer.id))
-    onCustomerSearchChange('')
-
-    setNewCustomerName('')
-    setNewCustomerPhone('')
-    setNewCustomerEmail('')
-    setIsAddCustomerOpen(false)
+    setIsAddingCustomer(true)
     setAddCustomerMessage('')
-  } catch {
-    setAddCustomerMessage('Could not add this customer. Please try again.')
-  } finally {
-    setIsAddingCustomer(false)
-  }
-}
 
+    try {
+      const result = await addCustomerToBusiness(businessId, {
+        name,
+        phone,
+        email: email || undefined,
+      })
+
+      if (!result.ok || !result.customer) {
+        setAddCustomerMessage(result.message ?? 'Could not add this customer.')
+        return
+      }
+
+      onCustomerSelection(result.customer)
+      onInvoiceFieldChange('customerId', String(result.customer.id))
+      onCustomerSearchChange('')
+
+      setNewCustomerName('')
+      setNewCustomerPhone('')
+      setNewCustomerEmail('')
+      setIsAddCustomerOpen(false)
+      setAddCustomerMessage('')
+    } catch {
+      setAddCustomerMessage('Could not add this customer. Please try again.')
+    } finally {
+      setIsAddingCustomer(false)
+    }
+  }
 
   const getCustomerLabel = (customer: { fullName?: string; email?: string; phoneNumber?: string } | null | undefined) => {
     if (!customer) return ''
     return `${customer.fullName ?? 'Customer'}${customer.email ? ` • ${customer.email}` : ''}${customer.phoneNumber ? ` • ${customer.phoneNumber}` : ''}`
   }
 
-  const totals = invoiceForm.items.reduce((result, item) => {
+  const totals = items.reduce((result, item) => {
     const quantity = Number(item.quantity)
     const unitPrice = Number(item.unitPrice)
     const gstRate = Number(item.gstRate)
@@ -273,7 +283,7 @@ const handleAddCustomer = async () => {
     ? Number((invoiceForm.discountType === 'PERCENTAGE' ? grossTotal * discountInput / 100 : discountInput).toFixed(2))
     : 0
   const discountedTotal = Math.max(0, Number((grossTotal - invoiceDiscount).toFixed(2)))
-  
+
   const handleContinueToPreview = () => {
     if (!selectedCustomer) {
       setPreviewError('Select a customer before continuing.')
@@ -281,7 +291,7 @@ const handleAddCustomer = async () => {
     }
 
     if (
-      invoiceForm.items.some(
+      items.some(
         (item) =>
           !item.productName.trim() ||
           !Number.isFinite(Number(item.quantity)) ||
@@ -580,27 +590,30 @@ const handleAddCustomer = async () => {
           <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
             <Stack direction="row" spacing={0.9} sx={{ alignItems: 'center' }}>
               <Box sx={{ width: 26, height: 26, display: 'grid', placeItems: 'center', borderRadius: 1.6, bgcolor: 'primary.main', color: '#fff' }}><PackagePlus size={14} /></Box>
-              <Typography variant="subtitle2" sx={{ color: 'text.primary', fontWeight: 850 }}>{invoiceMode === 'membership' ? 'Invoice items' : 'Products & services'}</Typography>
+              <Typography variant="subtitle2" sx={{ color: 'text.primary', fontWeight: 850 }}>{isMembership ? 'Invoice items' : 'Products & services'}</Typography>
             </Stack>
-            <Button
-              size="small"
-              variant="contained"
-              disableElevation
-              startIcon={<Plus size={15} />}
-              onClick={onAddItem}
-              sx={{ flexShrink: 0, px: 1.4, minHeight: '34px !important', borderRadius: 2, fontWeight: 750, textTransform: 'none' }}
-            >
-              Add product
-            </Button>
+            {/* "Add product" is only for the Products tab; a membership invoice has exactly one item. */}
+            {!isMembership && (
+              <Button
+                size="small"
+                variant="contained"
+                disableElevation
+                startIcon={<Plus size={15} />}
+                onClick={onAddItem}
+                sx={{ flexShrink: 0, px: 1.4, minHeight: '34px !important', borderRadius: 2, fontWeight: 750, textTransform: 'none' }}
+              >
+                Add product
+              </Button>
+            )}
           </Stack>
-          {(productsLoading || productsError || businessProducts.length === 0) && (
+          {!isMembership && (productsLoading || productsError || businessProducts.length === 0) && (
             <Typography variant="caption" color="text.secondary" sx={{ mt: '-8px !important' }}>
               {productsLoading ? 'Loading saved products…' : productsError ? 'Saved products could not be loaded. Enter items manually.' : 'No saved products yet. Enter items manually.'}
             </Typography>
           )}
 
           <Stack spacing={1.2}>
-            {invoiceForm.items.map((item, index) => {
+            {items.map((item, index) => {
               const quantity = Number(item.quantity)
               const unitPrice = Number(item.unitPrice)
               const gstRate = Number(item.gstRate)
@@ -615,11 +628,15 @@ const handleAddCustomer = async () => {
                     <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 750 }}>Item</Typography>
                     <Box sx={{ flex: 1 }} />
                     <Typography variant="body2" sx={{ fontWeight: 850, color: lineTotal > 0 ? 'primary.main' : 'text.disabled' }}>{formatMoney(lineTotal)}</Typography>
-                    <IconButton aria-label={`Remove item ${index + 1}`} size="small" onClick={() => onRemoveItem(item.id)} disabled={invoiceForm.items.length <= 1} sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}><Trash2 size={15} /></IconButton>
+                    {/* Delete is only for the Products tab; removing the only membership item would leave an empty invoice. */}
+                    {!isMembership && (
+                      <IconButton aria-label={`Remove item ${index + 1}`} size="small" onClick={() => onRemoveItem(item.id)} disabled={invoiceForm.items.length <= 1} sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}><Trash2 size={15} /></IconButton>
+                    )}
                   </Stack>
                   <Autocomplete<BusinessProduct, false, false, true>
                     freeSolo
                     fullWidth
+                    readOnly={isMembership}
                     options={businessProducts}
                     loading={productsLoading}
                     value={item.productName}
@@ -663,14 +680,28 @@ const handleAddCustomer = async () => {
                       <TextField
                         {...params}
                         size="small"
-                        label={invoiceMode === 'membership' ? 'Product name' : 'Product or service'}
+                        label={isMembership ? 'Product name' : 'Product or service'}
                         placeholder="Select a saved item or type a name"
                       />
                     )}
                   />
                   <Box sx={{ display: 'grid', gridTemplateColumns: '0.8fr 1.2fr 0.85fr', gap: { xs: 0.7, sm: 1 } }}>
-                    <TextField size="small" label="Qty" type="number" value={item.quantity} onChange={(event) => onInvoiceItemChange(item.id, 'quantity', event.target.value)} slotProps={{ htmlInput: { min: 1, step: 1 } }} />
-                    <TextField size="small" label="Unit price" type="number" value={item.unitPrice} onChange={(event) => onInvoiceItemChange(item.id, 'unitPrice', event.target.value)} slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }} />
+                    <TextField
+                      size="small"
+                      label="Qty"
+                      type="number"
+                      value={item.quantity}
+                      onChange={(event) => onInvoiceItemChange(item.id, 'quantity', event.target.value)}
+                      slotProps={{ htmlInput: { min: 1, step: 1 }, input: { readOnly: isMembership } }}
+                    />
+                    <TextField
+                      size="small"
+                      label="Unit price"
+                      type="number"
+                      value={item.unitPrice}
+                      onChange={(event) => onInvoiceItemChange(item.id, 'unitPrice', event.target.value)}
+                      slotProps={{ htmlInput: { min: 0.01, step: 0.01 }, input: { readOnly: isMembership } }}
+                    />
                     <TextField size="small" label="GST %" type="number" value={item.gstRate} onChange={(event) => onInvoiceItemChange(item.id, 'gstRate', event.target.value)} slotProps={{ htmlInput: { min: 0, step: 0.01 } }} />
                   </Box>
                 </Stack>
@@ -735,8 +766,8 @@ const handleAddCustomer = async () => {
               )}
               <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', gap: 1, mt: 0.4, pt: 1.1, borderTop: '1px solid', borderColor: 'divider' }}>
                 <Box>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>                  {payLater ? 'Amount due' : 'Amount paid'}</Typography>
-                                    <Typography variant="caption" color="text.secondary">Including taxes</Typography>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>{payLater ? 'Amount due' : 'Amount paid'}</Typography>
+                  <Typography variant="caption" color="text.secondary">Including taxes</Typography>
                 </Box>
                 <Typography variant="h5" color="primary.main" sx={{ fontWeight: 900, letterSpacing: '-0.04em' }}>{formatMoney(discountedTotal)}</Typography>
               </Stack>
@@ -782,70 +813,68 @@ const handleAddCustomer = async () => {
           {previewError && <Alert severity="error">{previewError}</Alert>}
           {invoiceMessage && <Alert severity={invoiceMessageSeverity}>{invoiceMessage}</Alert>}
         </Stack>
-          </Box>
+      </Box>
     ) : (
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: { xs: 1.4, sm: 2 } }}>
-         <Paper
+        <Paper
           variant="outlined"
           sx={{ p: { xs: 2, sm: 3 }, borderRadius: 2, boxShadow: 'none' }}
         >
-         
-        <Stack spacing={0.5} sx={{ mb: 2 }}>
-          <Typography variant="h5" sx={{ fontWeight: 900 }}>
-            {businessName}
+          <Stack spacing={0.5} sx={{ mb: 2 }}>
+            <Typography variant="h5" sx={{ fontWeight: 900 }}>
+              {businessName}
+            </Typography>
+
+            {business?.businessType && (
+              <Typography variant="body2" color="text.secondary">
+                {business.businessType}
+              </Typography>
+            )}
+
+            {business?.address && (
+              <Typography variant="body2" color="text.secondary">
+                {business.address}
+              </Typography>
+            )}
+
+            {(business?.city || business?.region || business?.country) && (
+              <Typography variant="body2" color="text.secondary">
+                {[business.city, business.region, business.country]
+                  .filter(Boolean)
+                  .join(', ')}
+              </Typography>
+            )}
+
+            {business?.phone && (
+              <Typography variant="body2">
+                Phone: {business.phone}
+              </Typography>
+            )}
+
+            {business?.email && (
+              <Typography variant="body2">
+                Email: {business.email}
+              </Typography>
+            )}
+
+            {business?.gstin && (
+              <Typography variant="body2">
+                GSTIN: {business.gstin}
+              </Typography>
+            )}
+
+            {business?.pan && (
+              <Typography variant="body2">
+                PAN: {business.pan}
+              </Typography>
+            )}
+          </Stack>
+
+          <Divider sx={{ my: 2 }} />
+
+          <Typography variant="h5" sx={{ fontWeight: 900, mb: 0.5 }}>
+            INVOICE
           </Typography>
-
-          {business?.businessType && (
-            <Typography variant="body2" color="text.secondary">
-              {business.businessType}
-            </Typography>
-          )}
-
-          {business?.address && (
-            <Typography variant="body2" color="text.secondary">
-              {business.address}
-            </Typography>
-          )}
-
-          {(business?.city || business?.region || business?.country) && (
-            <Typography variant="body2" color="text.secondary">
-              {[business.city, business.region, business.country]
-                .filter(Boolean)
-                .join(', ')}
-            </Typography>
-          )}
-
-          {business?.phone && (
-            <Typography variant="body2">
-              Phone: {business.phone}
-            </Typography>
-          )}
-
-          {business?.email && (
-            <Typography variant="body2">
-              Email: {business.email}
-            </Typography>
-          )}
-
-          {business?.gstin && (
-            <Typography variant="body2">
-              GSTIN: {business.gstin}
-            </Typography>
-          )}
-
-          {business?.pan && (
-            <Typography variant="body2">
-              PAN: {business.pan}
-            </Typography>
-          )}
-        </Stack>
-
-        <Divider sx={{ my: 2 }} />
-
-        <Typography variant="h5" sx={{ fontWeight: 900, mb: 0.5 }}>
-          INVOICE
-        </Typography>
-
 
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Bill summary
@@ -888,7 +917,7 @@ const handleAddCustomer = async () => {
           <Box sx={{ borderTop: '1px solid', borderColor: 'divider', my: 2 }} />
 
           <Stack spacing={1.5}>
-            {invoiceForm.items.map((item, index) => {
+            {items.map((item, index) => {
               const quantity = Number(item.quantity) || 0
               const unitPrice = Number(item.unitPrice) || 0
               const gstRate = Number(item.gstRate) || 0
@@ -1070,7 +1099,7 @@ const handleAddCustomer = async () => {
         </DialogActions>
       </Box>
     </Dialog>
-    
+
   </>
   )
 }

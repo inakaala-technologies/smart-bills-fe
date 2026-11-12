@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { Alert, Avatar, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, InputAdornment, Stack, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material'
-import { ArrowLeft, Check, MoreHorizontal, Plus, Search, Send, X } from 'lucide-react'
+import { useCallback, useState } from 'react'
+import { Alert, Avatar, Box, Button, Dialog, IconButton, InputAdornment, Stack, TextField, Tooltip, Typography } from '@mui/material'
+import { ArrowLeft, Check, Download, FileText, Mail, MoreHorizontal, Mic, Plus, Search, Send, Share2 } from 'lucide-react'
 
 export type InvoiceListRow = {
   id: number
@@ -34,23 +34,59 @@ export type InvoiceListPanelProps = {
   onPreviewClosed?: () => void
 }
 
+/* Figma tokens */
+const PURPLE = '#4E2BCC'
+const LIME = '#CDF27E'
+const PURPLE_DARK = '#331A88'
+const HEADER_GRADIENT = 'linear-gradient(180deg, #F1EBFC 0%, #CDBAF1 14%, #AE89F2 30%, #8C59F2 46%, #5B34D4 66%, #331A88 84%, #0F032D 100%)'
+const PAGE_BG = 'var(--mui-palette-background-default)'
+const LINE = 'var(--mui-palette-divider)'
+const INK = 'var(--mui-palette-text-primary)'
+const MUTED = 'var(--mui-palette-text-secondary)'
+const CARD_BG = 'var(--mui-palette-background-paper)'
+const SOFT_BG = 'var(--mui-palette-action-hover)'
+
+/* Pill colours on the Invoice Detail screen */
+const pillOf = (token: string) => ({
+  color: `var(--mui-palette-${token}-main)`,
+  bg: `color-mix(in srgb, var(--mui-palette-${token}-main) 16%, var(--mui-palette-background-paper))`,
+  border: `color-mix(in srgb, var(--mui-palette-${token}-main) 38%, var(--mui-palette-background-paper))`,
+})
+const detailPill: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  PAID: { label: 'Paid', ...pillOf('success') },
+  SENT: { label: 'Pending', ...pillOf('info') },
+  PARTIAL: { label: 'Partial', ...pillOf('warning') },
+  OVERDUE: { label: 'Overdue', ...pillOf('error') },
+  DRAFT: { label: 'Draft', color: MUTED, bg: SOFT_BG, border: LINE },
+}
+
 const invoiceFilters = [
   { label: 'All', value: 'ALL' },
   { label: 'Draft', value: 'DRAFT' },
   { label: 'Pending', value: 'SENT' },
+  { label: 'Partial', value: 'PARTIAL' },
   { label: 'Paid', value: 'PAID' },
   { label: 'Overdue', value: 'OVERDUE' },
 ] as const
 
-const invoiceColumns = 'minmax(0, 1.5fr) minmax(52px, 0.7fr) auto minmax(32px, 0.45fr) 24px'
-
 const invoiceStatusStyles: Record<string, { label: string; color: string; background: string }> = {
   DRAFT: { label: 'Draft', color: 'var(--mui-palette-text-secondary)', background: 'var(--mui-palette-action-hover)' },
   SENT: { label: 'Pending', color: 'var(--mui-palette-info-main)', background: 'color-mix(in srgb, var(--mui-palette-info-main) 18%, var(--mui-palette-background-paper))' },
-  PARTIAL: { label: 'Partially paid', color: 'var(--mui-palette-warning-main)', background: 'color-mix(in srgb, var(--mui-palette-warning-main) 18%, var(--mui-palette-background-paper))' },
+  PARTIAL: { label: 'Partial', color: 'var(--mui-palette-warning-main)', background: 'color-mix(in srgb, var(--mui-palette-warning-main) 18%, var(--mui-palette-background-paper))' },
   PAID: { label: 'Paid', color: 'var(--mui-palette-success-main)', background: 'color-mix(in srgb, var(--mui-palette-success-main) 18%, var(--mui-palette-background-paper))' },
   OVERDUE: { label: 'Overdue', color: 'var(--mui-palette-error-main)', background: 'color-mix(in srgb, var(--mui-palette-error-main) 18%, var(--mui-palette-background-paper))' },
 }
+
+const pillButtonSx = {
+  minHeight: 26,
+  px: 1.1,
+  py: 0.2,
+  borderRadius: '999px',
+  fontSize: 11,
+  fontWeight: 600,
+  lineHeight: 1,
+  textTransform: 'none',
+} as const
 
 function getDisplayStatus(row: InvoiceListRow) {
   const status = row.status.trim().replace(/\s+/g, '_').toUpperCase()
@@ -60,17 +96,20 @@ function getDisplayStatus(row: InvoiceListRow) {
   return status === 'PAST_DUE' || (isUnpaid && Boolean(row.dueDate) && row.dueDate! < today) ? 'OVERDUE' : status
 }
 
-function formatDate(value?: string) {
+function formatDetailDate(value?: string) {
   if (!value) return '—'
   const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  if (Number.isNaN(date.getTime())) return value
+  const day = String(date.getDate()).padStart(2, '0')
+  const month = date.toLocaleDateString('en-IN', { month: 'short' })
+  return `${day} ${month}, ${date.getFullYear()}`
 }
 
 function formatMoney(value?: number) {
   return `₹${Number(value ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-export function InvoiceListPanel({ invoiceRows, onBack, onCreateInvoice, onUpdateStatus, businessDetails, previewInvoiceId, onPreviewClosed }: InvoiceListPanelProps) {
+export function InvoiceListPanel({ invoiceRows, onBack, onCreateInvoice, onUpdateStatus, previewInvoiceId, onPreviewClosed }: InvoiceListPanelProps) {
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [savingInvoiceId, setSavingInvoiceId] = useState<number | null>(null)
@@ -78,6 +117,13 @@ export function InvoiceListPanel({ invoiceRows, onBack, onCreateInvoice, onUpdat
   const [actionMessage, setActionMessage] = useState('')
   const [actionError, setActionError] = useState(false)
   const displayedPreview = previewInvoice ?? invoiceRows.find((row) => row.id === previewInvoiceId) ?? null
+  /* Always open the detail screen scrolled to the top so "Billed to" is visible */
+  const detailScrollRef = useCallback((element: HTMLDivElement | null) => { if (element) element.scrollTop = 0 }, [])
+  const detailStatus = displayedPreview ? getDisplayStatus(displayedPreview) : ''
+  const detailPillStyle = detailPill[detailStatus] ?? { label: displayedPreview?.status ?? '', color: MUTED, bg: SOFT_BG, border: LINE }
+  const detailSubtotal = displayedPreview
+    ? displayedPreview.subtotal ?? (displayedPreview.totalAmount != null ? displayedPreview.totalAmount - (displayedPreview.gstAmount ?? 0) : undefined)
+    : undefined
 
   const closePreview = () => {
     setPreviewInvoice(null)
@@ -123,58 +169,95 @@ export function InvoiceListPanel({ invoiceRows, onBack, onCreateInvoice, onUpdat
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <IconButton aria-label="Back to dashboard" onClick={onBack} sx={{ width: 32, height: 36, ml: -0.5, color: 'text.primary' }}>
-          <ArrowLeft size={21} />
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75 }}>
+      {/* Title */}
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
+        <IconButton aria-label="Back to dashboard" onClick={onBack} sx={{ width: 32, height: 32, ml: -0.75, mt: -0.2, color: 'text.primary' }}>
+          <ArrowLeft size={20} />
         </IconButton>
-        <Typography sx={{ color: 'text.primary', fontWeight: 800, fontSize: 17 }}>Invoices &amp; Receipts</Typography>
+        <Box>
+          <Typography component="h2" sx={{ color: 'text.primary', fontWeight: 500, fontSize: 22, lineHeight: 1.2 }}>Invoices</Typography>
+          <Typography sx={{ mt: 0.4, color: 'text.secondary', fontSize: 12.5, lineHeight: 1.35 }}>
+            Create, track and manage your invoices with ease
+          </Typography>
+        </Box>
       </Box>
 
-      <TextField
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        placeholder="Search customer, invoice number..."
-        size="small"
-        fullWidth
-        slotProps={{
-          htmlInput: { 'aria-label': 'Search customer or invoice number' },
-          input: { startAdornment: <InputAdornment position="start"><Search size={17} color="var(--mui-palette-text-secondary)" /></InputAdornment> },
-        }}
-        sx={{ '& .MuiOutlinedInput-root': { minHeight: 40, borderRadius: 2.5, backgroundColor: 'background.paper', fontSize: 12, '& fieldset': { borderColor: 'var(--mui-palette-divider)' } } }}
-      />
+      {/* Search + lime action button */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+        <TextField
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search"
+          size="small"
+          fullWidth
+          slotProps={{
+            htmlInput: { 'aria-label': 'Search customer or invoice number' },
+            input: {
+              startAdornment: <InputAdornment position="start"><Search size={18} color="var(--mui-palette-text-secondary)" /></InputAdornment>,
+              endAdornment: <InputAdornment position="end"><Mic size={18} color="var(--mui-palette-text-secondary)" /></InputAdornment>,
+            },
+          }}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              height: 48,
+              borderRadius: '999px',
+              backgroundColor: 'action.hover',
+              fontSize: 14,
+              '& fieldset': { border: 'none' },
+            },
+          }}
+        />
+        <IconButton
+          aria-label="Create invoice"
+          onClick={onCreateInvoice}
+          sx={{ width: 48, height: 48, flexShrink: 0, bgcolor: LIME, color: PURPLE_DARK, '&:hover': { bgcolor: '#BFE667' } }}
+        >
+          <Plus size={22} strokeWidth={2.4} />
+        </IconButton>
+      </Box>
 
-      <ToggleButtonGroup
-        exclusive
-        value={statusFilter}
-        onChange={(_, value: string | null) => value && setStatusFilter(value)}
+      {/* Filter chips */}
+      <Box
+        role="group"
         aria-label="Filter invoices by status"
-        sx={{ width: '100%', gap: 0.8, '& .MuiToggleButtonGroup-grouped': { flex: 1, minWidth: 0, px: 0.5, py: 0.65, border: '1px solid var(--mui-palette-divider) !important', borderRadius: '999px !important', color: 'text.secondary', backgroundColor: 'background.paper', fontSize: 11, fontWeight: 700, lineHeight: 1.2, textTransform: 'none', '&.Mui-selected': { color: 'primary.contrastText', backgroundColor: 'primary.main', '&:hover': { backgroundColor: 'primary.dark' } } } }}
+        sx={{ display: 'flex', gap: 1, overflowX: 'auto', pb: 0.25, scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
       >
-        {invoiceFilters.map((filter) => (
-          <ToggleButton key={filter.value} value={filter.value} aria-label={filter.label}>{filter.label}</ToggleButton>
-        ))}
-      </ToggleButtonGroup>
-
-      <Button
-        variant="contained"
-        startIcon={<Plus size={17} />}
-        onClick={onCreateInvoice}
-        sx={{ minHeight: 43, borderRadius: 2, fontWeight: 800, fontSize: 13, textTransform: 'none', boxShadow: 'none' }}
-      >
-        Create Invoice
-      </Button>
+        {invoiceFilters.map((filter) => {
+          const active = statusFilter === filter.value
+          return (
+            <Box
+              key={filter.value}
+              component="button"
+              type="button"
+              aria-pressed={active}
+              aria-label={filter.label}
+              onClick={() => setStatusFilter(filter.value)}
+              sx={{
+                flexShrink: 0,
+                minWidth: 50,
+                height: 44,
+                px: 2,
+                borderRadius: '48px',
+                border: `1px solid ${active ? PURPLE : 'var(--mui-palette-divider)'}`,
+                bgcolor: active ? PURPLE : 'background.paper',
+                color: active ? '#FFFFFF' : 'text.secondary',
+                fontFamily: 'inherit',
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+            >
+              {filter.label}
+            </Box>
+          )
+        })}
+      </Box>
 
       {actionMessage && <Alert severity={actionError ? 'error' : 'success'} onClose={() => setActionMessage('')}>{actionMessage}</Alert>}
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: invoiceColumns, alignItems: 'center', gap: 0.7, px: 0.3, pt: 0.35, pb: 0.1, borderBottom: '1px solid var(--mui-palette-divider)' }}>
-        {['Customer', 'Amount', 'Status', 'Date', ''].map((label, index) => (
-          <Typography key={`${label}-${index}`} noWrap sx={{ color: 'text.secondary', fontSize: 9.5, fontWeight: 700 }}>{label}</Typography>
-        ))}
-      </Box>
-
       {filteredRows.length > 0 ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.85 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
           {filteredRows.map((row) => {
             const status = getDisplayStatus(row)
             const statusStyle = invoiceStatusStyles[status] ?? { label: row.status, color: 'var(--mui-palette-text-secondary)', background: 'var(--mui-palette-action-hover)' }
@@ -196,58 +279,71 @@ export function InvoiceListPanel({ invoiceRows, onBack, onCreateInvoice, onUpdat
                   }
                 }}
                 sx={{
-                  p: 1,
-                  border: '1px solid var(--mui-palette-divider)',
-                  borderRadius: 1.7,
-                  backgroundColor: 'background.paper',
-                  boxShadow: '0 3px 10px rgba(0,0,0,0.14)',
+                  py: 1.75,
+                  px: 0.5,
+                  borderBottom: '1px solid var(--mui-palette-divider)',
                   cursor: 'pointer',
-                  transition: 'border-color 150ms ease, box-shadow 150ms ease',
-                  '&:hover': { borderColor: 'primary.main', boxShadow: '0 5px 14px rgba(0,0,0,0.17)' },
-                  '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                  '&:hover': { bgcolor: 'action.hover' },
+                  '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 },
                 }}
               >
-                <Box sx={{ display: 'grid', gridTemplateColumns: invoiceColumns, alignItems: 'center', gap: 0.7 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.7, minWidth: 0 }}>
-                    <Avatar sx={{ width: 27, height: 27, flexShrink: 0, bgcolor: 'success.light', color: 'success.dark', fontSize: 9, fontWeight: 800 }}>{row.badge}</Avatar>
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography noWrap sx={{ color: 'text.primary', fontSize: 10, fontWeight: 800, lineHeight: 1.25 }}>{row.customerName}</Typography>
-                      <Typography noWrap sx={{ color: 'text.secondary', fontSize: 8.5, lineHeight: 1.2 }}>#{row.invoiceNumber}</Typography>
+                {/* Row 1: avatar + name/number, amount */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Avatar sx={{ width: 44, height: 44, flexShrink: 0, bgcolor: 'action.hover', color: 'text.secondary', fontSize: 15, fontWeight: 600 }}>{row.badge}</Avatar>
+                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                    <Typography noWrap sx={{ color: 'text.primary', fontSize: 14, fontWeight: 600, lineHeight: 1.35 }}>{row.customerName}</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+                      <FileText size={12} />
+                      <Typography noWrap sx={{ color: 'text.secondary', fontSize: 12, lineHeight: 1.35 }}>{row.invoiceNumber}</Typography>
                     </Box>
                   </Box>
-                  <Typography noWrap sx={{ color: 'text.primary', fontSize: 9.5, fontWeight: 800 }}>{row.amount}</Typography>
-                  <Box sx={{ justifySelf: 'start', px: 0.8, py: 0.4, borderRadius: '999px', color: statusStyle.color, background: statusStyle.background, fontSize: 8.5, fontWeight: 800, lineHeight: 1 }}>
-                    {statusStyle.label}
-                  </Box>
-                  <Typography noWrap sx={{ color: 'text.secondary', fontSize: 8.5, textAlign: 'right' }}>{row.date}</Typography>
+                  <Typography noWrap sx={{ color: 'text.primary', fontSize: 15, fontWeight: 700 }}>{row.amount}</Typography>
                   <Tooltip title="Copy invoice number">
-                    <IconButton aria-label={`Copy invoice number ${row.invoiceNumber}`} size="small" onClick={(event) => { event.stopPropagation(); void navigator.clipboard?.writeText(row.invoiceNumber) }} sx={{ width: 22, height: 22, color: 'primary.main' }}>
-                      <MoreHorizontal size={15} />
+                    <IconButton
+                      aria-label={`Copy invoice number ${row.invoiceNumber}`}
+                      size="small"
+                      onClick={(event) => { event.stopPropagation(); void navigator.clipboard?.writeText(row.invoiceNumber) }}
+                      sx={{ width: 24, height: 24, mr: -0.5, color: 'text.secondary' }}
+                    >
+                      <MoreHorizontal size={16} />
                     </IconButton>
                   </Tooltip>
                 </Box>
+
                 {(row.invoiceDiscountAmount ?? 0) > 0 && (
-                  <Typography variant="caption" sx={{ display: 'block', mt: 0.4, color: 'success.main', fontWeight: 700 }}>
+                  <Typography variant="caption" sx={{ display: 'block', mt: 0.6, ml: 7.25, color: 'success.main', fontWeight: 700 }}>
                     Invoice discount{row.invoiceDiscountType === 'PERCENTAGE' ? ` (${row.invoiceDiscountValue}%)` : ''}: −{formatMoney(row.invoiceDiscountAmount)}
                   </Typography>
                 )}
                 {row.loyaltyDetails && (
-                  <Typography variant="caption" sx={{ display: 'block', mt: 0.4, color: 'success.main', fontWeight: 700 }}>
+                  <Typography variant="caption" sx={{ display: 'block', mt: 0.4, ml: 7.25, color: 'success.main', fontWeight: 700 }}>
                     {row.loyaltyDetails}
                   </Typography>
                 )}
-                <Stack direction="row" spacing={0.7} onClick={(event) => event.stopPropagation()} sx={{ mt: 0.6, flexWrap: 'wrap' }}>
-                  {isDraft ? (
-                    <Button size="small" startIcon={<Send size={12} />} onClick={() => void handleUpdateStatus(row, 'SENT')} disabled={isSaving} sx={{ minHeight: 26, px: 0.8, py: 0.2, border: '1px solid var(--mui-palette-divider)', borderRadius: '999px', color: 'primary.main', fontSize: 9, fontWeight: 700, lineHeight: 1, textTransform: 'none' }}>
-                      Send draft
-                    </Button>
-                  ) : (
-                    <Button size="small" startIcon={<Send size={11} />} onClick={() => void handleShareInvoice(row)} disabled={!navigator.share && !row.customerEmail} sx={{ minHeight: 26, px: 0.8, py: 0.2, border: '1px solid var(--mui-palette-divider)', borderRadius: '999px', color: 'primary.main', fontSize: 9, fontWeight: 700, lineHeight: 1, textTransform: 'none', '&.Mui-disabled': { color: 'text.disabled', borderColor: 'divider' } }}>
-                      Send to customer app
-                    </Button>
-                  )}
-                  {canMarkPaid && <Button size="small" startIcon={<Check size={12} />} onClick={() => void handleUpdateStatus(row, 'PAID')} disabled={isSaving} sx={{ minHeight: 26, px: 0.8, py: 0.2, border: '1px solid var(--mui-palette-divider)', borderRadius: '999px', color: 'success.main', fontSize: 9, fontWeight: 700, lineHeight: 1, textTransform: 'none' }}>{isSaving ? 'Saving…' : 'Mark paid'}</Button>}
-                </Stack>
+
+                {/* Row 2: date left, actions + status right */}
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 1.25, flexWrap: 'wrap' }}>
+                  <Typography sx={{ color: 'text.secondary', fontSize: 12 }}>{row.date}</Typography>
+                  <Stack direction="row" spacing={0.8} onClick={(event) => event.stopPropagation()} sx={{ alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', rowGap: 0.6 }}>
+                    {isDraft ? (
+                      <Button size="small" startIcon={<Send size={12} />} onClick={() => void handleUpdateStatus(row, 'SENT')} disabled={isSaving} sx={{ ...pillButtonSx, border: '1px solid var(--mui-palette-divider)', color: 'primary.main' }}>
+                        Send draft
+                      </Button>
+                    ) : (
+                      <Button size="small" startIcon={<Send size={12} />} onClick={() => void handleShareInvoice(row)} disabled={!navigator.share && !row.customerEmail} sx={{ ...pillButtonSx, border: '1px solid var(--mui-palette-divider)', color: 'primary.main', '&.Mui-disabled': { color: 'text.disabled', borderColor: 'divider' } }}>
+                        Send to customer app
+                      </Button>
+                    )}
+                    {canMarkPaid && (
+                      <Button size="small" startIcon={<Check size={12} />} onClick={() => void handleUpdateStatus(row, 'PAID')} disabled={isSaving} sx={{ ...pillButtonSx, bgcolor: invoiceStatusStyles.PAID.background, color: 'success.main' }}>
+                        {isSaving ? 'Saving…' : 'Mark as paid'}
+                      </Button>
+                    )}
+                    <Box sx={{ px: 1.1, py: 0.6, borderRadius: '999px', color: statusStyle.color, background: statusStyle.background, fontSize: 11, fontWeight: 600, lineHeight: 1 }}>
+                      {statusStyle.label}
+                    </Box>
+                  </Stack>
+                </Box>
               </Box>
             )
           })}
@@ -262,128 +358,125 @@ export function InvoiceListPanel({ invoiceRows, onBack, onCreateInvoice, onUpdat
       <Dialog
         open={displayedPreview != null}
         onClose={closePreview}
-        fullWidth
-        maxWidth="sm"
-        sx={{ '& .MuiDialog-paper': { borderRadius: 2.5, overflow: 'hidden' } }}
+        fullScreen
+        container={() => document.querySelector<HTMLElement>('[data-app-frame]') ?? document.body}
+        sx={{ position: 'absolute', '& .MuiBackdrop-root': { position: 'absolute' } }}
+        slotProps={{ paper: { sx: { bgcolor: PAGE_BG, backgroundImage: 'none', borderRadius: 0, display: 'flex', flexDirection: 'column' } } }}
       >
         {displayedPreview && (
           <>
-            <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, px: 2, py: 1.2, borderBottom: '1px solid', borderColor: 'divider' }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 850 }}>Invoice preview</Typography>
-              <IconButton aria-label="Close invoice preview" onClick={closePreview} size="small"><X size={18} /></IconButton>
-            </DialogTitle>
-            <DialogContent dividers sx={{ p: { xs: 1, sm: 2.5 }, bgcolor: '#f1f5f4' }}>
-              {/* The sheet is always white (like a printed invoice), so it gets its own light palette
-                  instead of inheriting the dark theme's near-white text colors. */}
-              <Box sx={{
-                '--mui-palette-text-primary': '#1a1530',
-                '--mui-palette-text-secondary': '#5b5870',
-                '--mui-palette-divider': 'rgba(26, 21, 48, 0.16)',
-                '--mui-palette-action-hover': 'rgba(78, 43, 204, 0.07)',
-                '--mui-palette-primary-main': '#4E2BCC',
-                '--mui-palette-success-main': '#16845f',
-                maxWidth: 680,
-                mx: 'auto',
-                p: { xs: 1.5, sm: 3 },
-                bgcolor: '#fff',
-                color: '#1a1530',
-                border: '1px solid rgba(26, 21, 48, 0.12)',
-                borderRadius: 1.5,
-                boxShadow: '0 5px 20px rgba(24, 51, 47, 0.08)',
-                '& .MuiChip-root': { color: '#1a1530', bgcolor: 'rgba(26, 21, 48, 0.08)' },
-              }}>
-                <Stack spacing={2.5}>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ justifyContent: 'space-between', gap: 2, pb: 2, borderBottom: '2px solid', borderColor: 'primary.main' }}>
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography variant="h6" color="primary.main" sx={{ fontWeight: 900, letterSpacing: '0.02em' }}>{businessDetails?.name || 'Business'}</Typography>
-                      {businessDetails?.address && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.6, whiteSpace: 'pre-line' }}>{businessDetails.address}</Typography>}
-                      {businessDetails?.phone && <Typography variant="body2" color="text.secondary">{businessDetails.phone}</Typography>}
-                      {businessDetails?.email && <Typography variant="body2" color="text.secondary">{businessDetails.email}</Typography>}
-                      {businessDetails?.gstin && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}><strong>GSTIN:</strong> {businessDetails.gstin}</Typography>}
-                    </Box>
-                    <Box sx={{ textAlign: { xs: 'left', sm: 'right' }, flexShrink: 0 }}>
-                      <Typography variant="h5" sx={{ fontWeight: 900, letterSpacing: '0.08em' }}>{businessDetails?.gstin ? 'TAX INVOICE' : 'INVOICE'}</Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>#{displayedPreview.invoiceNumber}</Typography>
-                      <Chip
-                        size="small"
-                        label={invoiceStatusStyles[getDisplayStatus(displayedPreview)]?.label ?? getDisplayStatus(displayedPreview).replaceAll('_', ' ')}
-                        sx={{ mt: 0.8, fontWeight: 750 }}
-                      />
-                    </Box>
-                  </Stack>
+            {/* Header */}
+            <Box sx={{ flexShrink: 0, background: HEADER_GRADIENT, borderRadius: '0 0 35px 35px', pt: 'calc(env(safe-area-inset-top, 0px) + 44px)', pb: '24px', px: '18px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <IconButton aria-label="Back to invoices" onClick={closePreview} sx={{ width: 44, height: 44, bgcolor: '#FFFFFF', color: '#1B1535', '&:hover': { bgcolor: '#F1EBFC' } }}>
+                <ArrowLeft size={22} strokeWidth={2.2} />
+              </IconButton>
+              <Typography component="h2" sx={{ flex: 1, textAlign: 'center', color: '#FFFFFF', fontSize: 20, fontWeight: 500, lineHeight: 1.2 }}>Invoice Detail</Typography>
+<Box aria-hidden="true" sx={{ width: 44, height: 44, flexShrink: 0 }} />
+            </Box>
 
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 800 }}>Bill to</Typography>
-                      <Typography variant="body1" sx={{ fontWeight: 800 }}>{displayedPreview.customerName}</Typography>
-                      {displayedPreview.customerAddress && <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-line' }}>{displayedPreview.customerAddress}</Typography>}
-                      {displayedPreview.customerEmail && <Typography variant="body2" color="text.secondary">{displayedPreview.customerEmail}</Typography>}
-                      {displayedPreview.customerPhone && <Typography variant="body2" color="text.secondary">{displayedPreview.customerPhone}</Typography>}
-                    </Box>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(100px, 1fr))', gap: 1.5, alignContent: 'start' }}>
-                      <Box>
-                        <Typography variant="caption" color="text.secondary">Invoice date</Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 750 }}>{formatDate(displayedPreview.issueDate)}</Typography>
+            {/* Content */}
+            <Box ref={detailScrollRef} sx={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', p: '16px', display: 'flex', flexDirection: 'column', gap: '12px', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
+              {/* Billed to card */}
+              <Box sx={{ bgcolor: CARD_BG, border: `1px solid ${LINE}`, borderRadius: '12px', p: '16px' }}>
+                <Typography sx={{ color: INK, fontSize: 15, fontWeight: 600, mb: '12px', lineHeight: 1.3 }}>Billed to</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', pb: '14px', borderBottom: `1px solid ${LINE}` }}>
+                  <Avatar sx={{ width: 36, height: 36, flexShrink: 0, bgcolor: SOFT_BG, color: MUTED, fontSize: 13, fontWeight: 600 }}>{displayedPreview.badge}</Avatar>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography noWrap sx={{ color: INK, fontSize: 13, fontWeight: 700, lineHeight: 1.35 }}>{displayedPreview.customerName}</Typography>
+                    {(displayedPreview.customerEmail || displayedPreview.customerPhone) && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', color: MUTED }}>
+                        <Mail size={12} />
+                        <Typography noWrap sx={{ color: MUTED, fontSize: 11, lineHeight: 1.35 }}>{displayedPreview.customerEmail ?? displayedPreview.customerPhone}</Typography>
                       </Box>
-                      <Box>
-                        <Typography variant="caption" color="text.secondary">{displayedPreview.status.toUpperCase() === 'PAID' ? 'Payment status' : 'Due date'}</Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 750 }}>
-                          {displayedPreview.status.toUpperCase() === 'PAID' ? 'Paid in full' : formatDate(displayedPreview.dueDate)}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </Stack>
-
-                  <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
-                    <Stack direction="row" sx={{ px: 1.5, py: 1, bgcolor: 'action.hover', justifyContent: 'space-between' }}>
-                      <Typography variant="caption" sx={{ fontWeight: 850, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Description</Typography>
-                      <Typography variant="caption" sx={{ fontWeight: 850, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Amount</Typography>
-                    </Stack>
-                    <Stack direction="row" sx={{ px: 1.5, py: 1.5, justifyContent: 'space-between', gap: 1 }}>
-                      <Typography variant="body2">Invoice charges</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatMoney(displayedPreview.subtotal ?? (displayedPreview.totalAmount != null ? displayedPreview.totalAmount - (displayedPreview.gstAmount ?? 0) : undefined))}</Typography>
-                    </Stack>
+                    )}
                   </Box>
+                </Box>
 
-                  <Box sx={{ ml: { sm: 'auto' }, width: { xs: '100%', sm: 'min(100%, 300px)' } }}>
-                    <Stack spacing={0.8}>
-                      <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
-                        <Typography variant="body2" color="text.secondary">Subtotal</Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatMoney(displayedPreview.subtotal ?? (displayedPreview.totalAmount != null ? displayedPreview.totalAmount - (displayedPreview.gstAmount ?? 0) : undefined))}</Typography>
-                      </Stack>
-                      {displayedPreview.gstAmount != null && (
-                        <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
-                          <Typography variant="body2" color="text.secondary">GST</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatMoney(displayedPreview.gstAmount)}</Typography>
-                        </Stack>
-                      )}
-                      {(displayedPreview.invoiceDiscountAmount ?? 0) > 0 && (
-                        <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
-                          <Typography variant="body2" color="success.main">
-                            Discount{displayedPreview.invoiceDiscountType === 'PERCENTAGE' ? ` (${displayedPreview.invoiceDiscountValue}%)` : ''}
-                          </Typography>
-                          <Typography variant="body2" color="success.main" sx={{ fontWeight: 700 }}>−{formatMoney(displayedPreview.invoiceDiscountAmount)}</Typography>
-                        </Stack>
-                      )}
-                      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'baseline', gap: 1, pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 850 }}>Total</Typography>
-                        <Typography variant="h5" color="primary.main" sx={{ fontWeight: 900 }}>{formatMoney(displayedPreview.totalAmount)}</Typography>
-                      </Stack>
-                    </Stack>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', color: MUTED, mt: '14px' }}>
+                  <FileText size={14} />
+                  <Typography sx={{ color: MUTED, fontSize: 12.5 }}>{displayedPreview.invoiceNumber}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', mt: '4px', flexWrap: 'wrap' }}>
+                  <Typography sx={{ color: INK, fontSize: 28, fontWeight: 500, lineHeight: 1.25 }}>{formatMoney(displayedPreview.totalAmount)}</Typography>
+                  <Box sx={{ px: '10px', py: '3px', borderRadius: '999px', border: `1px solid ${detailPillStyle.border}`, bgcolor: detailPillStyle.bg, color: detailPillStyle.color, fontSize: 11, fontWeight: 600, lineHeight: 1.4 }}>
+                    {detailPillStyle.label}
                   </Box>
+                </Box>
 
-                  {displayedPreview.loyaltyDetails && (
-                    <Typography variant="caption" color="success.main" sx={{ fontWeight: 700 }}>{displayedPreview.loyaltyDetails}</Typography>
-                  )}
-                  <Typography variant="caption" color="text.secondary" sx={{ pt: 1.5, borderTop: '1px solid', borderColor: 'divider', textAlign: 'center' }}>
-                    Thank you for your business.
-                  </Typography>
-                </Stack>
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: '12px', mt: '20px', alignItems: 'start' }}>
+                  <Box>
+                    <Typography sx={{ color: MUTED, fontSize: 11 }}>Issued Date</Typography>
+                    <Typography sx={{ color: INK, fontSize: 12.5, fontWeight: 700 }}>{formatDetailDate(displayedPreview.issueDate)}</Typography>
+                  </Box>
+                  <Box>
+                    <Typography sx={{ color: MUTED, fontSize: 11 }}>Due Date</Typography>
+                    <Typography sx={{ color: INK, fontSize: 12.5, fontWeight: 700 }}>{displayedPreview.dueDate ? formatDetailDate(displayedPreview.dueDate) : detailStatus === 'PAID' ? 'Paid in full' : 'Not set'}</Typography>
+                  </Box>
+                </Box>
               </Box>
-            </DialogContent>
-            <DialogActions sx={{ px: 2, py: 1.3 }}>
-              <Button onClick={closePreview} sx={{ textTransform: 'none', fontWeight: 750 }}>Close preview</Button>
-            </DialogActions>
+
+              {/* Item details card */}
+              <Box sx={{ bgcolor: CARD_BG, border: `1px solid ${LINE}`, borderRadius: '12px', p: '16px' }}>
+                <Typography sx={{ color: INK, fontSize: 15, fontWeight: 600, mb: '12px' }}>Item Details</Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 40px 90px', gap: '8px', pb: '10px', borderBottom: `1px solid ${LINE}` }}>
+                  <Typography sx={{ color: MUTED, fontSize: 11.5 }}>Description</Typography>
+                  <Typography sx={{ color: MUTED, fontSize: 11.5, textAlign: 'center' }}>QTY</Typography>
+                  <Typography sx={{ color: MUTED, fontSize: 11.5, textAlign: 'right' }}>Price</Typography>
+                </Box>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 40px 90px', gap: '8px', py: '12px', borderBottom: `1px solid ${LINE}` }}>
+                  <Typography sx={{ color: INK, fontSize: 12.5 }}>Invoice charges</Typography>
+                  <Typography sx={{ color: INK, fontSize: 12.5, textAlign: 'center' }}>1</Typography>
+                  <Typography sx={{ color: INK, fontSize: 12.5, textAlign: 'right' }}>{formatMoney(detailSubtotal)}</Typography>
+                </Box>
+
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr auto', rowGap: '10px', columnGap: '8px', pt: '12px' }}>
+                  <Typography sx={{ color: INK, fontSize: 12.5 }}>Subtotal</Typography>
+                  <Typography sx={{ color: INK, fontSize: 12.5, textAlign: 'right' }}>{formatMoney(detailSubtotal)}</Typography>
+                  {displayedPreview.gstAmount != null && (
+                    <>
+                      <Typography sx={{ color: INK, fontSize: 12.5 }}>Tax</Typography>
+                      <Typography sx={{ color: INK, fontSize: 12.5, textAlign: 'right' }}>{formatMoney(displayedPreview.gstAmount)}</Typography>
+                    </>
+                  )}
+                  {(displayedPreview.invoiceDiscountAmount ?? 0) > 0 && (
+                    <>
+                      <Typography sx={{ color: 'var(--mui-palette-success-main)', fontSize: 12.5 }}>
+                        Discount{displayedPreview.invoiceDiscountType === 'PERCENTAGE' ? ` (${displayedPreview.invoiceDiscountValue}%)` : ''}
+                      </Typography>
+                      <Typography sx={{ color: 'var(--mui-palette-success-main)', fontSize: 12.5, textAlign: 'right' }}>−{formatMoney(displayedPreview.invoiceDiscountAmount)}</Typography>
+                    </>
+                  )}
+                </Box>
+
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: '12px', pt: '12px', borderTop: `1px solid ${LINE}` }}>
+                  <Typography sx={{ color: INK, fontSize: 14, fontWeight: 700 }}>Total</Typography>
+                  <Typography sx={{ color: INK, fontSize: 14, fontWeight: 700 }}>{formatMoney(displayedPreview.totalAmount)}</Typography>
+                </Box>
+                {displayedPreview.loyaltyDetails && (
+                  <Typography sx={{ mt: '10px', color: 'var(--mui-palette-success-main)', fontSize: 11.5, fontWeight: 600 }}>{displayedPreview.loyaltyDetails}</Typography>
+                )}
+              </Box>
+            </Box>
+
+            {/* Actions */}
+            <Box sx={{ flexShrink: 0, display: 'flex', gap: '12px', px: '16px', pt: '8px', pb: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
+              <Button
+                onClick={() => window.print()}
+                startIcon={<Download size={16} />}
+                sx={{ flex: 1, height: 48, borderRadius: '999px', bgcolor: SOFT_BG, color: INK, fontSize: 13, fontWeight: 500, textTransform: 'none', '&:hover': { bgcolor: 'var(--mui-palette-action-selected)' } }}
+              >
+                Download PDF
+              </Button>
+              <Button
+                onClick={() => void handleShareInvoice(displayedPreview)}
+                disabled={!navigator.share && !displayedPreview.customerEmail}
+                startIcon={<Share2 size={16} />}
+                sx={{ flex: 1, height: 48, borderRadius: '999px', bgcolor: PURPLE, color: '#FFFFFF', fontSize: 13, fontWeight: 500, textTransform: 'none', '&:hover': { bgcolor: PURPLE_DARK }, '&.Mui-disabled': { bgcolor: '#C9C2E6', color: '#FFFFFF' } }}
+              >
+                Share
+              </Button>
+            </Box>
+
           </>
         )}
       </Dialog>
