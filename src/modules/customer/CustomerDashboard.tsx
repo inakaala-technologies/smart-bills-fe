@@ -47,6 +47,7 @@ import { setActiveTab, setSelectedBusinessId } from '../../store/customerDashboa
 import type { DashboardTab } from '../types'
 import { FamilyManagementDialog } from './components/FamilyManagementDialog'
 import { CustomerBillsPage } from './components/CustomerBillsPage'
+import { CustomerReceiptsPage } from './components/CustomerReceiptsPage'
 import { getDashboardPath } from '../../routes/dashboardPaths'
 
 // 'offers' is added so /dashboard/offers is a valid route.
@@ -55,6 +56,7 @@ const customerDashboardTabs: DashboardTab[] = [
   'businesses',
   'offers',
   'invoices',
+  'receipts',
   'appointments',
   'rewards',
   'memberships',
@@ -157,7 +159,9 @@ export function CustomerDashboard() {
     if (!hasInvoiceLink || invoiceFromLink) return
     // Invoices may still be loading: only report "not found" once they have loaded and nothing matches.
     if (loading || data.invoices.length === 0) return
-    setMissingInvoiceLabel(invoiceNumberParam ?? `#${invoiceIdParam}`)
+    void Promise.resolve().then(() => {
+      setMissingInvoiceLabel(invoiceNumberParam ?? `#${invoiceIdParam}`)
+    })
     const nextParams = new URLSearchParams(searchParams)
     nextParams.delete('invoiceId')
     nextParams.delete('invoiceNumber')
@@ -768,6 +772,7 @@ export function CustomerDashboard() {
                   latitude={data.customers[0]?.latitude}
                   longitude={data.customers[0]?.longitude}
                   view="businesses"
+                  myBusinesses={data.businesses}
                 />
               </Box>
             )}
@@ -790,11 +795,13 @@ export function CustomerDashboard() {
                   latitude={data.customers[0]?.latitude}
                   longitude={data.customers[0]?.longitude}
                   view="offers"
+                  myBusinesses={data.businesses}
                 />
               </Box>
             )}
 
             {activeTab === 'invoices' && <CustomerInvoicesList invoices={data.invoices} businesses={data.businesses} />}
+            {activeTab === 'receipts' && <CustomerReceiptsPage />}
             {activeTab === 'rewards' && <CustomerLoyaltyPanel customerId={customerProfileId} businesses={data.businesses} />}
             {activeTab === 'payslips' && <CustomerPayslipsPage />}
             {activeTab === 'insights' && <CustomerInsights invoices={data.invoices} businesses={data.businesses} customerId={customerProfileId} />}

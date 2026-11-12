@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { alpha } from '@mui/material/styles'
 import {
   Box,
+  ButtonBase,
   Container,
   Menu,
   MenuItem,
@@ -12,18 +13,19 @@ import {
 } from '@mui/material'
 import {
   Building2,
+  CalendarDays,
   FileText,
   Home,
   LayoutGrid,
+  KeyRound,
   ReceiptText,
   UserRound,
+  Users,
   type LucideIcon,
 } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { AppointmentDetailDialog } from '../../components/AppointmentDetailDialog'
-import { EmptyState } from '../../components/EmptyState'
-import { RecentActivityItem } from '../../components/RecentActivityItem'
 import { createInvoice, fetchAppointmentById, type AppointmentSummary } from '../../services/api'
 import { getCurrentUser, logoutUser } from '../../services/auth'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
@@ -32,6 +34,7 @@ import type { DashboardTab } from '../types'
 import { AdminSummaryCards, AdminOverviewSection } from './components/AdminDashboardOverview'
 import { AdminListCard, AdminProfileCard } from './components/AdminDashboardPanels'
 import { AdminInvoiceGeneratorCard, type AdminInvoiceForm } from './components/AdminInvoiceGeneratorCard'
+import { AdminPosPartnerApplications } from './components/AdminPosPartnerApplications'
 import { getDashboardPath } from '../../routes/dashboardPaths'
 
 const roleNav: Array<{ key: DashboardTab; label: string; icon: LucideIcon }> = [
@@ -40,7 +43,16 @@ const roleNav: Array<{ key: DashboardTab; label: string; icon: LucideIcon }> = [
   { key: 'invoices', label: 'Documents', icon: FileText },
   { key: 'profile', label: 'Profile', icon: UserRound },
 ]
-const adminDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'customers', 'appointments', 'profile']
+const adminNavigation: Array<{ key: DashboardTab; label: string; icon: LucideIcon }> = [
+  { key: 'overview', label: 'Overview', icon: Home },
+  { key: 'businesses', label: 'Businesses', icon: Building2 },
+  { key: 'customers', label: 'Customers', icon: Users },
+  { key: 'appointments', label: 'Appointments', icon: CalendarDays },
+  { key: 'invoices', label: 'Invoices', icon: FileText },
+  { key: 'partner-applications', label: 'POS partners', icon: KeyRound },
+  { key: 'profile', label: 'Profile', icon: UserRound },
+]
+const adminDashboardTabs: DashboardTab[] = ['overview', 'businesses', 'invoices', 'customers', 'appointments', 'profile', 'partner-applications']
 
 type DashboardMenuProps = {
   activeTab: DashboardTab
@@ -74,24 +86,39 @@ function DashboardMenu({ activeTab, anchorEl, isOpen, onClose, onChangeTab }: Da
         },
       }}
     >
-      {roleNav.map((tab) => (
+      {adminNavigation.map((tab) => {
+        const Icon = tab.icon
+        return (
+          <MenuItem
+            key={tab.key}
+            selected={activeTab === tab.key}
+            onClick={() => {
+              if (onChangeTab) {
+                onChangeTab(tab.key)
+              } else {
+                dispatch(setActiveTab(tab.key))
+              }
+              onClose()
+            }}
+            sx={{ gap: 1, py: 1.1, fontWeight: 600 }}
+          >
+            <Icon size={16} />
+            {tab.label}
+          </MenuItem>
+        )
+      })}
+      {import.meta.env.DEV && (
         <MenuItem
-          key={tab.key}
-          selected={activeTab === tab.key}
           onClick={() => {
-            if (onChangeTab) {
-              onChangeTab(tab.key)
-            } else {
-              dispatch(setActiveTab(tab.key))
-            }
+            navigate('/dev/receipt-sender')
             onClose()
           }}
           sx={{ gap: 1, py: 1.1, fontWeight: 600 }}
         >
-          {tab.key === 'overview' ? <Home size={16} /> : tab.key === 'businesses' ? <Building2 size={16} /> : tab.key === 'invoices' ? <ReceiptText size={16} /> : <UserRound size={15} />}
-          {tab.label}
+          <ReceiptText size={16} />
+          Receipt sender test (dev)
         </MenuItem>
-      ))}
+      )}
       <MenuItem
         onClick={() => {
           logoutUser()
@@ -104,11 +131,6 @@ function DashboardMenu({ activeTab, anchorEl, isOpen, onClose, onChangeTab }: Da
       </MenuItem>
     </Menu>
   )
-}
-
-function formatCurrency(value?: number) {
-  if (typeof value !== 'number' || Number.isNaN(value)) return '—'
-  return `₹${value.toLocaleString('en-IN')}`
 }
 
 export function AdminDashboard() {
@@ -202,12 +224,6 @@ export function AdminDashboard() {
     return () => window.removeEventListener('bhive:open-appointment', handleOpen)
   }, [data.appointments])
 
-  const recentActivity = data.invoices.slice(0, 3).map((invoice) => ({
-    label: invoice.invoiceNumber ?? `INV-${invoice.id}`,
-    detail: `${invoice.status ?? 'SENT'} • ${formatCurrency(invoice.totalAmount)}`,
-    value: formatCurrency(invoice.totalAmount),
-  }))
-
   const handleSelectBusiness = (businessId: number) => {
     dispatch(setSelectedBusinessId(businessId))
   }
@@ -281,23 +297,24 @@ export function AdminDashboard() {
       sx={{
         minHeight: '100vh',
         backgroundColor: 'background.default',
-        py: { xs: 2, sm: 4 },
+        px: { xs: 0, sm: 2 },
+        py: { xs: 0, sm: 3 },
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'flex-start',
       }}
     >
-      <Container maxWidth="xs" disableGutters sx={{ px: { xs: 1.5, sm: 0 } }}>
+      <Container maxWidth="xl" disableGutters sx={{ width: '100%' }}>
         <Paper
           elevation={0}
           sx={{
             width: '100%',
-            maxWidth: 412,
             mx: 'auto',
-            borderRadius: '24px',
+            minHeight: { xs: '100vh', sm: 'calc(100vh - 48px)' },
+            borderRadius: { xs: 0, sm: 4 },
             backgroundColor: 'background.paper',
             border: '1px solid var(--mui-palette-divider)',
-            boxShadow: '0 18px 46px rgba(0, 0, 0, 0.18)',
+            boxShadow: { xs: 'none', sm: '0 18px 46px rgba(15, 3, 45, 0.08)' },
             overflow: 'hidden',
             position: 'relative',
             display: 'flex',
@@ -321,51 +338,87 @@ export function AdminDashboard() {
             onChangeTab={handleChangeTab}
           />
 
-          <Box sx={{ p: { xs: 2, sm: 2.2 }, pb: 10 }}>
-            <Stack spacing={1.6}>
-              <Box sx={(theme) => ({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, background: alpha(theme.palette.primary.main, 0.06), borderRadius: 2.5, px: 1.2, py: 0.8 })}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '236px minmax(0, 1fr)' }, flex: 1, minHeight: 0 }}>
+            <Box
+              component="aside"
+              sx={(theme) => ({
+                display: { xs: 'none', md: 'flex' },
+                flexDirection: 'column',
+                gap: 1.5,
+                p: 2.2,
+                borderRight: `1px solid ${theme.palette.divider}`,
+                backgroundColor: alpha(theme.palette.primary.main, 0.025),
+              })}
+            >
+              <Box sx={{ px: 1, pb: 0.5 }}>
+                <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 800, letterSpacing: '0.12em' }}>
+                  Admin workspace
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Manage BHive operations
+                </Typography>
+              </Box>
+              <Stack component="nav" aria-label="Admin dashboard navigation" spacing={0.5}>
+                {adminNavigation.map((tab) => {
+                  const Icon = tab.icon
+                  const isActive = activeTab === tab.key
+                  return (
+                    <ButtonBase
+                      key={tab.key}
+                      onClick={() => handleChangeTab(tab.key)}
+                      aria-current={isActive ? 'page' : undefined}
+                      sx={{
+                        width: '100%',
+                        justifyContent: 'flex-start',
+                        gap: 1.2,
+                        px: 1.2,
+                        py: 1.15,
+                        borderRadius: 2,
+                        color: isActive ? 'primary.dark' : 'text.secondary',
+                        backgroundColor: isActive ? 'primary.light' : 'transparent',
+                        '&:hover': { backgroundColor: isActive ? 'primary.light' : 'action.hover' },
+                      }}
+                    >
+                      <Icon size={18} />
+                      <Typography variant="body2" sx={{ fontWeight: isActive ? 800 : 600 }}>
+                        {tab.label}
+                      </Typography>
+                    </ButtonBase>
+                  )
+                })}
+              </Stack>
+              <Box sx={{ mt: 'auto', p: 1.2, borderRadius: 2.5, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
+                <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', fontWeight: 700 }}>
+                  Signed in as
+                </Typography>
+                <Typography variant="body2" noWrap sx={{ mt: 0.35, fontWeight: 700 }}>
+                  {authUser?.email ?? 'Administrator'}
+                </Typography>
+              </Box>
+            </Box>
+
+            <Box component="main" sx={{ minWidth: 0, p: { xs: 2, sm: 2.5, lg: 3.5 }, pb: { xs: 11, md: 3.5 } }}>
+              <Stack spacing={2.2}>
+              {activeTab !== 'partner-applications' && <Box sx={(theme) => ({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, background: alpha(theme.palette.primary.main, 0.06), borderRadius: 2.5, px: 1.2, py: 0.8 })}>
                 <Typography variant="caption" sx={(theme) => ({ fontWeight: 700, color: theme.palette.primary.dark })}>Active business</Typography>
                 <Select size="small" value={selectedBusinessId ?? data.businesses[0]?.id ?? ''} onChange={(event) => handleSelectBusiness(Number(event.target.value))} sx={{ minWidth: 150, '& .MuiOutlinedInput-notchedOutline': { border: 'none' }, background: 'background.paper', borderRadius: 2 }}>
                   {data.businesses.map((business) => (
                     <MenuItem key={business.id} value={business.id}>{business.businessName ?? business.name ?? `Business ${business.id}`}</MenuItem>
                   ))}
                 </Select>
-              </Box>
+              </Box>}
 
             {activeTab === 'overview' && (
               <>
-                <Box sx={(theme) => ({ background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.08)} 0%, ${alpha(theme.palette.success.main, 0.08)} 54%, ${alpha(theme.palette.grey[50], 0.8)} 100%)`, borderRadius: 3.2, p: 1.8, border: `1px solid ${alpha(theme.palette.text.primary, 0.04)}`, boxShadow: `0 16px 30px ${alpha(theme.palette.success.main, 0.08)}` })}>
+                <Box sx={(theme) => ({ background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.12)} 0%, ${alpha(theme.palette.secondary.main, 0.07)} 54%, ${theme.palette.background.paper} 100%)`, borderRadius: 3.2, p: { xs: 2, sm: 2.5 }, border: `1px solid ${alpha(theme.palette.text.primary, 0.06)}`, boxShadow: `0 16px 30px ${alpha(theme.palette.primary.main, 0.08)}` })}>
                   <Typography variant="caption" sx={(theme) => ({ color: theme.palette.primary.main, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase' })}>BHive</Typography>
                   <Typography variant="h6" sx={{ mt: 0.7, fontWeight: 800, letterSpacing: '-0.05em' }}>Operations overview</Typography>
-                  <Typography variant="body2" sx={(theme) => ({ mt: 0.7, color: theme.palette.text.secondary, maxWidth: 220 })}>
-                    Keep a close watch on business performance and invoice flow.
+                  <Typography variant="body2" sx={(theme) => ({ mt: 0.7, color: theme.palette.text.secondary, maxWidth: 520 })}>
+                      Monitor businesses, customer activity, appointments, invoices, and POS partner onboarding from one workspace.
                   </Typography>
                 </Box>
 
                 <AdminSummaryCards />
-
-                <Box sx={(theme) => ({ background: `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.04)} 0%, ${theme.palette.common.white} 100%)`, borderRadius: 3.5, p: 1.5, border: `1px solid ${alpha(theme.palette.text.primary, 0.05)}`, boxShadow: `0 14px 28px ${alpha(theme.palette.common.black, 0.04)}` })}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.2 }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Recent activity</Typography>
-                    <Typography variant="caption" sx={(theme) => ({ color: theme.palette.primary.main, fontWeight: 700 })}>See all</Typography>
-                  </Box>
-
-                  {recentActivity.length > 0 ? (
-                    <Stack spacing={1.1}>
-                      {recentActivity.map((entry, idx) => (
-                        <RecentActivityItem
-                          key={`${entry.label}-${idx}`}
-                          title={entry.label}
-                          subtitle={entry.detail}
-                          amount={entry.value}
-                          badge={entry.label.slice(0, 2).toUpperCase()}
-                        />
-                      ))}
-                    </Stack>
-                  ) : (
-                    <EmptyState title="No activity" description="Financial activity will show here." />
-                  )}
-                </Box>
 
                 <AdminOverviewSection onOpenBusiness={handleOpenBusiness} />
                 <AdminInvoiceGeneratorCard invoiceForm={invoiceForm} invoiceMessage={invoiceMessage} onInvoiceFieldChange={handleInvoiceInput} onCreateInvoice={handleCreateInvoice} />
@@ -378,9 +431,11 @@ export function AdminDashboard() {
 
             {activeTab === 'customers' && <AdminListCard title="Customers" items={customerItems} emptyTitle="No customers" emptyDescription="Customer records will appear here." />}
             {activeTab === 'appointments' && <AdminListCard title="Appointments" items={appointmentItems} emptyTitle="No appointments" emptyDescription="Scheduled bookings will show here." />}
+            {activeTab === 'partner-applications' && <AdminPosPartnerApplications />}
             {activeTab === 'profile' && <AdminProfileCard authUser={authUser} />}
-          </Stack>
-        </Box>
+              </Stack>
+            </Box>
+          </Box>
 
         <AppointmentDetailDialog
           open={Boolean(selectedAppointment)}
@@ -405,6 +460,7 @@ export function AdminDashboard() {
             borderRadius: 999,
             boxShadow: '0 8px 24px rgba(15, 3, 45, 0.14)',
             display: 'grid',
+            '@media (min-width:900px)': { display: 'none' },
             gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
             py: 0.7,
             px: 0.6,
@@ -416,9 +472,11 @@ export function AdminDashboard() {
             const Icon = tab.icon
 
             return (
-              <Box
+              <ButtonBase
                 key={tab.key}
                 onClick={() => handleChangeTab(tab.key)}
+                aria-label={tab.label}
+                aria-current={isActive ? 'page' : undefined}
                 sx={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -432,6 +490,7 @@ export function AdminDashboard() {
                   py: 0.7,
                   px: 0.4,
                   color: isActive ? 'primary.contrastText' : 'text.secondary',
+                  width: '100%',
                 }}
               >
                 <Icon
@@ -450,7 +509,7 @@ export function AdminDashboard() {
                 >
                   {tab.label}
                 </Typography>
-              </Box>
+              </ButtonBase>
             )
           })}
         </Box>
