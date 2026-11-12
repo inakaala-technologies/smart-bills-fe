@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { addCustomerToBusiness, type DashboardData } from '../../../services/api'
-import { Alert, Autocomplete, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Drawer, FormControl, IconButton, MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
+import { type DashboardData } from '../../../services/api'
+import { Alert, Autocomplete, Box, Button, Divider, Drawer, FormControl, IconButton, MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import { ArrowRight, CalendarClock, CheckCircle2, CircleDollarSign, Gift, PackagePlus, Percent, Plus, ReceiptText, Trash2, UserRound, X } from 'lucide-react'
 import { fetchLoyaltyBalance, fetchLoyaltySettings, type LoyaltyProgramSettings } from '../../../services/api'
 import { fetchBusinessMembershipPlans } from '../../../store/businessDashboardSlice'
 import { useAppDispatch, useAppSelector } from '../../../store/hooks'
 import { getBusinessProducts, type BusinessProduct } from '../../../services/api/billingApi'
+import { AddCustomerDialog } from './AddCustomerDialog'
 
 export type InvoiceLineItemForm = {
   id: string
@@ -93,11 +94,6 @@ export function InvoiceGeneratorCard({
   const [showDiscount, setShowDiscount] = useState(false)
   const [previewError, setPreviewError] = useState('')
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false)
-  const [newCustomerName, setNewCustomerName] = useState('')
-  const [newCustomerPhone, setNewCustomerPhone] = useState('')
-  const [newCustomerEmail, setNewCustomerEmail] = useState('')
-  const [isAddingCustomer, setIsAddingCustomer] = useState(false)
-  const [addCustomerMessage, setAddCustomerMessage] = useState('')
   const invoiceMode = invoiceModeOverride ?? (membershipPlans.length > 0 ? 'membership' : 'products')
   const isMembership = invoiceMode === 'membership'
   // Membership invoices only ever use one line item (the member's saved plan).
@@ -220,45 +216,11 @@ export function InvoiceGeneratorCard({
     onClose()
   }
 
-  const handleAddCustomer = async () => {
-    const name = newCustomerName.trim()
-    const phone = newCustomerPhone.trim()
-    const email = newCustomerEmail.trim()
-
-    if (!name || !phone) {
-      setAddCustomerMessage('Enter the customer name and mobile number.')
-      return
-    }
-
-    setIsAddingCustomer(true)
-    setAddCustomerMessage('')
-
-    try {
-      const result = await addCustomerToBusiness(businessId, {
-        name,
-        phone,
-        email: email || undefined,
-      })
-
-      if (!result.ok || !result.customer) {
-        setAddCustomerMessage(result.message ?? 'Could not add this customer.')
-        return
-      }
-
-      onCustomerSelection(result.customer)
-      onInvoiceFieldChange('customerId', String(result.customer.id))
-      onCustomerSearchChange('')
-
-      setNewCustomerName('')
-      setNewCustomerPhone('')
-      setNewCustomerEmail('')
-      setIsAddCustomerOpen(false)
-      setAddCustomerMessage('')
-    } catch {
-      setAddCustomerMessage('Could not add this customer. Please try again.')
-    } finally {
-      setIsAddingCustomer(false)
-    }
+  const handleCustomerAdded = (customer: DashboardData['customers'][number]) => {
+    onCustomerSelection(customer)
+    onInvoiceFieldChange('customerId', String(customer.id))
+    onCustomerSearchChange('')
+    setIsAddCustomerOpen(false)
   }
 
   const getCustomerLabel = (customer: { fullName?: string; email?: string; phoneNumber?: string } | null | undefined) => {
@@ -533,13 +495,10 @@ export function InvoiceGeneratorCard({
                 <Button
                 fullWidth
                 startIcon={<Plus size={16} />}
-                onClick={() => {
-                  setAddCustomerMessage('')
-                  setIsAddCustomerOpen(true)
-                }}
+                onClick={() => setIsAddCustomerOpen(true)}
                 sx={{ textTransform: 'none', justifyContent: 'flex-start' }}
               >
-                Add New Customer
+                Add Registered Customer
               </Button>
               </Stack>
             )}
@@ -1030,76 +989,13 @@ export function InvoiceGeneratorCard({
       </Box>
     </Drawer>
 
-    <Dialog
+    <AddCustomerDialog
       open={isAddCustomerOpen}
-      onClose={() => {
-        if (!isAddingCustomer) setIsAddCustomerOpen(false)
-      }}
-      fullWidth
-      maxWidth="xs"
-    >
-      <Box
-        component="form"
-        onSubmit={(event) => {
-          event.preventDefault()
-          void handleAddCustomer()
-        }}
-      >
-        <DialogTitle>Add New Customer</DialogTitle>
-
-        <DialogContent dividers>
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            {addCustomerMessage && (
-              <Alert severity="error">{addCustomerMessage}</Alert>
-            )}
-
-            <TextField
-              autoFocus
-              required
-              fullWidth
-              label="Customer name"
-              value={newCustomerName}
-              onChange={(event) => setNewCustomerName(event.target.value)}
-            />
-
-            <TextField
-              required
-              fullWidth
-              label="Mobile number"
-              type="tel"
-              value={newCustomerPhone}
-              onChange={(event) => setNewCustomerPhone(event.target.value)}
-            />
-
-            <TextField
-              fullWidth
-              label="Email address (optional)"
-              type="email"
-              value={newCustomerEmail}
-              onChange={(event) => setNewCustomerEmail(event.target.value)}
-            />
-          </Stack>
-        </DialogContent>
-
-        <DialogActions sx={{ px: 2, py: 1.5 }}>
-          <Button
-            onClick={() => setIsAddCustomerOpen(false)}
-            disabled={isAddingCustomer}
-          >
-            Cancel
-          </Button>
-
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={isAddingCustomer}
-          >
-            {isAddingCustomer ? 'Adding...' : 'Add customer'}
-          </Button>
-        </DialogActions>
-      </Box>
-    </Dialog>
-
+      businessId={businessId}
+      onClose={() => setIsAddCustomerOpen(false)}
+      onCreated={handleCustomerAdded}
+      onAlreadyAdded={handleCustomerAdded}
+    />
   </>
   )
 }

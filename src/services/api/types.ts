@@ -36,6 +36,7 @@ export type CustomerSummary = {
   lastName?: string
   email?: string
   phoneNumber?: string
+  alreadyAdded?: boolean
   locationAddress?: string
   latitude?: number
   longitude?: number

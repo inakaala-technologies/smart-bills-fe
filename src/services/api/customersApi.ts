@@ -32,34 +32,25 @@ export async function searchCustomers(query: string): Promise<CustomerSummary[]>
   }
 }
 
-export async function addCustomerToBusiness(businessId: number, customer: { name: string; phone: string; email?: string }): Promise<{ ok: boolean; customer?: CustomerSummary; message?: string }> { 
-   try {
-    const profileResponse = await apiClient.post<Record<string, unknown>>('/api/v1/customers', customer)
-    const customerId = Number(profileResponse.data.id)
-
-    if (!Number.isFinite(customerId) || customerId <= 0) {
-      return { ok: false, message: 'Could not create the customer profile.' }
-    }
-    
-    await apiClient.post('/api/v1/business-customers', {
-      businessId,
-      customerProfileId: customerId,
-      status: 'ACTIVE',
-    })
+export async function addCustomerToBusiness(businessId: number, profileId: string): Promise<{ ok: boolean; customer?: CustomerSummary; message?: string }> {
+  try {
+    const { data } = await apiClient.post<Record<string, unknown>>(
+      `/api/v1/businesses/${businessId}/customers/${encodeURIComponent(profileId)}`,
+    )
     return {
       ok: true,
       customer: {
-        id: customerId,
-        fullName: customer.name.trim(),
-        firstName: customer.name.trim(),
-        email: customer.email,
-        phoneNumber: customer.phone,
+        id: Number(data.id),
+        profileId: typeof data.profileId === 'string' ? data.profileId : undefined,
+        fullName: typeof data.name === 'string' ? data.name : undefined,
+        email: typeof data.email === 'string' ? data.email : undefined,
+        phoneNumber: typeof data.phone === 'string' ? data.phone : undefined,
         businessId,
-        },
-      }
+      },
+    }
   } catch (error) {
-    if (error instanceof ApiClientError && error.status && error.status >= 400) {
-      return { ok: false, message: error.message || 'Could not add this customer.' }
+    if (error instanceof ApiClientError && error.status === 404) {
+      return { ok: false, message: 'That registered customer could not be found. Search again.' }
     }
     return { ok: false, message: getErrorMessage(error, 'Could not add this customer.') }
   }
