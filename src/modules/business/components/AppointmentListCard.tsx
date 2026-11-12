@@ -14,11 +14,13 @@ export type AppointmentListCardProps = {
   onUpdated: () => void
 }
 
+type ListView = 'UPCOMING' | 'ALL' | 'EXPIRED' | 'CANCELLED'
+
 function statusColor(status: string): 'success' | 'warning' | 'error' | 'default' {
   if (status === 'CONFIRMED' || status === 'COMPLETED') return 'success'
   if (status === 'BOOKED') return 'warning'
   if (status === 'CANCELLED' || status === 'NO_SHOW') return 'error'
-  return 'default'
+  return 'default' // EXPIRED and anything else
 }
 
 export function AppointmentListCard({
@@ -31,7 +33,7 @@ export function AppointmentListCard({
   onUpdated,
 }: AppointmentListCardProps) {
   const [message, setMessage] = useState('')
-  const [view, setView] = useState<'UPCOMING' | 'ALL' | 'CANCELLED'>('UPCOMING')
+  const [view, setView] = useState<ListView>('UPCOMING')
   const [selectedDate, setSelectedDate] = useState('')
   const [staff, setStaff] = useState<AppointmentStaffView[]>([])
   const [updatingId, setUpdatingId] = useState<number | null>(null)
@@ -50,12 +52,21 @@ export function AppointmentListCard({
     return () => { isCurrent = false }
   }, [businessId, staffRefreshKey])
 
+  // A BOOKED appointment whose time has already passed is shown as EXPIRED.
+  // The stored status in the database is not changed.
+  const isExpired = (appointment: DashboardData['appointments'][number]) => {
+    const status = (appointment.status ?? 'BOOKED').toUpperCase()
+    if (status !== 'BOOKED' || !appointment.scheduledAt) return false
+    return new Date(appointment.scheduledAt).getTime() < now
+  }
+
   const visibleAppointments = appointments.filter((appointment) => {
     if (selectedAppointmentId && appointment.id === selectedAppointmentId) return true
     const status = (appointment.status ?? 'BOOKED').toUpperCase()
     if (selectedDate && !appointment.scheduledAt?.startsWith(selectedDate)) return false
     if (view === 'CANCELLED') return status === 'CANCELLED'
-    if (view === 'UPCOMING') return ['BOOKED', 'CONFIRMED'].includes(status) && new Date(appointment.scheduledAt ?? '').getTime() >= now
+    if (view === 'EXPIRED') return isExpired(appointment)
+    if (view === 'UPCOMING') return ['BOOKED', 'CONFIRMED'].includes(status) && !isExpired(appointment) && new Date(appointment.scheduledAt ?? '').getTime() >= now
     return true
   }).sort((first, second) => new Date(first.scheduledAt ?? '').getTime() - new Date(second.scheduledAt ?? '').getTime())
 
@@ -98,6 +109,13 @@ export function AppointmentListCard({
     onUpdated()
   }
 
+  const emptyTitle = view === 'CANCELLED' ? 'No cancellations' : view === 'EXPIRED' ? 'No expired appointments' : 'No appointments'
+  const emptyDescription = view === 'CANCELLED'
+    ? 'Cancelled bookings will appear in this list.'
+    : view === 'EXPIRED'
+      ? 'Bookings that were never confirmed before their time will appear here.'
+      : 'No bookings match this calendar view.'
+
   return (
     <Card
       variant="outlined"
@@ -129,12 +147,13 @@ export function AppointmentListCard({
             fullWidth
             size="small"
             value={view}
-            onChange={(_event, value: 'UPCOMING' | 'ALL' | 'CANCELLED' | null) => { if (value) setView(value) }}
+            onChange={(_event, value: ListView | null) => { if (value) setView(value) }}
             aria-label="Appointment list filter"
-            sx={{ '& .MuiToggleButton-root': { flex: 1, px: 0.8, py: 0.9, whiteSpace: 'nowrap', textTransform: 'none', fontWeight: 600 } }}
+            sx={{ '& .MuiToggleButton-root': { flex: 1, px: 0.5, py: 0.9, whiteSpace: 'nowrap', textTransform: 'none', fontWeight: 600, fontSize: '0.78rem' } }}
           >
             <ToggleButton value="UPCOMING">Upcoming</ToggleButton>
             <ToggleButton value="ALL">All</ToggleButton>
+            <ToggleButton value="EXPIRED">Expired</ToggleButton>
             <ToggleButton value="CANCELLED">Cancelled</ToggleButton>
           </ToggleButtonGroup>
           <TextField
@@ -151,13 +170,17 @@ export function AppointmentListCard({
         {visibleAppointments.length > 0 ? (
           <Stack spacing={1.4}>
             {visibleAppointments.map((appointment) => {
-              const status = (appointment.status ?? 'BOOKED').toUpperCase()
+              const storedStatus = (appointment.status ?? 'BOOKED').toUpperCase()
+              const expired = isExpired(appointment)
+              const status = expired ? 'EXPIRED' : storedStatus
               const customer = customers.find((item) => item.id === appointment.customerId)
-              const actions: Array<{ label: string; status: AppointmentStatus }> = status === 'BOOKED'
-                ? [{ label: 'Confirm', status: 'CONFIRMED' }, { label: 'Cancel', status: 'CANCELLED' }]
-                : status === 'CONFIRMED'
-                  ? [{ label: 'Complete', status: 'COMPLETED' }, { label: 'No-show', status: 'NO_SHOW' }, { label: 'Cancel', status: 'CANCELLED' }]
-                  : []
+              const actions: Array<{ label: string; status: AppointmentStatus }> = expired
+                ? [{ label: 'Cancel', status: 'CANCELLED' }]
+                : status === 'BOOKED'
+                  ? [{ label: 'Confirm', status: 'CONFIRMED' }, { label: 'Cancel', status: 'CANCELLED' }]
+                  : status === 'CONFIRMED'
+                    ? [{ label: 'Complete', status: 'COMPLETED' }, { label: 'No-show', status: 'NO_SHOW' }, { label: 'Cancel', status: 'CANCELLED' }]
+                    : []
               const buttonCount = actions.length + (onSelectAppointment ? 1 : 0)
 
               const isSelected = selectedAppointmentId === appointment.id
@@ -211,8 +234,8 @@ export function AppointmentListCard({
                     {appointment.notes && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.4 }}>{appointment.notes}</Typography>}
                   </Box>
 
-                  {/* Row 3: staff dropdown, full width */}
-                  {(status === 'BOOKED' || status === 'CONFIRMED') && (
+                  {/* Row 3: staff dropdown, full width (not for expired bookings) */}
+                  {!expired && (status === 'BOOKED' || status === 'CONFIRMED') && (
                     <TextField
                       select
                       fullWidth
@@ -269,7 +292,7 @@ export function AppointmentListCard({
             })}
           </Stack>
         ) : (
-          <EmptyState title={view === 'CANCELLED' ? 'No cancellations' : 'No appointments'} description={view === 'CANCELLED' ? 'Cancelled bookings will appear in this list.' : 'No bookings match this calendar view.'} />
+          <EmptyState title={emptyTitle} description={emptyDescription} />
         )}
       </CardContent>
       <Dialog open={Boolean(pendingAction)} onClose={() => setPendingAction(null)} fullWidth maxWidth="xs">

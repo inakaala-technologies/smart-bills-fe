@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
   Alert,
   Box,
@@ -23,6 +23,7 @@ import {
   Clock,
   IndianRupee,
   Mail,
+  MapPin,
   Phone,
   User,
   UserCheck,
@@ -57,6 +58,8 @@ function formatCurrency(value?: number) {
 
 function getStatusColor(status?: string): 'info' | 'success' | 'warning' | 'error' | 'default' {
   switch (status?.toUpperCase()) {
+    case 'EXPIRED':
+      return 'default'
     case 'CONFIRMED':
       return 'info'
     case 'COMPLETED':
@@ -86,7 +89,16 @@ export function AppointmentDetailDialog({
   const [isEditingNote, setIsEditingNote] = useState(false)
   const [submittingAction, setSubmittingAction] = useState<string | null>(null)
   const [actionError, setActionError] = useState('')
-  const [renderedAt] = useState(() => Date.now())
+  const [renderedAt, setRenderedAt] = useState(() => Date.now())
+
+  // Refresh "now" every time the dialog opens (otherwise it would be the time the
+  // parent first mounted), and keep it fresh while the dialog stays open.
+  useEffect(() => {
+    if (!open) return
+    setRenderedAt(Date.now())
+    const timer = window.setInterval(() => setRenderedAt(Date.now()), 30_000)
+    return () => window.clearInterval(timer)
+  }, [open, appointment?.id])
 
   if (!appointment) return null
 
@@ -96,7 +108,23 @@ export function AppointmentDetailDialog({
   const isCancelled = status === 'CANCELLED'
   const isCompleted = status === 'COMPLETED'
   const isFuture = appointment.scheduledAt ? new Date(appointment.scheduledAt).getTime() > renderedAt : true
-  const canCustomerCancel = role === 'CUSTOMER' && ['BOOKED', 'CONFIRMED'].includes(status) && isFuture
+
+  // An appointment that is still BOOKED / CONFIRMED but whose time has passed is shown as EXPIRED.
+  // It expires once it has finished (start + duration). To expire at the start time instead,
+  // remove the "+ duration" part below.
+  const startMs = appointment.scheduledAt ? new Date(appointment.scheduledAt).getTime() : NaN
+  const endMs = startMs + (appointment.durationMinutes ?? 0) * 60_000
+  const isExpired = ['BOOKED', 'CONFIRMED'].includes(status) && Number.isFinite(endMs) && endMs < renderedAt
+  const displayStatus = isExpired ? 'EXPIRED' : status
+
+  const canCustomerCancel = role === 'CUSTOMER' && ['BOOKED', 'CONFIRMED'].includes(status) && isFuture && !isExpired
+  const isClosed = isCancelled || isCompleted || isExpired
+
+  // Home visit details
+  const isHomeVisit = Boolean(appointment.homeVisit)
+  const serviceFee = appointment.servicePrice ?? 0
+  const visitCharge = isHomeVisit ? (appointment.visitingCharge ?? business?.homeVisitCharge ?? 0) : 0
+  const totalFee = serviceFee + visitCharge
 
   const handleAction = async (newStatus: AppointmentStatus, note?: string) => {
     if (!onStatusChange) return
@@ -164,11 +192,20 @@ export function AppointmentDetailDialog({
         <Box sx={{ minWidth: 0 }}>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.5 }}>
             <Chip
-              label={status.replace('_', ' ')}
-              color={getStatusColor(status)}
+              label={displayStatus.replace('_', ' ')}
+              color={getStatusColor(displayStatus)}
               size="small"
               sx={{ fontWeight: 800, textTransform: 'uppercase', fontSize: 11 }}
             />
+            {isHomeVisit && (
+              <Chip
+                label="Home visit"
+                size="small"
+                variant="outlined"
+                color="primary"
+                sx={{ fontWeight: 700, fontSize: 11 }}
+              />
+            )}
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
               ID: #{appointment.id}
             </Typography>
@@ -272,13 +309,43 @@ export function AppointmentDetailDialog({
               >
                 <IndianRupee size={20} />
               </Box>
-              <Box sx={{ minWidth: 0 }}>
+              <Box sx={{ minWidth: 0, flex: 1 }}>
                 <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, textTransform: 'uppercase' }}>
                   Fee & Duration
                 </Typography>
-                <Typography sx={{ fontWeight: 800, color: 'text.primary', fontSize: 16 }}>
-                  {formatCurrency(appointment.servicePrice)}
-                </Typography>
+
+                {isHomeVisit ? (
+                  <Box sx={{ my: 0.3 }}>
+                    <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 2 }}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        Service
+                      </Typography>
+                      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                        {formatCurrency(serviceFee)}
+                      </Typography>
+                    </Stack>
+                    <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 2 }}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        Home visit charge
+                      </Typography>
+                      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                        + {formatCurrency(visitCharge)}
+                      </Typography>
+                    </Stack>
+                    <Divider sx={{ my: 0.5 }} />
+                    <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'baseline', gap: 2 }}>
+                      <Typography sx={{ fontWeight: 800, fontSize: 13, color: 'text.primary' }}>Total</Typography>
+                      <Typography sx={{ fontWeight: 800, fontSize: 16, color: 'text.primary' }}>
+                        {formatCurrency(totalFee)}
+                      </Typography>
+                    </Stack>
+                  </Box>
+                ) : (
+                  <Typography sx={{ fontWeight: 800, color: 'text.primary', fontSize: 16 }}>
+                    {formatCurrency(appointment.servicePrice)}
+                  </Typography>
+                )}
+
                 <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', color: 'text.secondary' }}>
                   <Clock size={12} />
                   <Typography variant="caption" sx={{ fontWeight: 600 }}>
@@ -345,13 +412,28 @@ export function AppointmentDetailDialog({
             )}
           </Paper>
 
+          {/* Home Visit Address */}
+          {isHomeVisit && (
+            <Paper variant="outlined" sx={{ p: 1.8, borderRadius: 2, bgcolor: 'background.paper' }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 750, textTransform: 'uppercase', display: 'block', mb: 1 }}>
+                Home Visit Address
+              </Typography>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+                <MapPin size={16} color="#4E2BCC" style={{ marginTop: 2, flexShrink: 0 }} />
+                <Typography variant="body2" sx={{ color: 'text.primary', overflowWrap: 'anywhere' }}>
+                  {appointment.visitAddress || 'Address not provided'}
+                </Typography>
+              </Stack>
+            </Paper>
+          )}
+
           {/* Staff Assignment */}
           {(role === 'BUSINESS' || Boolean(assignedStaffId || appointment.staffUserId)) && (
             <Paper variant="outlined" sx={{ p: 1.8, borderRadius: 2, bgcolor: 'background.paper' }}>
               <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 750, textTransform: 'uppercase', display: 'block', mb: 1 }}>
                 Assigned Staff Member
               </Typography>
-              {role === 'BUSINESS' && !isCancelled && !isCompleted ? (
+              {role === 'BUSINESS' && !isClosed ? (
                 <TextField
                   select
                   size="small"
@@ -469,7 +551,8 @@ export function AppointmentDetailDialog({
             </Button>
           )}
 
-          {role === 'BUSINESS' && !isCancelled && !isCompleted && (
+          {/* No status actions once the appointment is cancelled, completed or expired */}
+          {role === 'BUSINESS' && !isClosed && (
             <Stack direction="row" spacing={1}>
               {status === 'BOOKED' && (
                 <Button

@@ -27,7 +27,7 @@ import type { BusinessSummary } from '../../services/api/types'
 import { addProfile, getCurrentUser, logoutUser, switchAccount, type Role } from '../../services/auth'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import type { RootState } from '../../store/store'
-import { ArrowLeft, Search } from 'lucide-react'
+import { ArrowLeft, ReceiptText, Search } from 'lucide-react'
 import { BusinessProductsSection } from './components/BusinessProductsSection'
 import { getBusinessProducts } from '../../services/api/billingApi'
 import { fetchBusinessDashboard, fetchBusinessSummary, setActiveTab, setBusinessBanner, setBusinessFeatures, setBusinessHomeVisitCharge as setBusinessHomeVisitChargeAction, setSelectedBusinessId } from '../../store/businessDashboardSlice'
@@ -790,8 +790,8 @@ export function BusinessDashboard() {
             flexDirection: 'column',
           }}
         >
-          {activeTab === 'search' ? (
-            // Figma "Search" screen: gradient header with lime search icon + title, bell and photo
+                    {activeTab === 'search' || activeTab === 'invoices' ? (
+            // Figma page headers (Search, Billing): same gradient, lime icon + title, bell and photo
             <Box sx={{ flexShrink: 0, background: COMPACT_HEADER_GRADIENT, borderRadius: '0 0 35px 35px', pb: 2.4 }}>
               <AppHeader
                 authUser={authUser}
@@ -801,8 +801,12 @@ export function BusinessDashboard() {
                 isMenuOpen={isProfilePageOpen}
                 showWorkspaceContext={false}
                 transparent
-                pageTitle="Search"
-                pageIcon={<Search size={26} strokeWidth={2} color="#CDF27E" aria-hidden="true" />}
+                pageTitle={activeTab === 'invoices' ? 'Billing' : 'Search'}
+                pageIcon={
+                  activeTab === 'invoices'
+                    ? <ReceiptText size={26} strokeWidth={2} color="#CDF27E" aria-hidden="true" />
+                    : <Search size={26} strokeWidth={2} color="#CDF27E" aria-hidden="true" />
+                }
                 onOpenMenu={() => setIsProfilePageOpen(true)}
               />
             </Box>

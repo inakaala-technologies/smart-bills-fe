@@ -6,6 +6,10 @@ import { NotificationBell } from './NotificationBell'
 import { ThemeModeToggle } from './ThemeModeToggle'
 import type { AuthUser } from '../services/auth'
 
+/* Same gradient as the Search and Notifications headers */
+const PAGE_HEADER_GRADIENT =
+  'linear-gradient(180deg, #F1EBFC 0%, #CDBAF1 14%, #AE89F2 30%, #8C59F2 46%, #5B34D4 66%, #331A88 84%, #0F032D 100%)'
+
 type AppHeaderProps = {
   authUser: Pick<AuthUser, 'name' | 'email' | 'profilePictureUrl'> | null
   contextLabel: string
@@ -18,10 +22,14 @@ type AppHeaderProps = {
   /** Figma page-title header (e.g. Search): shows an icon + title on the left instead of the greeting. */
   pageTitle?: string
   pageIcon?: ReactNode
+  /** Figma page header that draws its own long gradient + 35px bottom radius (Billing). Use with pageTitle and pageIcon. */
+  pageGradient?: boolean
   onOpenMenu: (event: MouseEvent<HTMLElement>) => void
 }
 
-export function AppHeader({ authUser, contextLabel, roleLabel, menuId, isMenuOpen, showWorkspaceContext = true, transparent = false, pageTitle, pageIcon, onOpenMenu }: AppHeaderProps) {
+export function AppHeader({ authUser, contextLabel, roleLabel, menuId, isMenuOpen, showWorkspaceContext = true, transparent: transparentProp = false, pageTitle, pageIcon, pageGradient = false, onOpenMenu }: AppHeaderProps) {
+  /* pageGradient uses the same compact look as `transparent` (no theme toggle, 44px avatar) but paints its own background */
+  const transparent = transparentProp || pageGradient
   const initials = (authUser?.name ?? 'User')
     .split(/\s+/)
     .filter(Boolean)
@@ -51,12 +59,16 @@ export function AppHeader({ authUser, contextLabel, roleLabel, menuId, isMenuOpe
 
   return (
     <Box sx={{
-      px: 2.2,
+      px: pageGradient ? '18px' : 2.2,
       pt: transparent ? 'calc(env(safe-area-inset-top, 0px) + 44px)' : 2.6,
-      pb: transparent ? 0.5 : 1.6,
+      pb: pageGradient ? '24px' : transparent ? 0.5 : 1.6,
       color: '#ffffff',
-      background: transparent ? 'none' : 'linear-gradient(180deg, #C39AF3 0%, #905BF4 42%, #4E2BCC 100%)',
-      borderRadius: transparent ? 0 : { xs: 0, sm: '24px 24px 0 0' },
+      background: pageGradient
+        ? PAGE_HEADER_GRADIENT
+        : transparent
+          ? 'none'
+          : 'linear-gradient(180deg, #C39AF3 0%, #905BF4 42%, #4E2BCC 100%)',
+      borderRadius: pageGradient ? '0 0 35px 35px' : transparent ? 0 : { xs: 0, sm: '24px 24px 0 0' },
     }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
         {pageTitle ? (

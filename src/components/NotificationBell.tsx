@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Badge, Box, Button, ButtonBase, IconButton, Popover, Stack, Typography } from '@mui/material'
-import { Bell, CalendarCheck2, CheckCheck, Clock3, FileText, Users } from 'lucide-react'
+import { Avatar, Badge, Box, Button, IconButton, Menu, MenuItem, Popover, Stack, Typography } from '@mui/material'
+import { Bell, CalendarCheck2, ChevronLeft, Clock3, FileText, MoreHorizontal, Users } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import {
   fetchMyNotifications,
@@ -24,6 +24,17 @@ const clockTickMs = 60_000
 /* Brand palette (home page gradient) */
 const brand = { midnight: '#0F032D', violet: '#4E2BCC', lilac: '#905BF4', mist: '#EFEFEF' }
 
+/* Figma notification screen tokens */
+const HEADER_GRADIENT =
+  'linear-gradient(180deg, #F1EBFC 0%, #CDBAF1 14%, #AE89F2 30%, #8C59F2 46%, #5B34D4 66%, #331A88 84%, #0F032D 100%)'
+const PURPLE = '#5B34D4'
+const PURPLE_DARK = '#331A88'
+const LIME = '#CDF27E'
+const UNREAD_BG = '#F1EBFC'
+const TEXT_DARK = '#1B1535'
+const TEXT_MUTED = '#6B6880'
+const DIVIDER = '#E7E4EF'
+
 /* Warm "time is near" accent for upcoming appointments */
 const amber = { main: '#F5A524', deep: '#F97316', soft: 'rgba(245,165,36,0.14)', strong: 'rgba(245,165,36,0.24)' }
 
@@ -41,15 +52,13 @@ async function respondToFamilyInvitation(
   throw new Error('Family invitation API is not connected yet')
 }
 
-type NotificationGroup = { key: string; label: string; items: AppNotificationSummary[] }
 type Urgency = { level: 'imminent' | 'near'; label: string } | null
 type NotificationFilter = 'all' | 'unread' | 'appointments' | 'invoices'
 
-const filterOptions: { id: NotificationFilter; label: string }[] = [
+const filterOptions: { id: Exclude<NotificationFilter, 'invoices'>; label: string }[] = [
   { id: 'all', label: 'All' },
-  { id: 'unread', label: 'Unread' },
   { id: 'appointments', label: 'Appointments' },
-  { id: 'invoices', label: 'Invoices' },
+  { id: 'unread', label: 'Unread' },
 ]
 
 const emptyFilterText: Record<Exclude<NotificationFilter, 'all'>, string> = {
@@ -99,28 +108,18 @@ function notificationIcon(notification: AppNotificationSummary): ReactNode {
   return <Bell size={20} />
 }
 
-function groupLabel(date: Date): string {
-  const today = new Date()
-  const yesterday = new Date()
-  yesterday.setDate(today.getDate() - 1)
-  if (date.toDateString() === today.toDateString()) return 'TODAY'
-  if (date.toDateString() === yesterday.toDateString()) return 'YESTERDAY'
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toUpperCase()
-}
-
-function groupByDay(notifications: AppNotificationSummary[]): NotificationGroup[] {
-  const groups: NotificationGroup[] = []
-  for (const notification of notifications) {
-    const date = new Date(notification.createdAt)
-    const key = date.toDateString()
-    const last = groups[groups.length - 1]
-    if (last && last.key === key) {
-      last.items.push(notification)
-    } else {
-      groups.push({ key, label: groupLabel(date), items: [notification] })
-    }
-  }
-  return groups
+/* Short relative time shown on the right of each row: now, 2m, 8h, 3d, then a date */
+function shortTime(iso: string): string {
+  const time = new Date(iso).getTime()
+  if (Number.isNaN(time)) return ''
+  const minutes = Math.floor((Date.now() - time) / 60000)
+  if (minutes < 1) return 'now'
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d`
+  return new Date(time).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 /* Strict lookup (no guessing) so we never highlight the wrong appointment */
@@ -229,24 +228,19 @@ function extractInvoiceRef(notification: AppNotificationSummary): { invoiceId: n
   return { invoiceId, invoiceNumber: numberMatch ? numberMatch[0].toUpperCase() : null }
 }
 
-type PanelPlacement = { top: number; left: number; width: number; maxHeight: number }
+type PanelPlacement = { top: number; left: number; width: number; height: number; borderRadius: string }
 
 /* The app renders inside a phone-sized frame (marked with data-app-frame) that is narrower than the browser window.
-   Position the panel inside that frame, not the window, so it can never stick out past the frame's edges. */
+   The notifications page fills exactly that frame, like a full screen of the app. */
 function computePlacement(anchor: HTMLElement): PanelPlacement {
-  const frame = anchor.closest<HTMLElement>('[data-app-frame]')?.getBoundingClientRect()
-  const left = frame?.left ?? 0
-  const frameWidth = frame?.width ?? window.innerWidth
-  const frameBottom = Math.min(frame?.bottom ?? window.innerHeight, window.innerHeight)
-  const gutter = 12
-  const bottomNavReserve = 96
-  const width = Math.min(360, frameWidth - gutter * 2)
-  const top = anchor.getBoundingClientRect().bottom + 8
+  const frameEl = anchor.closest<HTMLElement>('[data-app-frame]')
+  const frame = frameEl?.getBoundingClientRect()
   return {
-    top,
-    left: left + (frameWidth - width) / 2,
-    width,
-    maxHeight: Math.max(240, frameBottom - top - bottomNavReserve),
+    top: frame?.top ?? 0,
+    left: frame?.left ?? 0,
+    width: frame?.width ?? window.innerWidth,
+    height: frame?.height ?? window.innerHeight,
+    borderRadius: frameEl ? window.getComputedStyle(frameEl).borderRadius : '0px',
   }
 }
 
@@ -264,11 +258,20 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
   const [invitationResult, setInvitationResult] = useState<Record<string, 'accepted' | 'declined'>>({})
   const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(null)
   const [filter, setFilter] = useState<NotificationFilter>('all')
+  const [menu, setMenu] = useState<{ anchor: HTMLElement; notification: AppNotificationSummary } | null>(null)
 
   const businessAppointments = useAppSelector((state) => state.businessDashboard.data.appointments)
   const customerAppointments = useAppSelector((state) => state.customerDashboard.data.appointments)
   const adminAppointments = useAppSelector((state) => state.adminDashboard.data.appointments)
   const role = useAppSelector((state) => state.auth.authUser?.role ?? 'BUSINESS')
+  const profile = useAppSelector((state) => state.auth.authUser) as unknown as {
+    profilePictureUrl?: string | null
+    profileImageUrl?: string | null
+    fullName?: string
+    name?: string
+  } | null
+  const profileImage = profile?.profilePictureUrl ?? profile?.profileImageUrl ?? undefined
+  const profileInitial = (profile?.fullName ?? profile?.name ?? '').trim().charAt(0).toUpperCase()
   const allAppointments = [...businessAppointments, ...customerAppointments, ...adminAppointments]
 
   useEffect(() => {
@@ -317,9 +320,12 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
   }, [])
 
   const open = Boolean(anchorEl && placement)
-  const close = () => setAnchorEl(null)
+  const close = () => {
+    setAnchorEl(null)
+    setMenu(null)
+  }
 
-  /* Keep the panel inside the frame if the window is resized or rotated while it is open */
+  /* Keep the page inside the frame if the window is resized or rotated while it is open */
   useEffect(() => {
     if (!anchorEl) return
     const update = () => setPlacement(computePlacement(anchorEl))
@@ -331,7 +337,15 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
     () => feed.notifications.filter((item) => matchesFilter(item, filter)),
     [feed.notifications, filter],
   )
-  const groups = useMemo(() => groupByDay(visibleNotifications), [visibleNotifications])
+
+  const tabCounts = useMemo(
+    () => ({
+      all: feed.notifications.length,
+      appointments: feed.notifications.filter(isAppointmentNotification).length,
+      unread: feed.unreadCount,
+    }),
+    [feed.notifications, feed.unreadCount],
+  )
 
   const markReadInFeed = async (notification: AppNotificationSummary) => {
     const updated = await markNotificationRead(notification.id)
@@ -431,83 +445,133 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
     }
   }
 
-  const rowShellSx = {
-    display: 'flex',
-    width: '100%',
-    gap: 1.25,
-    px: 1.75,
-    py: 1.25,
-    textAlign: 'left' as const,
-    borderBottom: '1px solid',
-    borderColor: 'divider',
+  const renderAvatar = (notification: AppNotificationSummary, urgency: Urgency) => {
+    const invoice = isInvoiceNotification(notification)
+    return (
+      <Box
+        sx={{
+          width: 48,
+          height: 48,
+          flexShrink: 0,
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: urgency ? '#fff' : invoice ? PURPLE_DARK : '#56607A',
+          background: urgency ? `linear-gradient(135deg, ${amber.main}, ${amber.deep})` : undefined,
+          bgcolor: urgency ? undefined : invoice ? LIME : '#E4E8F0',
+        }}
+      >
+        {notificationIcon(notification)}
+      </Box>
+    )
   }
-
-  const renderIcon = (notification: AppNotificationSummary, unread: boolean, urgency: Urgency) => (
-    <Box
-      sx={{
-        width: 40,
-        height: 40,
-        flexShrink: 0,
-        borderRadius: '50%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: unread || urgency ? '#fff' : 'primary.main',
-        background: urgency
-          ? `linear-gradient(135deg, ${amber.main}, ${amber.deep})`
-          : unread
-            ? `linear-gradient(135deg, ${brand.lilac}, ${brand.violet})`
-            : undefined,
-        bgcolor: unread || urgency ? undefined : 'action.hover',
-      }}
-    >
-      {notificationIcon(notification)}
-    </Box>
-  )
 
   const renderNotification = (notification: AppNotificationSummary) => {
     const unread = !notification.readAt
-    const time = new Date(notification.createdAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    const invitation = isFamilyInvitation(notification)
+    const urgency = invitation ? null : appointmentUrgency(notification, allAppointments, now)
+    const invitationKey = String(notification.id)
+    const invitationState = invitationResult[invitationKey]
+    const busy = pendingInvitationId === invitationKey
 
-    /* ---- Family invitation: Accept / Decline ---- */
-    if (isFamilyInvitation(notification)) {
-      const key = String(notification.id)
-      const result = invitationResult[key]
-      const busy = pendingInvitationId === key
-      return (
-        <Box
-          key={notification.id}
-          sx={{ ...rowShellSx, alignItems: 'flex-start', bgcolor: unread ? 'rgba(144,91,244,0.14)' : 'transparent' }}
-        >
-          {renderIcon(notification, unread, null)}
-          <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Typography sx={{ color: 'text.primary', fontSize: 14, fontWeight: unread ? 600 : 500, lineHeight: 1.3 }}>
-              {notification.title}
-            </Typography>
-            <Typography sx={{ mt: 0.25, color: 'text.secondary', fontSize: 12, lineHeight: 1.4 }}>
-              {notification.message}
-            </Typography>
-            {result ? (
-              <Typography sx={{ mt: 1, color: 'primary.main', fontSize: 12, fontWeight: 600 }}>
-                {result === 'accepted' ? 'Invitation accepted' : 'Invitation declined'}
+    const background = urgency
+      ? urgency.level === 'imminent'
+        ? amber.strong
+        : amber.soft
+      : unread
+        ? UNREAD_BG
+        : '#FFFFFF'
+
+    return (
+      <Box
+        key={notification.id}
+        {...(invitation
+          ? {}
+          : {
+              role: 'button',
+              tabIndex: 0,
+              onClick: () => void handleNotificationClick(notification),
+              onKeyDown: (event: React.KeyboardEvent) => {
+                if (event.key === 'Enter') void handleNotificationClick(notification)
+              },
+            })}
+        sx={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '13px',
+          px: '24px',
+          pt: '22px',
+          pb: '26px',
+          cursor: invitation ? 'default' : 'pointer',
+          bgcolor: background,
+          boxShadow: urgency ? `inset 3px 0 0 ${amber.main}` : 'none',
+          borderBottom: `1px solid ${DIVIDER}`,
+          textAlign: 'left',
+        }}
+      >
+        {unread && (
+          <Box
+            aria-label="Unread"
+            sx={{ position: 'absolute', left: 9, top: 43, width: 6, height: 6, borderRadius: '50%', bgcolor: PURPLE }}
+          />
+        )}
+
+        {renderAvatar(notification, urgency)}
+
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography sx={{ mt: '2px', color: TEXT_DARK, fontSize: 14, fontWeight: 700, lineHeight: '21px' }}>
+            {notification.title}
+          </Typography>
+          <Typography sx={{ color: '#2B2744', fontSize: 14, lineHeight: '21px' }}>
+            {notification.message}
+          </Typography>
+
+          {urgency && (
+            <Box
+              sx={{
+                mt: 0.9,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0.5,
+                height: 20,
+                px: 1,
+                borderRadius: '10px',
+                bgcolor: amber.main,
+                color: brand.midnight,
+                fontSize: 11,
+                fontWeight: 700,
+              }}
+            >
+              <Clock3 size={12} />
+              {urgency.label}
+            </Box>
+          )}
+
+          {invitation &&
+            (invitationState ? (
+              <Typography sx={{ mt: 1.2, color: PURPLE, fontSize: 13, fontWeight: 600 }}>
+                {invitationState === 'accepted' ? 'Invitation accepted' : 'Invitation declined'}
               </Typography>
             ) : (
-              <Stack direction="row" spacing={1} sx={{ mt: 1.25 }}>
+              <Stack direction="row" spacing={1} sx={{ mt: 1.4 }}>
                 <Button
                   size="small"
                   variant="contained"
+                  disableElevation
                   disabled={busy}
                   onClick={() => void handleInvitation(notification, 'accept')}
                   sx={{
-                    height: 32,
-                    px: 2.25,
-                    borderRadius: '16px',
-                    fontSize: 12,
-                    fontWeight: 600,
                     textTransform: 'none',
-                    boxShadow: 'none',
-                    background: `linear-gradient(135deg, ${brand.lilac}, ${brand.violet})`,
-                    color: '#fff',
+                    borderRadius: '6px',
+                    px: 2,
+                    py: 0.5,
+                    fontSize: 13.5,
+                    fontWeight: 500,
+                    bgcolor: PURPLE,
+                    color: '#FFFFFF',
+                    '&:hover': { bgcolor: PURPLE_DARK },
                   }}
                 >
                   Accept
@@ -517,82 +581,40 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
                   variant="outlined"
                   disabled={busy}
                   onClick={() => void handleInvitation(notification, 'decline')}
-                  sx={{ height: 32, px: 2.25, borderRadius: '16px', fontSize: 12, fontWeight: 600, textTransform: 'none' }}
+                  sx={{
+                    textTransform: 'none',
+                    borderRadius: '6px',
+                    px: 2,
+                    py: 0.5,
+                    fontSize: 13.5,
+                    fontWeight: 500,
+                    bgcolor: '#FFFFFF',
+                    color: TEXT_DARK,
+                    borderColor: '#D6D2E2',
+                    '&:hover': { bgcolor: '#F7F5FC', borderColor: '#BFB8D6' },
+                  }}
                 >
                   Decline
                 </Button>
               </Stack>
-            )}
-            <Typography sx={{ mt: 0.75, color: 'text.secondary', fontSize: 11 }}>{time}</Typography>
-          </Box>
-          <Box
-            aria-hidden
-            sx={{ mt: 0.75, width: 8, height: 8, flexShrink: 0, borderRadius: '50%', bgcolor: unread ? 'primary.main' : 'transparent' }}
-          />
+            ))}
         </Box>
-      )
-    }
 
-    /* ---- Regular row (invoice, appointment, etc.) ---- */
-    const urgency = appointmentUrgency(notification, allAppointments, now)
-    const baseBg = urgency
-      ? urgency.level === 'imminent'
-        ? amber.strong
-        : amber.soft
-      : unread
-        ? 'rgba(144,91,244,0.14)'
-        : 'transparent'
-
-    return (
-      <ButtonBase
-        key={notification.id}
-        onClick={() => void handleNotificationClick(notification)}
-        sx={{
-          ...rowShellSx,
-          alignItems: 'center',
-          justifyContent: 'flex-start',
-          bgcolor: baseBg,
-          boxShadow: urgency ? `inset 3px 0 0 ${amber.main}` : 'none',
-          transition: 'background-color 0.2s ease',
-          '&:hover': { bgcolor: urgency ? amber.strong : 'rgba(144,91,244,0.2)' },
-        }}
-      >
-        {renderIcon(notification, unread, urgency)}
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography sx={{ color: 'text.primary', fontSize: 14, fontWeight: unread || urgency ? 600 : 500, lineHeight: 1.3 }}>
-            {notification.title}
-          </Typography>
-          <Typography sx={{ mt: 0.25, color: 'text.secondary', fontSize: 12, lineHeight: 1.4 }}>
-            {notification.message}
-          </Typography>
-          <Stack direction="row" spacing={1} sx={{ mt: 0.5, alignItems: 'center' }}>
-            <Typography sx={{ color: 'text.secondary', fontSize: 11 }}>{time}</Typography>
-            {urgency && (
-              <Box
-                sx={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 0.5,
-                  height: 20,
-                  px: 1,
-                  borderRadius: '10px',
-                  bgcolor: amber.main,
-                  color: brand.midnight,
-                  fontSize: 11,
-                  fontWeight: 700,
-                }}
-              >
-                <Clock3 size={12} />
-                {urgency.label}
-              </Box>
-            )}
-          </Stack>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
+          <Typography sx={{ mt: '2px', fontSize: 12, lineHeight: '21px', color: TEXT_MUTED }}>{shortTime(notification.createdAt)}</Typography>
+          <IconButton
+            size="small"
+            aria-label="More options"
+            onClick={(event) => {
+              event.stopPropagation()
+              setMenu({ anchor: event.currentTarget, notification })
+            }}
+            sx={{ color: '#1B1535', p: 0, height: 21, minWidth: 24, borderRadius: '6px' }}
+          >
+            <MoreHorizontal size={20} strokeWidth={3} />
+          </IconButton>
         </Box>
-        <Box
-          aria-hidden
-          sx={{ width: 8, height: 8, flexShrink: 0, borderRadius: '50%', bgcolor: unread ? 'primary.main' : 'transparent' }}
-        />
-      </ButtonBase>
+      </Box>
     )
   }
 
@@ -622,7 +644,7 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
         </Badge>
       </IconButton>
 
-      {/* Positioned from the app frame (see computePlacement) so it stays fully inside it, clear of the bottom nav */}
+      {/* Full page that fills the app frame (see computePlacement) */}
       <Popover
         open={open}
         onClose={close}
@@ -633,46 +655,113 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
         slotProps={{
           paper: {
             sx: {
-              width: placement?.width ?? 360,
-              maxHeight: placement?.maxHeight,
+              width: placement?.width ?? '100%',
+              height: placement?.height ?? '100%',
+              maxWidth: 'none',
+              maxHeight: 'none',
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
-              borderRadius: '20px',
+              borderRadius: placement?.borderRadius ?? 0,
+              bgcolor: '#FFFFFF',
+              backgroundImage: 'none',
             },
           },
         }}
       >
-        <Stack direction="row" spacing={1} sx={{ px: 2, pt: 1.75, pb: 1.25, alignItems: 'center', flexShrink: 0 }}>
-          <Typography sx={{ color: 'text.primary', fontSize: 17, fontWeight: 600 }}>Notifications</Typography>
-          {feed.unreadCount > 0 && (
-            <Box
-              sx={{
-                height: 22,
-                px: 1.25,
-                borderRadius: '11px',
-                bgcolor: brand.violet,
-                color: brand.mist,
-                fontSize: 11,
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-              }}
-            >
-              {feed.unreadCount} new
-            </Box>
-          )}
-          <Box sx={{ flex: 1 }} />
-          <Button
-            size="small"
-            startIcon={<CheckCheck size={14} />}
-            onClick={() => void handleMarkAllRead()}
-            disabled={feed.unreadCount === 0}
-            sx={{ minWidth: 0, px: 0.8, fontSize: 11, fontWeight: 600, textTransform: 'none' }}
+        {/* Header */}
+        <Box
+          sx={{
+            flexShrink: 0,
+            background: HEADER_GRADIENT,
+            borderRadius: '0 0 35px 35px',
+            pt: 'calc(env(safe-area-inset-top) + 44px)',
+            pb: '24px',
+            px: '18px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+          }}
+        >
+          <IconButton
+            onClick={close}
+            aria-label="Back"
+            sx={{
+              width: 44,
+              height: 44,
+              color: '#2A1670',
+              bgcolor: '#CDBAF1',
+              '&:hover': { bgcolor: '#D9CBF6' },
+            }}
           >
-            Mark all read
-          </Button>
-        </Stack>
+            <ChevronLeft size={24} strokeWidth={2.4} />
+          </IconButton>
+          <Typography component="h2" sx={{ flex: 1, color: '#FFFFFF', fontSize: 26, fontWeight: 400, lineHeight: 1.2 }}>
+            Notifications
+          </Typography>
+          <Avatar src={profileImage} sx={{ width: 44, height: 44, bgcolor: 'rgba(255,255,255,0.28)', color: '#FFFFFF' }}>
+            {profileInitial}
+          </Avatar>
+        </Box>
+
+        {/* Tabs */}
+        <Box
+          role="tablist"
+          aria-label="Filter notifications"
+          sx={{ flexShrink: 0, display: 'flex', borderBottom: `1px solid ${DIVIDER}` }}
+        >
+          {filterOptions.map((option) => {
+            const active = filter === option.id
+            return (
+              <Box
+                key={option.id}
+                role="tab"
+                aria-selected={active}
+                tabIndex={0}
+                onClick={() => setFilter(option.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') setFilter(option.id)
+                }}
+                sx={{ flex: 1, display: 'flex', justifyContent: 'center', cursor: 'pointer', mb: '-1px' }}
+              >
+                <Box
+                  sx={{
+                    px: '16px',
+                    height: 48,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    whiteSpace: 'nowrap',
+                    fontSize: 15,
+                    fontWeight: active ? 600 : 500,
+                    color: active ? '#2B1A7A' : '#4A4760',
+                    borderBottom: `3px solid ${active ? PURPLE : 'transparent'}`,
+                  }}
+                >
+                {option.label}
+                <Box
+                  component="span"
+                  sx={{
+                    ml: 1,
+                    minWidth: 24,
+                    height: 22,
+                    px: 0.8,
+                    borderRadius: '11px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: active ? '#1B1535' : '#3F3D56',
+                    bgcolor: active ? LIME : '#E9E7F2',
+                  }}
+                >
+                  {tabCounts[option.id]}
+                </Box>
+                </Box>
+              </Box>
+            )
+          })}
+        </Box>
 
         {actionError && (
           <Typography role="alert" sx={{ px: 2, py: 1, color: 'error.main', fontSize: 12 }}>
@@ -680,53 +769,15 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
           </Typography>
         )}
         {loadError && feed.notifications.length > 0 && (
-          <Typography role="status" sx={{ px: 2, py: 0.8, color: 'text.secondary', fontSize: 11 }}>
+          <Typography role="status" sx={{ px: 2, py: 0.8, color: TEXT_MUTED, fontSize: 11 }}>
             Could not refresh. Showing the latest loaded notifications.
           </Typography>
         )}
 
-        {feed.notifications.length > 0 && (
-          <Stack
-            direction="row"
-            spacing={1}
-            role="group"
-            aria-label="Filter notifications"
-            sx={{ px: 2, pb: 1.25, flexShrink: 0, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
-          >
-            {filterOptions.map((option) => {
-              const selected = filter === option.id
-              return (
-                <ButtonBase
-                  key={option.id}
-                  aria-pressed={selected}
-                  onClick={() => setFilter(option.id)}
-                  sx={{
-                    flexShrink: 0,
-                    height: 30,
-                    px: 1.5,
-                    borderRadius: '15px',
-                    fontFamily: 'inherit',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: selected ? brand.mist : 'text.primary',
-                    bgcolor: selected ? brand.violet : 'action.hover',
-                    border: '1px solid',
-                    borderColor: selected ? brand.violet : 'divider',
-                    transition: 'background-color 0.2s ease',
-                    '&:hover': { bgcolor: selected ? brand.violet : 'action.selected' },
-                  }}
-                >
-                  {option.label}
-                  {option.id === 'unread' && feed.unreadCount > 0 ? ` · ${feed.unreadCount}` : ''}
-                </ButtonBase>
-              )
-            })}
-          </Stack>
-        )}
-
+        {/* List */}
         {loadError && feed.notifications.length === 0 ? (
-          <Stack spacing={0.8} sx={{ alignItems: 'center', px: 2, py: 3 }}>
-            <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center' }}>
+          <Stack spacing={0.8} sx={{ alignItems: 'center', px: 2, py: 4 }}>
+            <Typography variant="body2" sx={{ color: TEXT_MUTED, textAlign: 'center' }}>
               Notifications could not be loaded.
             </Typography>
             <Button size="small" onClick={() => setReloadToken((current) => current + 1)}>
@@ -734,11 +785,11 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
             </Button>
           </Stack>
         ) : loading && feed.notifications.length === 0 ? (
-          <Typography role="status" sx={{ px: 2, py: 3, color: 'text.secondary', fontSize: 12, textAlign: 'center' }}>
+          <Typography role="status" sx={{ px: 2, py: 4, color: TEXT_MUTED, fontSize: 13, textAlign: 'center' }}>
             Loading notifications...
           </Typography>
         ) : feed.notifications.length === 0 ? (
-          <Stack spacing={0.75} sx={{ alignItems: 'center', px: 2, py: 4 }}>
+          <Stack spacing={0.75} sx={{ alignItems: 'center', px: 2, py: 5 }}>
             <Box
               sx={{
                 width: 52,
@@ -747,20 +798,20 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                bgcolor: 'action.hover',
-                color: 'primary.main',
+                bgcolor: '#ECEAF2',
+                color: PURPLE,
               }}
             >
               <Bell size={22} />
             </Box>
-            <Typography sx={{ color: 'text.primary', fontSize: 14, fontWeight: 600 }}>You’re all caught up</Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'center' }}>
+            <Typography sx={{ color: TEXT_DARK, fontSize: 14, fontWeight: 600 }}>You’re all caught up</Typography>
+            <Typography variant="caption" sx={{ color: TEXT_MUTED, textAlign: 'center' }}>
               New updates will appear here.
             </Typography>
           </Stack>
         ) : visibleNotifications.length === 0 ? (
-          <Stack spacing={0.75} sx={{ alignItems: 'center', px: 2, py: 4 }}>
-            <Typography sx={{ color: 'text.primary', fontSize: 14, fontWeight: 600 }}>
+          <Stack spacing={0.75} sx={{ alignItems: 'center', px: 2, py: 5 }}>
+            <Typography sx={{ color: TEXT_DARK, fontSize: 14, fontWeight: 600 }}>
               {emptyFilterText[filter as Exclude<NotificationFilter, 'all'>]}
             </Typography>
             <Button size="small" onClick={() => setFilter('all')} sx={{ textTransform: 'none', fontWeight: 600 }}>
@@ -768,20 +819,35 @@ export function NotificationBell({ contrast = false, prominent = false }: { cont
             </Button>
           </Stack>
         ) : (
-          <Box sx={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>
-            {groups.map((group) => (
-              <Box key={group.key}>
-                <Typography
-                  sx={{ px: 2, pt: 1.5, pb: 0.75, color: 'text.secondary', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em' }}
-                >
-                  {group.label}
-                </Typography>
-                {group.items.map(renderNotification)}
-              </Box>
-            ))}
+          <Box sx={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', pb: 'calc(16px + env(safe-area-inset-bottom))', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
+            {visibleNotifications.map(renderNotification)}
           </Box>
         )}
       </Popover>
+
+      {/* "•••" menu on each row */}
+      <Menu anchorEl={menu?.anchor ?? null} open={Boolean(menu)} onClose={() => setMenu(null)}>
+        {menu && !menu.notification.readAt && (
+          <MenuItem
+            onClick={() => {
+              const target = menu.notification
+              setMenu(null)
+              void markReadInFeed(target).catch(() => setActionError('Could not update this notification. Try again.'))
+            }}
+          >
+            Mark as read
+          </MenuItem>
+        )}
+        <MenuItem
+          disabled={feed.unreadCount === 0}
+          onClick={() => {
+            setMenu(null)
+            void handleMarkAllRead()
+          }}
+        >
+          Mark all as read
+        </MenuItem>
+      </Menu>
     </>
   )
 }
