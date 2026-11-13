@@ -107,18 +107,16 @@ function DashboardMenu({ activeTab, anchorEl, isOpen, onClose, onChangeTab }: Da
           </MenuItem>
         )
       })}
-      {import.meta.env.DEV && (
-        <MenuItem
-          onClick={() => {
-            navigate('/dev/receipt-sender')
-            onClose()
-          }}
-          sx={{ gap: 1, py: 1.1, fontWeight: 600 }}
-        >
-          <ReceiptText size={16} />
-          Receipt sender test (dev)
-        </MenuItem>
-      )}
+      <MenuItem
+        onClick={() => {
+          navigate('/dev/receipt-sender')
+          onClose()
+        }}
+        sx={{ gap: 1, py: 1.1, fontWeight: 600 }}
+      >
+        <ReceiptText size={16} />
+        Receipt sender test
+      </MenuItem>
       <MenuItem
         onClick={() => {
           logoutUser()
