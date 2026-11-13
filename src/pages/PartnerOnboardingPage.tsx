@@ -139,9 +139,15 @@ export function PartnerOnboardingPage() {
 
   const generateKeyPair = async () => {
     setErrorMessage('')
+    const subtleCrypto = window.crypto?.subtle
+    if (!window.isSecureContext || !subtleCrypto || typeof subtleCrypto.generateKey !== 'function') {
+      setErrorMessage('Secure key generation requires HTTPS. Open this page over HTTPS, or use localhost for development.')
+      return
+    }
+
     setIsGeneratingKey(true)
     try {
-      const generated = await window.crypto.subtle.generateKey(
+      const generated = await subtleCrypto.generateKey(
         { name: 'Ed25519' },
         true,
         ['sign', 'verify'],
@@ -149,8 +155,8 @@ export function PartnerOnboardingPage() {
       if (!('privateKey' in generated) || !('publicKey' in generated)) {
         throw new Error('The browser did not return an Ed25519 keypair.')
       }
-      const publicKey = toBase64(await window.crypto.subtle.exportKey('spki', generated.publicKey))
-      const privateKey = toBase64(await window.crypto.subtle.exportKey('pkcs8', generated.privateKey))
+      const publicKey = toBase64(await subtleCrypto.exportKey('spki', generated.publicKey))
+      const privateKey = toBase64(await subtleCrypto.exportKey('pkcs8', generated.privateKey))
       setKeys({ publicKey: generated.publicKey, privateKey: generated.privateKey })
       setPublicKeyBase64(publicKey)
       const privateKeyFile = new Blob([toPem('PRIVATE KEY', privateKey)], { type: 'application/x-pem-file' })
